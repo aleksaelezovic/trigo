@@ -244,12 +244,12 @@ func (p *Parser) parseConstruct() (*ConstructQuery, error) {
 			break
 		}
 
-		// Parse a triple pattern
-		pattern, err := p.parseTriplePattern()
+		// Parse triple pattern(s) with property list shorthand support
+		patterns, err := p.parseTriplePatterns()
 		if err != nil {
 			return nil, err
 		}
-		template = append(template, pattern)
+		template = append(template, patterns...)
 
 		p.skipWhitespace()
 		// Optionally consume '.' separator
@@ -471,12 +471,12 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			continue
 		}
 
-		// Parse triple pattern
-		triple, err := p.parseTriplePattern()
+		// Parse triple pattern(s) with property list shorthand support
+		triples, err := p.parseTriplePatterns()
 		if err != nil {
 			return nil, err
 		}
-		pattern.Patterns = append(pattern.Patterns, triple)
+		pattern.Patterns = append(pattern.Patterns, triples...)
 
 		// Skip optional '.' separator
 		p.skipWhitespace()
@@ -557,6 +557,81 @@ func (p *Parser) parseTriplePattern() (*TriplePattern, error) {
 		Predicate: *predicate,
 		Object:    *object,
 	}, nil
+}
+
+// parseTriplePatterns parses triple patterns with property list shorthand (semicolon and comma)
+// Syntax:
+//   ?s ?p1 ?o1 ; ?p2 ?o2 ; ?p3 ?o3 .  (semicolon repeats subject)
+//   ?s ?p ?o1 , ?o2 , ?o3 .           (comma repeats subject and predicate)
+func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
+	var triples []*TriplePattern
+
+	// Parse first triple
+	firstTriple, err := p.parseTriplePattern()
+	if err != nil {
+		return nil, err
+	}
+	triples = append(triples, firstTriple)
+
+	// Handle property list shorthand
+	for {
+		p.skipWhitespace()
+		ch := p.peek()
+
+		if ch == ',' {
+			// Comma: same subject and predicate, new object
+			p.advance() // skip ','
+			p.skipWhitespace()
+
+			object, err := p.parseTermOrVariable()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse object after comma: %w", err)
+			}
+
+			triples = append(triples, &TriplePattern{
+				Subject:   firstTriple.Subject,
+				Predicate: firstTriple.Predicate,
+				Object:    *object,
+			})
+
+		} else if ch == ';' {
+			// Semicolon: same subject, new predicate and object
+			p.advance() // skip ';'
+			p.skipWhitespace()
+
+			// Check for end of pattern (semicolon can be trailing)
+			if p.peek() == '.' || p.peek() == '}' {
+				break
+			}
+
+			predicate, err := p.parseTermOrVariable()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse predicate after semicolon: %w", err)
+			}
+
+			p.skipWhitespace()
+			object, err := p.parseTermOrVariable()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse object after semicolon: %w", err)
+			}
+
+			triple := &TriplePattern{
+				Subject:   firstTriple.Subject,
+				Predicate: *predicate,
+				Object:    *object,
+			}
+			triples = append(triples, triple)
+
+			// Update firstTriple to allow comma after this predicate-object pair
+			firstTriple = triple
+
+		} else {
+			// No more comma or semicolon, done
+			break
+		}
+	}
+
+	return triples, nil
 }
 
 // parseTermOrVariable parses either an RDF term or a variable
