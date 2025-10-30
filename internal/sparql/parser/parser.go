@@ -481,6 +481,18 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 		return &TermOrVariable{Term: literal}, nil
 	}
 
+	// Keyword 'a' (shorthand for rdf:type)
+	if ch == 'a' {
+		// Check if it's just 'a' by itself (not part of a prefixed name)
+		if p.pos+1 >= p.length || !((p.input[p.pos+1] >= 'a' && p.input[p.pos+1] <= 'z') ||
+			(p.input[p.pos+1] >= 'A' && p.input[p.pos+1] <= 'Z') ||
+			(p.input[p.pos+1] >= '0' && p.input[p.pos+1] <= '9') ||
+			p.input[p.pos+1] == '_' || p.input[p.pos+1] == '-' || p.input[p.pos+1] == ':') {
+			p.advance() // consume 'a'
+			return &TermOrVariable{Term: rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")}, nil
+		}
+	}
+
 	// Prefixed name (like :foo or prefix:foo)
 	if ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
 		prefixedName, err := p.parsePrefixedName()
@@ -744,9 +756,26 @@ func (p *Parser) advance() {
 }
 
 func (p *Parser) skipWhitespace() {
-	for p.pos < p.length && (p.input[p.pos] == ' ' || p.input[p.pos] == '\t' ||
-		p.input[p.pos] == '\n' || p.input[p.pos] == '\r') {
-		p.pos++
+	for p.pos < p.length {
+		ch := p.input[p.pos]
+
+		// Skip whitespace characters
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+			p.pos++
+			continue
+		}
+
+		// Skip comments (from # to end of line)
+		if ch == '#' {
+			p.pos++
+			// Skip until newline
+			for p.pos < p.length && p.input[p.pos] != '\n' && p.input[p.pos] != '\r' {
+				p.pos++
+			}
+			continue
+		}
+
+		break
 	}
 }
 
