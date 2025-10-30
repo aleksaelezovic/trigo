@@ -157,6 +157,14 @@ type FunctionCallExpression struct {
 
 func (e *FunctionCallExpression) expressionNode() {}
 
+// ExistsExpression represents EXISTS or NOT EXISTS in FILTER
+type ExistsExpression struct {
+	Not     bool         // true for NOT EXISTS, false for EXISTS
+	Pattern GraphPattern // the graph pattern to test
+}
+
+func (e *ExistsExpression) expressionNode() {}
+
 // Operator represents an operator in expressions
 type Operator int
 

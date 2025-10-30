@@ -37,6 +37,8 @@ func (e *Evaluator) Evaluate(expr parser.Expression, binding *store.Binding) (rd
 		return e.evaluateLiteralExpression(ex, binding)
 	case *parser.FunctionCallExpression:
 		return e.evaluateFunctionCall(ex, binding)
+	case *parser.ExistsExpression:
+		return e.evaluateExistsExpression(ex, binding)
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}
@@ -68,4 +70,13 @@ func (e *Evaluator) evaluateLiteralExpression(expr *parser.LiteralExpression, bi
 		return nil, fmt.Errorf("literal expression has nil literal")
 	}
 	return expr.Literal, nil
+}
+
+// evaluateExistsExpression evaluates EXISTS or NOT EXISTS
+func (e *Evaluator) evaluateExistsExpression(expr *parser.ExistsExpression, binding *store.Binding) (rdf.Term, error) {
+	// TODO: Implement EXISTS/NOT EXISTS evaluation
+	// This requires executing the graph pattern against the store with the current binding
+	// and checking if any results are returned.
+	// For now, return an error to indicate it's not yet implemented.
+	return nil, fmt.Errorf("EXISTS/NOT EXISTS evaluation not yet implemented")
 }

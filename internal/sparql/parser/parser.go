@@ -1488,6 +1488,39 @@ func (p *Parser) parseUnaryExpression() (Expression, error) {
 func (p *Parser) parsePrimaryExpression() (Expression, error) {
 	p.skipWhitespace()
 
+	// Check for boolean literals (true/false)
+	savedPos := p.pos
+	if p.matchKeyword("TRUE") {
+		return &LiteralExpression{Literal: rdf.NewBooleanLiteral(true)}, nil
+	}
+	p.pos = savedPos
+	if p.matchKeyword("FALSE") {
+		return &LiteralExpression{Literal: rdf.NewBooleanLiteral(false)}, nil
+	}
+	p.pos = savedPos
+
+	// Check for EXISTS or NOT EXISTS
+	if p.matchKeyword("NOT") {
+		p.skipWhitespace()
+		if p.matchKeyword("EXISTS") {
+			p.skipWhitespace()
+			pattern, err := p.parseGraphPattern()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse graph pattern in NOT EXISTS: %w", err)
+			}
+			return &ExistsExpression{Not: true, Pattern: *pattern}, nil
+		}
+		// Not followed by EXISTS, restore position
+		p.pos = savedPos
+	} else if p.matchKeyword("EXISTS") {
+		p.skipWhitespace()
+		pattern, err := p.parseGraphPattern()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse graph pattern in EXISTS: %w", err)
+		}
+		return &ExistsExpression{Not: false, Pattern: *pattern}, nil
+	}
+
 	// Check for parenthesized expression
 	if p.peek() == '(' {
 		p.advance() // skip '('
