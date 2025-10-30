@@ -242,6 +242,8 @@ func (e *Executor) createIterator(plan optimizer.QueryPlan) (store.BindingIterat
 		return e.createUnionIterator(p)
 	case *optimizer.MinusPlan:
 		return e.createMinusIterator(p)
+	case *optimizer.OrderByPlan:
+		return e.createOrderByIterator(p)
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %T", plan)
 	}
@@ -1046,4 +1048,144 @@ func (it *minusIterator) isCompatible(left, right *store.Binding) bool {
 		}
 	}
 	return true
+}
+
+// createOrderByIterator creates an iterator for ORDER BY operations
+func (e *Executor) createOrderByIterator(plan *optimizer.OrderByPlan) (store.BindingIterator, error) {
+	input, err := e.createIterator(plan.Input)
+	if err != nil {
+		return nil, err
+	}
+
+	return &orderByIterator{
+		input:   input,
+		orderBy: plan.OrderBy,
+	}, nil
+}
+
+// orderByIterator implements ORDER BY operations
+type orderByIterator struct {
+	input      store.BindingIterator
+	orderBy    []*parser.OrderCondition
+	bindings   []*store.Binding
+	position   int
+	initialized bool
+}
+
+func (it *orderByIterator) Next() bool {
+	// Materialize and sort all bindings on first call
+	if !it.initialized {
+		it.initialized = true
+
+		// Collect all bindings
+		for it.input.Next() {
+			binding := it.input.Binding()
+			it.bindings = append(it.bindings, binding.Clone())
+		}
+
+		// Sort bindings according to ORDER BY conditions
+		it.sortBindings()
+	}
+
+	if it.position >= len(it.bindings) {
+		return false
+	}
+
+	it.position++
+	return true
+}
+
+func (it *orderByIterator) Binding() *store.Binding {
+	if it.position > 0 && it.position <= len(it.bindings) {
+		return it.bindings[it.position-1]
+	}
+	return store.NewBinding()
+}
+
+func (it *orderByIterator) Close() error {
+	return it.input.Close()
+}
+
+// sortBindings sorts the bindings according to ORDER BY conditions
+func (it *orderByIterator) sortBindings() {
+	if len(it.orderBy) == 0 {
+		return
+	}
+
+	// Use a simple bubble sort with comparison function
+	// For better performance, could use sort.Slice with a custom Less function
+	for i := 0; i < len(it.bindings); i++ {
+		for j := i + 1; j < len(it.bindings); j++ {
+			if it.shouldSwap(it.bindings[i], it.bindings[j]) {
+				it.bindings[i], it.bindings[j] = it.bindings[j], it.bindings[i]
+			}
+		}
+	}
+}
+
+// shouldSwap returns true if binding a should come after binding b
+func (it *orderByIterator) shouldSwap(a, b *store.Binding) bool {
+	// Compare based on each ORDER BY condition in order
+	for _, condition := range it.orderBy {
+		cmp := it.compareByCondition(a, b, condition)
+
+		if cmp != 0 {
+			// If descending, reverse the comparison
+			if !condition.Ascending {
+				cmp = -cmp
+			}
+			return cmp > 0
+		}
+		// If equal, continue to next condition
+	}
+	return false
+}
+
+// compareByCondition compares two bindings based on a single order condition
+// Returns: -1 if a < b, 0 if a == b, 1 if a > b
+func (it *orderByIterator) compareByCondition(a, b *store.Binding, condition *parser.OrderCondition) int {
+	// For now, only handle simple variable expressions
+	// TODO: Evaluate full expressions once expression evaluator is implemented
+
+	varExpr, ok := condition.Expression.(*parser.VariableExpression)
+	if !ok {
+		// Can't evaluate complex expressions yet, treat as equal
+		return 0
+	}
+
+	varName := varExpr.Variable.Name
+
+	aVal, aExists := a.Vars[varName]
+	bVal, bExists := b.Vars[varName]
+
+	// Handle missing values (unbound variables)
+	if !aExists && !bExists {
+		return 0
+	}
+	if !aExists {
+		return -1 // Treat unbound as less than any value
+	}
+	if !bExists {
+		return 1
+	}
+
+	// Compare the terms
+	return it.compareTerms(aVal, bVal)
+}
+
+// compareTerms compares two RDF terms
+// Returns: -1 if a < b, 0 if a == b, 1 if a > b
+func (it *orderByIterator) compareTerms(a, b rdf.Term) int {
+	// Use string comparison for now
+	// TODO: Implement proper SPARQL ordering rules
+	aStr := a.String()
+	bStr := b.String()
+
+	if aStr < bStr {
+		return -1
+	}
+	if aStr > bStr {
+		return 1
+	}
+	return 0
 }
