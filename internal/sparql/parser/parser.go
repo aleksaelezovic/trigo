@@ -263,9 +263,23 @@ func (p *Parser) parseProjection() ([]*Variable, error) {
 	}
 
 	var variables []*Variable
+	hasProjection := false
 	for {
 		p.skipWhitespace()
-		if p.peek() != '?' && p.peek() != '$' {
+		ch := p.peek()
+
+		// Check for expression in parentheses: (expr AS ?var)
+		if ch == '(' {
+			// Skip expression and extract variable
+			if err := p.skipSelectExpression(); err != nil {
+				return nil, err
+			}
+			hasProjection = true
+			continue
+		}
+
+		// Regular variable
+		if ch != '?' && ch != '$' {
 			break
 		}
 
@@ -274,9 +288,10 @@ func (p *Parser) parseProjection() ([]*Variable, error) {
 			return nil, err
 		}
 		variables = append(variables, variable)
+		hasProjection = true
 	}
 
-	if len(variables) == 0 {
+	if !hasProjection {
 		return nil, fmt.Errorf("expected at least one variable or *")
 	}
 
@@ -862,6 +877,58 @@ func (p *Parser) skipBase() error {
 		return fmt.Errorf("expected '>' to end IRI in BASE declaration")
 	}
 	p.advance() // skip '>'
+
+	return nil
+}
+
+// skipSelectExpression skips a SELECT expression: (expression AS ?variable)
+func (p *Parser) skipSelectExpression() error {
+	p.skipWhitespace()
+
+	if p.peek() != '(' {
+		return fmt.Errorf("expected '(' to start SELECT expression")
+	}
+	p.advance() // skip '('
+
+	// Skip until we find 'AS' keyword at depth 1
+	depth := 1
+	for p.pos < p.length {
+		if p.peek() == '(' {
+			depth++
+			p.advance()
+		} else if p.peek() == ')' {
+			depth--
+			if depth == 0 {
+				p.advance() // skip closing ')'
+				break
+			}
+			p.advance()
+		} else if depth == 1 && p.matchKeyword("AS") {
+			// Found AS - skip to the variable
+			p.skipWhitespace()
+			// Skip the variable
+			if p.peek() == '?' || p.peek() == '$' {
+				p.advance() // skip ? or $
+				// Skip variable name
+				for p.pos < p.length {
+					ch := p.peek()
+					if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+						(ch >= '0' && ch <= '9') || ch == '_') {
+						break
+					}
+					p.advance()
+				}
+			}
+			p.skipWhitespace()
+			// Expect closing ')'
+			if p.peek() == ')' {
+				p.advance()
+				break
+			}
+		} else {
+			p.advance()
+		}
+	}
 
 	return nil
 }
