@@ -139,28 +139,29 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 |---------|--------|-------|
 | **Basic Graph Patterns** | ✅ Implemented | Triple patterns with variables |
 | **Joins** | ✅ Implemented | Nested loop joins with optimization |
-| **FILTER** | ✅ Parsed | Expression parsing, EXISTS/NOT EXISTS support, evaluation TODO |
-| **OPTIONAL** | ✅ Parsed | Parser support complete, execution TODO |
-| **UNION** | ✅ Parsed | Parser support complete, execution TODO |
+| **FILTER** | ✅ Implemented | Expression evaluation with full operator support |
+| **OPTIONAL** | ✅ Implemented | Left outer join execution |
+| **UNION** | ✅ Implemented | Pattern alternation execution |
 | **GRAPH** | ✅ Implemented | Named graph queries with filtering |
-| **MINUS** | ✅ Parsed | Parser support complete, execution TODO |
-| **BIND** | ✅ Parsed | Parser support complete, execution TODO |
+| **MINUS** | ✅ Implemented | Set difference execution |
+| **BIND** | ✅ Implemented | Variable assignment with expression evaluation |
 
 ### Operators & Functions
 
-**Parsed (evaluation TODO):**
-- **Logical:** `&&`, `||`, `!`, `EXISTS`, `NOT EXISTS`
+**Implemented:**
+- **Logical:** `&&`, `||`, `!` (EXISTS/NOT EXISTS parsed, execution TODO)
 - **Comparison:** `=`, `!=`, `<`, `<=`, `>`, `>=`
-- **Arithmetic:** `+`, `-`, `*`, `/`
-- **String Functions:** `REGEX`, `STR`, `LANG`, `DATATYPE`
-- **Numeric Functions:** `isNumeric`, `ABS`, `CEIL`, `FLOOR`, `ROUND`
-- **Aggregates:** `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`, `SAMPLE`
+- **Arithmetic:** `+`, `-`, `*`, `/` with type promotion
+- **Type Checking:** `BOUND`, `isIRI`, `isBlank`, `isLiteral`, `isNumeric`
+- **Value Extraction:** `STR`, `LANG`, `DATATYPE`
+- **String Functions:** `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `CONCAT`, `CONTAINS`, `STRSTARTS`, `STRENDS`
+- **Numeric Functions:** `ABS`, `CEIL`, `FLOOR`, `ROUND`
 
-**Planned (evaluation TODO):**
-- Built-in functions: `BOUND`, `sameTerm`, `isIRI`, `isBlank`, `isLiteral`
-- String functions: `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `CONTAINS`, `STRSTARTS`, `STRENDS`
-- Date/time functions: `NOW`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`
-- Hash functions: `MD5`, `SHA1`, `SHA256`, `SHA512`
+**Parsed (evaluation TODO):**
+- **String Functions:** `REGEX` (requires regexp integration)
+- **Aggregates:** `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`, `SAMPLE` (requires GROUP BY execution)
+- **Date/time functions:** `NOW`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`
+- **Hash functions:** `MD5`, `SHA1`, `SHA256`, `SHA512`
 
 ### Parser Features
 
@@ -284,11 +285,11 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 ## Roadmap
 
 ### Near-term (Query Execution)
-- [ ] **FILTER expression evaluation** - Complete evaluator for all parsed operators
-- [ ] **Expression evaluator** - Core evaluator for BIND, FILTER, ORDER BY expressions
-- [ ] **DESCRIBE** - Execute resource description queries
+- [ ] **DESCRIBE** - Execute resource description queries (parser done ✅)
 - [ ] **EXISTS/NOT EXISTS execution** - Subpattern testing in FILTER (parser done ✅)
 - [ ] **Aggregation execution** - GROUP BY, HAVING, aggregate functions (parser done ✅)
+- [ ] **REGEX function** - Regular expression matching
+- [ ] **Additional built-in functions** - Date/time, hash functions, etc.
 
 ### Medium-term (Advanced SPARQL)
 - [ ] **Subquery parsing** - Nested SELECT support (detection done ✅)
@@ -318,7 +319,10 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **Parser improvements** - Comments, 'a' keyword, OPTIONAL/UNION/MINUS/BIND/EXISTS parsing
 - [x] **GROUP BY & HAVING** - Grouping and filter conditions parsed
 - [x] **Subquery detection** - Recognize nested queries to prevent parse errors
-- [x] **BIND execution** - Variable assignment structure (expression evaluation TODO)
+- [x] **Expression parser** - Complete recursive descent parser with operator precedence
+- [x] **Expression evaluator** - Core evaluator framework with 20+ functions and operators
+- [x] **FILTER execution** - Full filtering with expression evaluation
+- [x] **BIND execution** - Variable assignment with computed expressions
 - [x] **OPTIONAL patterns execution** - Left outer join implementation
 - [x] **UNION patterns execution** - Pattern alternation support
 - [x] **MINUS patterns execution** - Set difference for pattern negation
