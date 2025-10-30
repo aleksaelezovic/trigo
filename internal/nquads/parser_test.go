@@ -87,6 +87,7 @@ ex:s ex:p ex:o .
 			for i, quad := range quads {
 				if quad == nil {
 					t.Errorf("quad %d is nil", i)
+					continue
 				}
 				if quad.Subject == nil {
 					t.Errorf("quad %d has nil subject", i)
