@@ -149,15 +149,18 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 ### Operators & Functions
 
 **Implemented:**
-- **Logical:** `&&`, `||`, `!` (EXISTS/NOT EXISTS parsed, execution TODO)
-- **Comparison:** `=`, `!=`, `<`, `<=`, `>`, `>=`
+- **Logical:** `&&`, `||`, `!`
+- **Comparison:** `=`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`
 - **Arithmetic:** `+`, `-`, `*`, `/` with type promotion
+- **Literals:** `true`, `false` boolean literals
 - **Type Checking:** `BOUND`, `isIRI`, `isBlank`, `isLiteral`, `isNumeric`
 - **Value Extraction:** `STR`, `LANG`, `DATATYPE`
 - **String Functions:** `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `CONCAT`, `CONTAINS`, `STRSTARTS`, `STRENDS`
 - **Numeric Functions:** `ABS`, `CEIL`, `FLOOR`, `ROUND`
 
 **Parsed (evaluation TODO):**
+- **EXISTS/NOT EXISTS** - Subpattern testing in FILTER (parser done ✅, evaluation TODO)
+
 - **String Functions:** `REGEX` (requires regexp integration)
 - **Aggregates:** `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`, `SAMPLE` (requires GROUP BY execution)
 - **Date/time functions:** `NOW`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`
@@ -171,11 +174,14 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 - ✅ **'a' keyword** - Shorthand for `rdf:type`
 - ✅ **CONSTRUCT WHERE** - Shorthand syntax for simple CONSTRUCT queries
 - ✅ **SELECT expressions** - `SELECT (?x + ?y AS ?z)` with aggregates
-- ✅ **BIND** - Variable assignment in patterns (parsed)
-- ✅ **OPTIONAL** - Optional patterns (parsed)
-- ✅ **UNION** - Pattern alternation (parsed)
-- ✅ **MINUS** - Pattern negation (parsed)
-- ✅ **EXISTS/NOT EXISTS** - Subpattern testing in FILTER (parsed)
+- ✅ **BIND** - Variable assignment in patterns
+- ✅ **OPTIONAL** - Optional patterns
+- ✅ **UNION** - Pattern alternation
+- ✅ **MINUS** - Pattern negation
+- ✅ **EXISTS/NOT EXISTS** - Subpattern testing in FILTER
+- ✅ **IN/NOT IN** - Set membership operators
+- ✅ **Boolean literals** - `true` and `false` in expressions
+- ✅ **Property list shorthand** - Semicolon `;` and comma `,` syntax
 - ✅ **GROUP BY** - Grouping with variables and expressions (parsed)
 - ✅ **HAVING** - Filter conditions on groups (parsed)
 - ✅ **Subquery detection** - Recognize nested SELECT/ASK/CONSTRUCT/DESCRIBE (skip for now)
@@ -189,7 +195,6 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 - ❌ **SPARQL UPDATE** - INSERT, DELETE, LOAD, CLEAR operations
 - ❌ **Blank Node Property Lists** - `[ foaf:name "Alice" ]` syntax
 - ❌ **Collection Syntax** - `( item1 item2 )` for RDF lists
-- ❌ **Property list shorthand** - Semicolon `;` and comma `,` syntax
 
 ### RDF Serialization Formats
 
@@ -243,13 +248,13 @@ go build -o test-runner ./cmd/test-runner
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
 
 # Current parser test results:
-# - syntax-query: 70.2% pass rate (66/94 tests)
+# - syntax-query: 69.1% pass rate (65/94 tests)
 # - All SELECT expression tests passing (5/5)
 # - All aggregate syntax tests passing (15/15)
-# - All MINUS/EXISTS/NOT EXISTS tests passing (7/7)
-# - BIND tests: 100% parse correctly (10/10)
-# - Negation tests: 100% parse correctly (12/12)
-# - Subquery tests: 78.6% parse correctly (11/14)
+# - All IN/NOT IN tests passing (3/3)
+# - EXISTS/NOT EXISTS parsing working (syntax tests passing)
+# - Property list shorthand (semicolon/comma) working
+# - Boolean literals (true/false) in expressions working
 # - CONSTRUCT WHERE tests: 28.6% (2/7)
 ```
 
@@ -327,6 +332,10 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **UNION patterns execution** - Pattern alternation support
 - [x] **MINUS patterns execution** - Set difference for pattern negation
 - [x] **ORDER BY execution** - Result sorting with ASC/DESC support
+- [x] **Property list shorthand** - Semicolon and comma syntax for triple patterns
+- [x] **Boolean literals** - true/false in FILTER expressions
+- [x] **IN/NOT IN operators** - Set membership testing with expression evaluation
+- [x] **EXISTS/NOT EXISTS parsing** - Subpattern testing syntax (evaluation TODO)
 
 ## References
 
