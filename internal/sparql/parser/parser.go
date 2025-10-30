@@ -409,8 +409,38 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 		// Check for UNION (needs special handling since it's infix)
 		// For now, we'll handle it in a simplified way
 
-		// Check for nested graph pattern { ... }
+		// Check for nested graph pattern or subquery { ... }
 		if p.peek() == '{' {
+			// Peek ahead to see if this is a subquery (SELECT/ASK/CONSTRUCT/DESCRIBE)
+			savedPos := p.pos
+			p.advance() // skip '{'
+			p.skipWhitespace()
+
+			// Check for subquery keywords
+			isSubquery := p.matchKeyword("SELECT") || p.matchKeyword("ASK") ||
+						  p.matchKeyword("CONSTRUCT") || p.matchKeyword("DESCRIBE")
+
+			// Restore position
+			p.pos = savedPos
+
+			if isSubquery {
+				// This is a subquery - skip it for now
+				// Find the matching closing brace
+				p.advance() // skip '{'
+				depth := 1
+				for p.pos < p.length && depth > 0 {
+					if p.peek() == '{' {
+						depth++
+					} else if p.peek() == '}' {
+						depth--
+					}
+					p.advance()
+				}
+				// TODO: Actually parse subqueries properly
+				continue
+			}
+
+			// Regular nested graph pattern
 			nestedPattern, err := p.parseGraphPattern()
 			if err != nil {
 				return nil, err
