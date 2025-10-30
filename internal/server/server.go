@@ -1,0 +1,291 @@
+package server
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
+	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
+	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
+	"github.com/aleksaelezovic/trigo/internal/store"
+)
+
+// Server represents the HTTP SPARQL server
+type Server struct {
+	store    *store.TripleStore
+	executor *executor.Executor
+	optimizer *optimizer.Optimizer
+	addr     string
+}
+
+// NewServer creates a new SPARQL HTTP server
+func NewServer(store *store.TripleStore, addr string) *Server {
+	exec := executor.NewExecutor(store)
+
+	// Get statistics for optimizer
+	count, _ := store.Count()
+	stats := &optimizer.Statistics{TotalTriples: count}
+	opt := optimizer.NewOptimizer(stats)
+
+	return &Server{
+		store:    store,
+		executor: exec,
+		optimizer: opt,
+		addr:     addr,
+	}
+}
+
+// Start starts the HTTP server
+func (s *Server) Start() error {
+	http.HandleFunc("/sparql", s.handleSPARQL)
+	http.HandleFunc("/", s.handleRoot)
+
+	log.Printf("Starting SPARQL endpoint at http://%s/sparql", s.addr)
+	return http.ListenAndServe(s.addr, nil)
+}
+
+// handleRoot provides information about the endpoint
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <title>Trigo SPARQL Endpoint</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 0 20px; }
+        h1 { color: #333; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .example { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Trigo SPARQL Endpoint</h1>
+    <p>Welcome to the Trigo RDF Triplestore SPARQL endpoint.</p>
+
+    <h2>Endpoint URL</h2>
+    <p><code>POST /sparql</code> or <code>GET /sparql?query=...</code></p>
+
+    <h2>Example Query (GET)</h2>
+    <div class="example">
+        <pre>GET /sparql?query=SELECT%20%3Fs%20%3Fp%20%3Fo%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%2010</pre>
+    </div>
+
+    <h2>Example Query (POST)</h2>
+    <div class="example">
+        <pre>POST /sparql
+Content-Type: application/sparql-query
+
+SELECT ?s ?p ?o
+WHERE {
+    ?s ?p ?o .
+}
+LIMIT 10</pre>
+    </div>
+
+    <h2>Example using curl</h2>
+    <div class="example">
+        <pre>curl -X POST http://localhost:8080/sparql \
+  -H "Content-Type: application/sparql-query" \
+  -H "Accept: application/sparql-results+json" \
+  -d "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10"</pre>
+    </div>
+
+    <h2>Supported Formats</h2>
+    <ul>
+        <li><code>application/sparql-results+json</code> (default)</li>
+        <li><code>application/sparql-results+xml</code></li>
+    </ul>
+
+    <h2>Statistics</h2>
+    <p>Total triples: <strong>` + fmt.Sprintf("%d", s.Stats().TotalTriples) + `</strong></p>
+</body>
+</html>`
+
+	w.Write([]byte(html))
+}
+
+// handleSPARQL handles SPARQL query requests according to SPARQL 1.1 Protocol
+// https://www.w3.org/TR/sparql11-protocol/
+func (s *Server) handleSPARQL(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Extract query string
+	var queryString string
+	var err error
+
+	switch r.Method {
+	case "GET":
+		// GET request: query in URL parameter
+		queryString = r.URL.Query().Get("query")
+		if queryString == "" {
+			s.writeError(w, http.StatusBadRequest, "Missing 'query' parameter")
+			return
+		}
+
+	case "POST":
+		// POST request: query in body
+		contentType := r.Header.Get("Content-Type")
+
+		if strings.Contains(contentType, "application/sparql-query") {
+			// Direct SPARQL query in body
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, "Failed to read request body")
+				return
+			}
+			queryString = string(body)
+
+		} else if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+			// Form-encoded: query parameter
+			if err := r.ParseForm(); err != nil {
+				s.writeError(w, http.StatusBadRequest, "Failed to parse form")
+				return
+			}
+			queryString = r.FormValue("query")
+			if queryString == "" {
+				s.writeError(w, http.StatusBadRequest, "Missing 'query' parameter")
+				return
+			}
+
+		} else {
+			// Try to read body as query string anyway
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, "Failed to read request body")
+				return
+			}
+			queryString = string(body)
+		}
+
+	default:
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use GET or POST")
+		return
+	}
+
+	if queryString == "" {
+		s.writeError(w, http.StatusBadRequest, "Empty query")
+		return
+	}
+
+	// Parse query
+	p := parser.NewParser(queryString)
+	query, err := p.Parse()
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+		return
+	}
+
+	// Optimize query
+	optimizedQuery, err := s.optimizer.Optimize(query)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Optimization error: %v", err))
+		return
+	}
+
+	// Execute query
+	result, err := s.executor.Execute(optimizedQuery)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Execution error: %v", err))
+		return
+	}
+
+	// Determine response format based on Accept header
+	acceptHeader := r.Header.Get("Accept")
+	format := s.negotiateFormat(acceptHeader)
+
+	// Format and send response
+	s.writeResult(w, result, format)
+}
+
+// Stats returns the optimizer statistics
+func (s *Server) Stats() *optimizer.Statistics {
+	// Update statistics
+	count, _ := s.store.Count()
+	return &optimizer.Statistics{TotalTriples: count}
+}
+
+// negotiateFormat determines the response format based on Accept header
+func (s *Server) negotiateFormat(acceptHeader string) string {
+	accept := strings.ToLower(acceptHeader)
+
+	// Check for specific format requests
+	if strings.Contains(accept, "application/sparql-results+xml") {
+		return "xml"
+	}
+	if strings.Contains(accept, "application/sparql-results+json") {
+		return "json"
+	}
+	if strings.Contains(accept, "application/json") {
+		return "json"
+	}
+	if strings.Contains(accept, "text/xml") || strings.Contains(accept, "application/xml") {
+		return "xml"
+	}
+
+	// Default to JSON
+	return "json"
+}
+
+// writeResult writes the query result in the specified format
+func (s *Server) writeResult(w http.ResponseWriter, result executor.QueryResult, format string) {
+	var data []byte
+	var err error
+	var contentType string
+
+	switch format {
+	case "xml":
+		contentType = "application/sparql-results+xml; charset=utf-8"
+
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			data, err = FormatSelectResultsXML(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			data, err = FormatAskResultXML(askResult)
+		}
+
+	default: // json
+		contentType = "application/sparql-results+json; charset=utf-8"
+
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			data, err = FormatSelectResultsJSON(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			data, err = FormatAskResultJSON(askResult)
+		}
+	}
+
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Formatting error: %v", err))
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
+// writeError writes an error response
+func (s *Server) writeError(w http.ResponseWriter, statusCode int, message string) {
+	log.Printf("Error: %s", message)
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+
+	// Simple JSON serialization
+	w.Write([]byte(fmt.Sprintf(`{"error":{"code":%d,"message":"%s"}}`, statusCode, message)))
+}
