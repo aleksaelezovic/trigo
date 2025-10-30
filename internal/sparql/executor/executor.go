@@ -232,6 +232,8 @@ func (e *Executor) createIterator(plan optimizer.QueryPlan) (store.BindingIterat
 		return e.createOffsetIterator(p)
 	case *optimizer.DistinctPlan:
 		return e.createDistinctIterator(p)
+	case *optimizer.GraphPlan:
+		return e.createGraphIterator(p)
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %T", plan)
 	}
@@ -580,6 +582,154 @@ func (it *offsetIterator) Binding() *store.Binding {
 
 func (it *offsetIterator) Close() error {
 	return it.input.Close()
+}
+
+// createGraphIterator creates an iterator for a GRAPH pattern
+func (e *Executor) createGraphIterator(plan *optimizer.GraphPlan) (store.BindingIterator, error) {
+	// The GRAPH pattern wraps the inner plan and constrains all scans to a specific graph
+	// We need to wrap this by creating a modified executor that adds graph constraints
+
+	// Create a graph-aware executor wrapper
+	graphExec := &graphExecutor{
+		base:  e,
+		graph: plan.Graph,
+	}
+
+	// Execute the inner plan with the graph constraint
+	return graphExec.createIterator(plan.Input)
+}
+
+// graphExecutor wraps an executor and adds graph constraints to all scans
+type graphExecutor struct {
+	base  *Executor
+	graph *parser.GraphTerm
+}
+
+func (ge *graphExecutor) createIterator(plan optimizer.QueryPlan) (store.BindingIterator, error) {
+	switch p := plan.(type) {
+	case *optimizer.ScanPlan:
+		return ge.createGraphScanIterator(p)
+	case *optimizer.JoinPlan:
+		// For joins, create an iterator with graph-constrained left side
+		// The right side will be created on-demand during iteration
+		left, err := ge.createIterator(p.Left)
+		if err != nil {
+			return nil, err
+		}
+		// Create a join iterator that uses the graph executor for right side too
+		return &graphJoinIterator{
+			left:      left,
+			rightPlan: p.Right,
+			graphExec: ge,
+		}, nil
+	default:
+		// For other operators, delegate to base executor
+		return ge.base.createIterator(plan)
+	}
+}
+
+func (ge *graphExecutor) createGraphScanIterator(plan *optimizer.ScanPlan) (store.BindingIterator, error) {
+	// Convert parser triple pattern to store pattern with graph constraint
+	pattern := &store.Pattern{
+		Subject:   ge.base.convertTermOrVariable(plan.Pattern.Subject),
+		Predicate: ge.base.convertTermOrVariable(plan.Pattern.Predicate),
+		Object:    ge.base.convertTermOrVariable(plan.Pattern.Object),
+		Graph:     ge.convertGraphTerm(ge.graph),
+	}
+
+	// Execute pattern query
+	quadIter, err := ge.base.store.Query(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	return &scanIterator{
+		quadIter: quadIter,
+		pattern:  plan.Pattern,
+		binding:  store.NewBinding(),
+	}, nil
+}
+
+func (ge *graphExecutor) convertGraphTerm(graphTerm *parser.GraphTerm) interface{} {
+	if graphTerm.Variable != nil {
+		return &store.Variable{Name: graphTerm.Variable.Name}
+	}
+	return graphTerm.IRI
+}
+
+// graphJoinIterator implements nested loop join for GRAPH patterns
+type graphJoinIterator struct {
+	left         store.BindingIterator
+	rightPlan    optimizer.QueryPlan
+	graphExec    *graphExecutor
+	currentLeft  *store.Binding
+	currentRight store.BindingIterator
+	result       *store.Binding
+}
+
+func (it *graphJoinIterator) Next() bool {
+	for {
+		// If we have a right iterator, try to get next from it
+		if it.currentRight != nil {
+			if it.currentRight.Next() {
+				rightBinding := it.currentRight.Binding()
+
+				// Merge bindings
+				merged := it.mergeBindings(it.currentLeft, rightBinding)
+				if merged != nil {
+					it.result = merged
+					return true
+				}
+				continue
+			}
+			// Right exhausted, close it
+			_ = it.currentRight.Close() // #nosec G104 - close error doesn't affect iteration logic
+			it.currentRight = nil
+		}
+
+		// Get next from left
+		if !it.left.Next() {
+			return false
+		}
+
+		it.currentLeft = it.left.Binding()
+
+		// Create new right iterator using graph executor (with graph constraints)
+		rightIter, err := it.graphExec.createIterator(it.rightPlan)
+		if err != nil {
+			return false
+		}
+		it.currentRight = rightIter
+	}
+}
+
+func (it *graphJoinIterator) Binding() *store.Binding {
+	return it.result
+}
+
+func (it *graphJoinIterator) Close() error {
+	if it.currentRight != nil {
+		_ = it.currentRight.Close() // #nosec G104 - right close error less critical than left close error
+	}
+	return it.left.Close()
+}
+
+// mergeBindings merges two bindings, returns nil if incompatible
+func (it *graphJoinIterator) mergeBindings(left, right *store.Binding) *store.Binding {
+	result := left.Clone()
+
+	for varName, term := range right.Vars {
+		if existingTerm, exists := result.Vars[varName]; exists {
+			// Check compatibility
+			if !existingTerm.Equals(term) {
+				return nil
+			}
+		} else {
+			result.Vars[varName] = term
+		}
+	}
+
+	return result
 }
 
 // distinctIterator implements DISTINCT operations

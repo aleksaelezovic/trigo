@@ -265,6 +265,20 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			break
 		}
 
+		// Check for GRAPH keyword
+		if p.matchKeyword("GRAPH") {
+			graphPattern, err := p.parseGraphGraphPattern()
+			if err != nil {
+				return nil, err
+			}
+			// Add the GRAPH pattern as a child
+			if pattern.Children == nil {
+				pattern.Children = []*GraphPattern{}
+			}
+			pattern.Children = append(pattern.Children, graphPattern)
+			continue
+		}
+
 		// Check for FILTER
 		if p.matchKeyword("FILTER") {
 			filter, err := p.parseFilter()
@@ -290,6 +304,49 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 	}
 
 	return pattern, nil
+}
+
+// parseGraphGraphPattern parses a GRAPH <iri> { ... } or GRAPH ?var { ... } pattern
+func (p *Parser) parseGraphGraphPattern() (*GraphPattern, error) {
+	p.skipWhitespace()
+
+	// Parse graph name (IRI or variable)
+	graphTerm := &GraphTerm{}
+
+	if p.peek() == '?' {
+		// Variable
+		varName, err := p.parseVariable()
+		if err != nil {
+			return nil, err
+		}
+		graphTerm.Variable = varName
+	} else if p.peek() == '<' {
+		// IRI
+		iri, err := p.parseIRI()
+		if err != nil {
+			return nil, err
+		}
+		graphTerm.IRI = rdf.NewNamedNode(iri)
+	} else {
+		return nil, fmt.Errorf("expected IRI or variable after GRAPH")
+	}
+
+	// Parse the nested graph pattern
+	nestedPattern, err := p.parseGraphPattern()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a GRAPH pattern
+	graphPattern := &GraphPattern{
+		Type:     GraphPatternTypeGraph,
+		Graph:    graphTerm,
+		Patterns: nestedPattern.Patterns,
+		Filters:  nestedPattern.Filters,
+		Children: nestedPattern.Children,
+	}
+
+	return graphPattern, nil
 }
 
 // parseTriplePattern parses a single triple pattern

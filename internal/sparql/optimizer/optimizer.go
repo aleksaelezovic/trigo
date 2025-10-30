@@ -144,6 +144,14 @@ type ConstructPlan struct {
 
 func (p *ConstructPlan) planNode() {}
 
+// GraphPlan represents a GRAPH pattern operation
+type GraphPlan struct {
+	Input QueryPlan
+	Graph *parser.GraphTerm
+}
+
+func (p *GraphPlan) planNode() {}
+
 // optimizeSelect optimizes a SELECT query
 func (o *Optimizer) optimizeSelect(query *parser.SelectQuery) (QueryPlan, error) {
 	// Start with the WHERE clause
@@ -229,42 +237,83 @@ func (o *Optimizer) optimizeGraphPattern(pattern *parser.GraphPattern) (QueryPla
 	switch pattern.Type {
 	case parser.GraphPatternTypeBasic:
 		return o.optimizeBasicGraphPattern(pattern)
+	case parser.GraphPatternTypeGraph:
+		return o.optimizeGraphGraphPattern(pattern)
 	default:
 		// TODO: Handle other pattern types (UNION, OPTIONAL, etc.)
 		return o.optimizeBasicGraphPattern(pattern)
 	}
 }
 
-// optimizeBasicGraphPattern optimizes a basic graph pattern
-func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
-	if len(pattern.Patterns) == 0 {
-		return nil, nil
+// optimizeGraphGraphPattern optimizes a GRAPH pattern
+func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
+	// Optimize the nested patterns within the graph
+	innerPlan, err := o.optimizeBasicGraphPattern(pattern)
+	if err != nil {
+		return nil, err
 	}
 
-	// Reorder triple patterns by selectivity (greedy approach)
-	orderedPatterns := o.reorderBySelectivity(pattern.Patterns)
+	// Wrap in a GraphPlan that specifies which graph to query
+	return &GraphPlan{
+		Input: innerPlan,
+		Graph: pattern.Graph,
+	}, nil
+}
 
-	// Build join plan from ordered patterns
-	var plan QueryPlan = &ScanPlan{Pattern: orderedPatterns[0]}
+// optimizeBasicGraphPattern optimizes a basic graph pattern
+func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
+	var plan QueryPlan
 
-	for i := 1; i < len(orderedPatterns); i++ {
-		rightPlan := &ScanPlan{Pattern: orderedPatterns[i]}
+	// Handle triple patterns if present
+	if len(pattern.Patterns) > 0 {
+		// Reorder triple patterns by selectivity (greedy approach)
+		orderedPatterns := o.reorderBySelectivity(pattern.Patterns)
 
-		// Decide join type based on estimated cost
-		joinType := o.selectJoinType(plan, rightPlan)
+		// Build join plan from ordered patterns
+		plan = &ScanPlan{Pattern: orderedPatterns[0]}
 
-		plan = &JoinPlan{
-			Left:  plan,
-			Right: rightPlan,
-			Type:  joinType,
+		for i := 1; i < len(orderedPatterns); i++ {
+			rightPlan := &ScanPlan{Pattern: orderedPatterns[i]}
+
+			// Decide join type based on estimated cost
+			joinType := o.selectJoinType(plan, rightPlan)
+
+			plan = &JoinPlan{
+				Left:  plan,
+				Right: rightPlan,
+				Type:  joinType,
+			}
+		}
+	}
+
+	// Handle child patterns (e.g., GRAPH patterns)
+	for _, child := range pattern.Children {
+		childPlan, err := o.optimizeGraphPattern(child)
+		if err != nil {
+			return nil, err
+		}
+
+		if childPlan != nil {
+			if plan == nil {
+				plan = childPlan
+			} else {
+				// Join with existing plan
+				plan = &JoinPlan{
+					Left:  plan,
+					Right: childPlan,
+					Type:  JoinTypeNestedLoop,
+				}
+			}
 		}
 	}
 
 	// Apply filters (filter push-down)
 	for _, filter := range pattern.Filters {
-		plan = &FilterPlan{
-			Input:  plan,
-			Filter: filter,
+		if plan != nil {
+			plan = &FilterPlan{
+				Input:  plan,
+				Filter: filter,
+			}
 		}
 	}
 

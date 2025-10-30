@@ -113,49 +113,51 @@ func (s *TripleStore) selectIndex(pattern *Pattern) (storage.Table, []int) {
 	// If graph is not specified or is a variable, prefer default graph indexes
 	if !gBound {
 		// Default graph indexes (SPO, POS, OSP)
+		// KeyPattern maps: key_position -> SPOG_position (S=0, P=1, O=2, G=3)
 		if sBound && pBound {
-			return storage.TableSPO, []int{0, 1, 2} // S, P, O
+			return storage.TableSPO, []int{0, 1, 2} // Key order: S, P, O
 		}
 		if pBound && oBound {
-			return storage.TablePOS, []int{0, 1, 2} // P, O, S
+			return storage.TablePOS, []int{1, 2, 0} // Key order: P, O, S
 		}
 		if oBound && sBound {
-			return storage.TableOSP, []int{0, 1, 2} // O, S, P
+			return storage.TableOSP, []int{2, 0, 1} // Key order: O, S, P
 		}
 		if sBound {
-			return storage.TableSPO, []int{0, 1, 2} // S, P, O
+			return storage.TableSPO, []int{0, 1, 2} // Key order: S, P, O
 		}
 		if pBound {
-			return storage.TablePOS, []int{0, 1, 2} // P, O, S
+			return storage.TablePOS, []int{1, 2, 0} // Key order: P, O, S
 		}
 		if oBound {
-			return storage.TableOSP, []int{0, 1, 2} // O, S, P
+			return storage.TableOSP, []int{2, 0, 1} // Key order: O, S, P
 		}
 		// No variables bound, use SPO
 		return storage.TableSPO, []int{0, 1, 2}
 	}
 
 	// Named graph indexes (SPOG, POSG, OSPG, GSPO, GPOS, GOSP)
+	// KeyPattern maps: key_position -> SPOG_position (S=0, P=1, O=2, G=3)
 	if gBound && sBound && pBound {
-		return storage.TableGSPO, []int{0, 1, 2, 3} // G, S, P, O
+		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 	if gBound && pBound && oBound {
-		return storage.TableGPOS, []int{0, 1, 2, 3} // G, P, O, S
+		return storage.TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
 	}
 	if gBound && oBound && sBound {
-		return storage.TableGOSP, []int{0, 1, 2, 3} // G, O, S, P
+		return storage.TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
 	}
 	if gBound && sBound {
-		return storage.TableGSPO, []int{0, 1, 2, 3} // G, S, P, O
+		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 	if gBound && pBound {
-		return storage.TableGPOS, []int{0, 1, 2, 3} // G, P, O, S
+		return storage.TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
 	}
 	if gBound && oBound {
-		return storage.TableGOSP, []int{0, 1, 2, 3} // G, O, S, P
+		return storage.TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
 	}
 	if gBound {
-		return storage.TableGSPO, []int{0, 1, 2, 3} // G, S, P, O
+		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 
 	// Fallback to SPOG for mixed queries

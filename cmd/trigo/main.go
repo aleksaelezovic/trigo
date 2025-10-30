@@ -99,6 +99,29 @@ func runDemo() {
 		fmt.Printf("  ✓ %s\n", triple)
 	}
 
+	// Insert some quads with named graphs
+	fmt.Println("\nInserting data into named graphs...")
+	graph1 := rdf.NewNamedNode("http://example.org/graph1")
+	graph2 := rdf.NewNamedNode("http://example.org/graph2")
+
+	quads := []*rdf.Quad{
+		rdf.NewQuad(alice, name, rdf.NewLiteral("Alice in Graph1"), graph1),
+		rdf.NewQuad(bob, name, rdf.NewLiteral("Bob in Graph1"), graph1),
+		rdf.NewQuad(alice, name, rdf.NewLiteral("Alice in Graph2"), graph2),
+		rdf.NewQuad(carol, name, rdf.NewLiteral("Carol in Graph2"), graph2),
+	}
+
+	for _, quad := range quads {
+		if err := tripleStore.InsertQuad(quad); err != nil {
+			log.Fatalf("Failed to insert quad: %v", err)
+		}
+		fmt.Printf("  ✓ Quad in graph <%s>: %s %s %s\n",
+			quad.Graph.(*rdf.NamedNode).IRI,
+			formatTerm(quad.Subject),
+			formatTerm(quad.Predicate),
+			formatTerm(quad.Object))
+	}
+
 	// Count triples
 	count, err := tripleStore.Count()
 	if err != nil {

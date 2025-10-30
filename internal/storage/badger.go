@@ -96,17 +96,24 @@ func (t *BadgerTransaction) Delete(table Table, key []byte) error {
 // Scan iterates over a key range [start, end)
 func (t *BadgerTransaction) Scan(table Table, start, end []byte) (Iterator, error) {
 	opts := badger.DefaultIteratorOptions
-	opts.Prefix = TablePrefix(table)
-
-	it := t.txn.NewIterator(opts)
 
 	// Seek to start position
 	var seekKey []byte
+	var scanPrefix []byte
+	tablePrefix := TablePrefix(table)
+
 	if start != nil {
 		seekKey = PrefixKey(table, start)
+		// Use the start key as prefix to narrow down the scan
+		scanPrefix = seekKey
 	} else {
-		seekKey = TablePrefix(table)
+		seekKey = tablePrefix
+		// Use the table prefix for full table scans
+		scanPrefix = tablePrefix
 	}
+
+	opts.Prefix = scanPrefix
+	it := t.txn.NewIterator(opts)
 
 	// Calculate end key with prefix
 	var endKey []byte
@@ -115,12 +122,13 @@ func (t *BadgerTransaction) Scan(table Table, start, end []byte) (Iterator, erro
 	}
 
 	return &BadgerIterator{
-		it:       it,
-		prefix:   TablePrefix(table),
-		endKey:   endKey,
-		seekKey:  seekKey,
-		started:  false,
-		hasValue: false,
+		it:         it,
+		prefix:     tablePrefix,     // Use table prefix for stripping
+		scanPrefix: scanPrefix,      // Use full prefix for validation
+		endKey:     endKey,
+		seekKey:    seekKey,
+		started:    false,
+		hasValue:   false,
 	}, nil
 }
 
@@ -137,12 +145,13 @@ func (t *BadgerTransaction) Rollback() error {
 
 // BadgerIterator implements Iterator using BadgerDB
 type BadgerIterator struct {
-	it       *badger.Iterator
-	prefix   []byte
-	endKey   []byte
-	seekKey  []byte
-	started  bool
-	hasValue bool
+	it         *badger.Iterator
+	prefix     []byte // Table prefix for stripping from keys
+	scanPrefix []byte // Full prefix used for BadgerDB filtering
+	endKey     []byte
+	seekKey    []byte
+	started    bool
+	hasValue   bool
 }
 
 // Next advances to the next item

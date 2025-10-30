@@ -140,7 +140,7 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 | **FILTER** | 🚧 Parsed only | Expression parsing done, evaluation TODO |
 | **OPTIONAL** | 🚧 Parsed only | Left joins planned |
 | **UNION** | 🚧 Parsed only | Alternation planned |
-| **GRAPH** | 🚧 Parsed only | Named graph queries planned |
+| **GRAPH** | ✅ Implemented | Named graph queries with filtering |
 | **MINUS** | 🚧 Parsed only | Negation planned |
 
 ### Operators & Functions
@@ -271,7 +271,6 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [ ] **VALUES** - Inline data blocks
 - [ ] **Property paths** - Transitive/recursive queries (`*`, `+`, `?`, `/`, `|`)
 - [ ] **Built-in functions** - Complete SPARQL 1.1 function library
-- [ ] **GRAPH patterns** - Named graph query execution
 
 ### Long-term (Ecosystem)
 - [ ] **SPARQL UPDATE** - INSERT DATA, DELETE DATA, INSERT/DELETE WHERE, LOAD, CLEAR
@@ -287,6 +286,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **W3C test suite integration** - Automated testing infrastructure
 - [x] **Code quality tools** - staticcheck, gosec, comprehensive linting
 - [x] **CONSTRUCT queries** - Template-based RDF graph construction with N-Triples serialization
+- [x] **GRAPH patterns** - Named graph queries with proper filtering and index optimization
 
 ## References
 
