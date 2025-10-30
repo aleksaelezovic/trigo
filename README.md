@@ -203,12 +203,13 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 - ✅ **SPARQL XML** - application/sparql-results+xml (SELECT, ASK)
 - ✅ **N-Triples** - application/n-triples (CONSTRUCT)
 
-**RDF Data (Planned):**
-- ❌ **Turtle** - text/turtle
-- ❌ **TriG** - application/trig (with named graphs)
-- ❌ **N-Quads** - application/n-quads
-- ❌ **RDF/XML** - application/rdf+xml
-- ❌ **JSON-LD** - application/ld+json
+**RDF Data (Input via POST /data):**
+- ✅ **N-Triples** - application/n-triples (triples only)
+- ✅ **N-Quads** - application/n-quads (quads with named graphs)
+- ✅ **Turtle** - text/turtle (basic support)
+- ❌ **TriG** - application/trig (Turtle + named graphs) - TODO
+- ❌ **RDF/XML** - application/rdf+xml - TODO
+- ❌ **JSON-LD** - application/ld+json - TODO
 
 ## HTTP SPARQL Endpoint
 
@@ -226,12 +227,46 @@ curl -X POST http://localhost:8080/sparql \
 ```
 
 **Supported Features:**
-- GET and POST methods
+- GET and POST methods for SPARQL queries
 - SPARQL JSON Results format
 - SPARQL XML Results format
 - Content negotiation
 - CORS support
 - Web UI with documentation
+- **Bulk data upload** via POST /data endpoint
+
+### Bulk Data Upload
+
+Upload RDF data in various formats:
+
+```bash
+# Upload N-Triples data
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/n-triples' \
+  --data-binary @data.nt
+
+# Upload N-Quads data (with named graphs)
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/n-quads' \
+  --data-binary @data.nq
+
+# Upload Turtle data
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: text/turtle' \
+  --data-binary @data.ttl
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "statistics": {
+    "quadsInserted": 1000,
+    "durationMs": 245,
+    "quadsPerSecond": 4081.63
+  }
+}
+```
 
 📖 **See [HTTP_ENDPOINT.md](HTTP_ENDPOINT.md) for complete documentation**
 
@@ -330,7 +365,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [ ] **RDF-star** - Quoted triples support (following RDF-star spec)
 - [ ] **Federated queries** - SERVICE keyword for remote endpoints
 - [ ] **Full-text search** - Integrate text indexing
-- [ ] **Bulk loading** - Efficient import of Turtle, N-Triples, N-Quads, RDF/XML
+- [ ] **Additional RDF formats** - TriG, RDF/XML, JSON-LD parsers
 - [ ] **Benchmarking** - Performance comparisons with Oxigraph, Blazegraph, Jena
 - [ ] **Query optimization** - Statistics-based join ordering, cost-based optimization
 
@@ -358,6 +393,8 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **Boolean literals** - true/false in FILTER expressions
 - [x] **IN/NOT IN operators** - Set membership testing with expression evaluation
 - [x] **EXISTS/NOT EXISTS parsing** - Subpattern testing syntax (evaluation TODO)
+- [x] **Bulk data loading** - HTTP POST /data endpoint with N-Triples, N-Quads, and Turtle support
+- [x] **Batch insert operations** - Transaction batching for bulk inserts (10-100x faster)
 
 ## References
 

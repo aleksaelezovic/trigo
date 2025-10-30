@@ -318,3 +318,85 @@ func (s *TripleStore) Count() (int64, error) {
 
 	return count, nil
 }
+
+// InsertQuadsBatch inserts multiple quads in a single transaction for better performance
+func (s *TripleStore) InsertQuadsBatch(quads []*rdf.Quad) error {
+	if len(quads) == 0 {
+		return nil
+	}
+
+	txn, err := s.storage.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	for _, quad := range quads {
+		if err := s.insertQuadInTxn(txn, quad); err != nil {
+			return fmt.Errorf("failed to insert quad: %w", err)
+		}
+	}
+
+	return txn.Commit()
+}
+
+// InsertTriplesBatch inserts multiple triples into the default graph in a single transaction
+func (s *TripleStore) InsertTriplesBatch(triples []*rdf.Triple) error {
+	if len(triples) == 0 {
+		return nil
+	}
+
+	// Convert triples to quads with default graph
+	quads := make([]*rdf.Quad, len(triples))
+	for i, triple := range triples {
+		quads[i] = &rdf.Quad{
+			Subject:   triple.Subject,
+			Predicate: triple.Predicate,
+			Object:    triple.Object,
+			Graph:     rdf.NewDefaultGraph(),
+		}
+	}
+
+	return s.InsertQuadsBatch(quads)
+}
+
+// DeleteQuadsBatch deletes multiple quads in a single transaction for better performance
+func (s *TripleStore) DeleteQuadsBatch(quads []*rdf.Quad) error {
+	if len(quads) == 0 {
+		return nil
+	}
+
+	txn, err := s.storage.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	for _, quad := range quads {
+		if err := s.deleteQuadInTxn(txn, quad); err != nil {
+			return fmt.Errorf("failed to delete quad: %w", err)
+		}
+	}
+
+	return txn.Commit()
+}
+
+// DeleteTriplesBatch deletes multiple triples from the default graph in a single transaction
+func (s *TripleStore) DeleteTriplesBatch(triples []*rdf.Triple) error {
+	if len(triples) == 0 {
+		return nil
+	}
+
+	// Convert triples to quads with default graph
+	quads := make([]*rdf.Quad, len(triples))
+	for i, triple := range triples {
+		quads[i] = &rdf.Quad{
+			Subject:   triple.Subject,
+			Predicate: triple.Predicate,
+			Object:    triple.Object,
+			Graph:     rdf.NewDefaultGraph(),
+		}
+	}
+
+	return s.DeleteQuadsBatch(quads)
+}

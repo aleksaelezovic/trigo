@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aleksaelezovic/trigo/internal/rdfio"
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
@@ -43,6 +45,7 @@ func NewServer(store *store.TripleStore, addr string) *Server {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sparql", s.handleSPARQL)
+	mux.HandleFunc("/data", s.handleDataUpload)
 	mux.HandleFunc("/", s.handleRoot)
 
 	server := &http.Server{
@@ -303,6 +306,70 @@ func (s *Server) writeResult(w http.ResponseWriter, result executor.QueryResult,
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data) // #nosec G104 - error writing response is logged elsewhere if needed
+}
+
+// handleDataUpload handles bulk data uploads in various RDF formats
+func (s *Server) handleDataUpload(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		s.writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use POST")
+		return
+	}
+
+	// Get Content-Type header
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		s.writeError(w, http.StatusBadRequest, "Missing Content-Type header")
+		return
+	}
+
+	// Create appropriate parser based on content type
+	parser, err := rdfio.NewParser(contentType)
+	if err != nil {
+		supportedTypes := rdfio.GetSupportedContentTypes()
+		s.writeError(w, http.StatusUnsupportedMediaType,
+			fmt.Sprintf("Unsupported content type: %s. Supported types: %v", contentType, supportedTypes))
+		return
+	}
+
+	// Parse RDF data from request body
+	startTime := time.Now()
+	quads, err := parser.Parse(r.Body)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+		return
+	}
+
+	// Bulk insert quads
+	if err := s.store.InsertQuadsBatch(quads); err != nil {
+		s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Insert error: %v", err))
+		return
+	}
+
+	duration := time.Since(startTime)
+
+	// Return success response with statistics
+	response := map[string]interface{}{
+		"success": true,
+		"statistics": map[string]interface{}{
+			"quadsInserted":     len(quads),
+			"durationMs":        duration.Milliseconds(),
+			"quadsPerSecond":    float64(len(quads)) / duration.Seconds(),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(response) // #nosec G104 - error writing response is logged elsewhere if needed
 }
 
 // writeError writes an error response
