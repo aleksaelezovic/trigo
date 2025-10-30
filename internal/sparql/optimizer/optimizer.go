@@ -152,6 +152,39 @@ type GraphPlan struct {
 
 func (p *GraphPlan) planNode() {}
 
+// BindPlan represents a BIND operation (variable assignment)
+type BindPlan struct {
+	Input      QueryPlan
+	Expression parser.Expression
+	Variable   *parser.Variable
+}
+
+func (p *BindPlan) planNode() {}
+
+// OptionalPlan represents an OPTIONAL pattern (left outer join)
+type OptionalPlan struct {
+	Left  QueryPlan
+	Right QueryPlan
+}
+
+func (p *OptionalPlan) planNode() {}
+
+// UnionPlan represents a UNION pattern (alternation)
+type UnionPlan struct {
+	Left  QueryPlan
+	Right QueryPlan
+}
+
+func (p *UnionPlan) planNode() {}
+
+// MinusPlan represents a MINUS pattern (set difference)
+type MinusPlan struct {
+	Left  QueryPlan
+	Right QueryPlan
+}
+
+func (p *MinusPlan) planNode() {}
+
 // optimizeSelect optimizes a SELECT query
 func (o *Optimizer) optimizeSelect(query *parser.SelectQuery) (QueryPlan, error) {
 	// Start with the WHERE clause
@@ -286,7 +319,7 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 		}
 	}
 
-	// Handle child patterns (e.g., GRAPH patterns)
+	// Handle child patterns (e.g., GRAPH, OPTIONAL, UNION, MINUS patterns)
 	for _, child := range pattern.Children {
 		childPlan, err := o.optimizeGraphPattern(child)
 		if err != nil {
@@ -297,11 +330,30 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 			if plan == nil {
 				plan = childPlan
 			} else {
-				// Join with existing plan
-				plan = &JoinPlan{
-					Left:  plan,
-					Right: childPlan,
-					Type:  JoinTypeNestedLoop,
+				// Create appropriate plan based on child pattern type
+				switch child.Type {
+				case parser.GraphPatternTypeOptional:
+					plan = &OptionalPlan{
+						Left:  plan,
+						Right: childPlan,
+					}
+				case parser.GraphPatternTypeUnion:
+					plan = &UnionPlan{
+						Left:  plan,
+						Right: childPlan,
+					}
+				case parser.GraphPatternTypeMinus:
+					plan = &MinusPlan{
+						Left:  plan,
+						Right: childPlan,
+					}
+				default:
+					// Regular join for other pattern types
+					plan = &JoinPlan{
+						Left:  plan,
+						Right: childPlan,
+						Type:  JoinTypeNestedLoop,
+					}
 				}
 			}
 		}
@@ -313,6 +365,17 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 			plan = &FilterPlan{
 				Input:  plan,
 				Filter: filter,
+			}
+		}
+	}
+
+	// Apply BIND operations
+	for _, bind := range pattern.Binds {
+		if plan != nil {
+			plan = &BindPlan{
+				Input:      plan,
+				Expression: bind.Expression,
+				Variable:   bind.Variable,
 			}
 		}
 	}

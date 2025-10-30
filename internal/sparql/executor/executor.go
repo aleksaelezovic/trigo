@@ -234,6 +234,14 @@ func (e *Executor) createIterator(plan optimizer.QueryPlan) (store.BindingIterat
 		return e.createDistinctIterator(p)
 	case *optimizer.GraphPlan:
 		return e.createGraphIterator(p)
+	case *optimizer.BindPlan:
+		return e.createBindIterator(p)
+	case *optimizer.OptionalPlan:
+		return e.createOptionalIterator(p)
+	case *optimizer.UnionPlan:
+		return e.createUnionIterator(p)
+	case *optimizer.MinusPlan:
+		return e.createMinusIterator(p)
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %T", plan)
 	}
@@ -768,4 +776,274 @@ func (it *distinctIterator) bindingKey(binding *store.Binding) string {
 		key += varName + "=" + term.String() + ";"
 	}
 	return key
+}
+
+// createBindIterator creates an iterator for BIND operations
+func (e *Executor) createBindIterator(plan *optimizer.BindPlan) (store.BindingIterator, error) {
+	input, err := e.createIterator(plan.Input)
+	if err != nil {
+		return nil, err
+	}
+
+	return &bindIterator{
+		input:      input,
+		expression: plan.Expression,
+		variable:   plan.Variable,
+	}, nil
+}
+
+// bindIterator implements BIND operations (variable assignment)
+type bindIterator struct {
+	input      store.BindingIterator
+	expression parser.Expression
+	variable   *parser.Variable
+}
+
+func (it *bindIterator) Next() bool {
+	return it.input.Next()
+}
+
+func (it *bindIterator) Binding() *store.Binding {
+	inputBinding := it.input.Binding()
+
+	// TODO: Evaluate expression and bind result to variable
+	// For now, just pass through the input binding
+	// When expression evaluation is implemented, this should:
+	// 1. Evaluate it.expression using inputBinding
+	// 2. Add the result to inputBinding.Vars[it.variable.Name]
+	// 3. Return the extended binding
+
+	return inputBinding
+}
+
+func (it *bindIterator) Close() error {
+	return it.input.Close()
+}
+
+// createOptionalIterator creates an iterator for OPTIONAL operations (left outer join)
+func (e *Executor) createOptionalIterator(plan *optimizer.OptionalPlan) (store.BindingIterator, error) {
+	left, err := e.createIterator(plan.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	return &optionalIterator{
+		left:         left,
+		rightPlan:    plan.Right,
+		executor:     e,
+		currentLeft:  nil,
+		currentRight: nil,
+		hasMatch:     false,
+	}, nil
+}
+
+// optionalIterator implements OPTIONAL patterns (left outer join)
+type optionalIterator struct {
+	left         store.BindingIterator
+	rightPlan    optimizer.QueryPlan
+	executor     *Executor
+	currentLeft  *store.Binding
+	currentRight store.BindingIterator
+	result       *store.Binding
+	hasMatch     bool
+}
+
+func (it *optionalIterator) Next() bool {
+	for {
+		// If we have a right iterator, try to get next from it
+		if it.currentRight != nil {
+			if it.currentRight.Next() {
+				rightBinding := it.currentRight.Binding()
+
+				// Try to merge bindings
+				merged := it.mergeBindings(it.currentLeft, rightBinding)
+				if merged != nil {
+					it.hasMatch = true
+					it.result = merged
+					return true
+				}
+				continue
+			}
+			// Right exhausted
+			_ = it.currentRight.Close() // #nosec G104 - close error doesn't affect iteration logic
+			it.currentRight = nil
+
+			// If no match was found, return the left binding alone
+			if !it.hasMatch {
+				it.result = it.currentLeft
+				return true
+			}
+		}
+
+		// Get next from left
+		if !it.left.Next() {
+			return false
+		}
+
+		it.currentLeft = it.left.Binding()
+		it.hasMatch = false
+
+		// Create new right iterator
+		rightIter, err := it.executor.createIterator(it.rightPlan)
+		if err != nil {
+			// If right fails, still return left binding (OPTIONAL semantics)
+			it.result = it.currentLeft
+			return true
+		}
+		it.currentRight = rightIter
+	}
+}
+
+func (it *optionalIterator) Binding() *store.Binding {
+	return it.result
+}
+
+func (it *optionalIterator) Close() error {
+	if it.currentRight != nil {
+		_ = it.currentRight.Close() // #nosec G104 - right close error less critical than left close error
+	}
+	return it.left.Close()
+}
+
+// mergeBindings merges two bindings, returns nil if incompatible
+func (it *optionalIterator) mergeBindings(left, right *store.Binding) *store.Binding {
+	result := left.Clone()
+
+	for varName, term := range right.Vars {
+		if existingTerm, exists := result.Vars[varName]; exists {
+			// Check compatibility
+			if !existingTerm.Equals(term) {
+				return nil
+			}
+		} else {
+			result.Vars[varName] = term
+		}
+	}
+
+	return result
+}
+
+// createUnionIterator creates an iterator for UNION operations (alternation)
+func (e *Executor) createUnionIterator(plan *optimizer.UnionPlan) (store.BindingIterator, error) {
+	left, err := e.createIterator(plan.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	right, err := e.createIterator(plan.Right)
+	if err != nil {
+		_ = left.Close() // #nosec G104 - cleanup on error
+		return nil, err
+	}
+
+	return &unionIterator{
+		left:     left,
+		right:    right,
+		leftDone: false,
+	}, nil
+}
+
+// unionIterator implements UNION patterns (alternation)
+type unionIterator struct {
+	left     store.BindingIterator
+	right    store.BindingIterator
+	leftDone bool
+}
+
+func (it *unionIterator) Next() bool {
+	// First exhaust the left side
+	if !it.leftDone {
+		if it.left.Next() {
+			return true
+		}
+		it.leftDone = true
+	}
+
+	// Then process the right side
+	return it.right.Next()
+}
+
+func (it *unionIterator) Binding() *store.Binding {
+	if !it.leftDone {
+		return it.left.Binding()
+	}
+	return it.right.Binding()
+}
+
+func (it *unionIterator) Close() error {
+	_ = it.left.Close()  // #nosec G104 - left close error less critical than right close error
+	return it.right.Close()
+}
+
+// createMinusIterator creates an iterator for MINUS operations (set difference)
+func (e *Executor) createMinusIterator(plan *optimizer.MinusPlan) (store.BindingIterator, error) {
+	left, err := e.createIterator(plan.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	return &minusIterator{
+		left:      left,
+		rightPlan: plan.Right,
+		executor:  e,
+	}, nil
+}
+
+// minusIterator implements MINUS patterns (set difference)
+type minusIterator struct {
+	left      store.BindingIterator
+	rightPlan optimizer.QueryPlan
+	executor  *Executor
+}
+
+func (it *minusIterator) Next() bool {
+	for it.left.Next() {
+		leftBinding := it.left.Binding()
+
+		// Check if this binding is compatible with any right binding
+		rightIter, err := it.executor.createIterator(it.rightPlan)
+		if err != nil {
+			// If right fails, return left binding (MINUS semantics)
+			return true
+		}
+
+		hasMatch := false
+		for rightIter.Next() {
+			rightBinding := rightIter.Binding()
+
+			// Check if bindings are compatible (share common variables with same values)
+			if it.isCompatible(leftBinding, rightBinding) {
+				hasMatch = true
+				break
+			}
+		}
+		_ = rightIter.Close() // #nosec G104 - close error doesn't affect iteration logic
+
+		// Only return the binding if there was no match (MINUS semantics)
+		if !hasMatch {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (it *minusIterator) Binding() *store.Binding {
+	return it.left.Binding()
+}
+
+func (it *minusIterator) Close() error {
+	return it.left.Close()
+}
+
+// isCompatible checks if two bindings are compatible (no conflicting variable values)
+func (it *minusIterator) isCompatible(left, right *store.Binding) bool {
+	for varName, leftTerm := range left.Vars {
+		if rightTerm, exists := right.Vars[varName]; exists {
+			if !leftTerm.Equals(rightTerm) {
+				return false
+			}
+		}
+	}
+	return true
 }
