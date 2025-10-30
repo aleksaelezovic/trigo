@@ -119,7 +119,7 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 |---------|--------|-------|
 | **SELECT** | ✅ Implemented | Full support with projection, variables, and `*` |
 | **ASK** | ✅ Implemented | Boolean queries working |
-| **CONSTRUCT** | 🚧 Parsed only | AST support, execution TODO |
+| **CONSTRUCT** | ✅ Implemented | Template instantiation with N-Triples output |
 | **DESCRIBE** | 🚧 Parsed only | AST support, execution TODO |
 
 ### Query Modifiers
@@ -174,13 +174,13 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 ### RDF Serialization Formats
 
 **Query Results:**
-- ✅ **SPARQL JSON** - application/sparql-results+json
-- ✅ **SPARQL XML** - application/sparql-results+xml
+- ✅ **SPARQL JSON** - application/sparql-results+json (SELECT, ASK)
+- ✅ **SPARQL XML** - application/sparql-results+xml (SELECT, ASK)
+- ✅ **N-Triples** - application/n-triples (CONSTRUCT)
 
 **RDF Data (Planned):**
 - ❌ **Turtle** - text/turtle
 - ❌ **TriG** - application/trig (with named graphs)
-- ❌ **N-Triples** - application/n-triples
 - ❌ **N-Quads** - application/n-quads
 - ❌ **RDF/XML** - application/rdf+xml
 - ❌ **JSON-LD** - application/ld+json
@@ -260,7 +260,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 ### Near-term (Query Execution)
 - [ ] **FILTER expression evaluation** - Complete evaluator for all parsed operators
 - [ ] **ORDER BY execution** - Implement result sorting
-- [ ] **CONSTRUCT/DESCRIBE** - Execute template-based queries
+- [ ] **DESCRIBE** - Execute resource description queries
 - [ ] **OPTIONAL patterns** - Left join implementation
 - [ ] **UNION patterns** - Alternation support
 
@@ -286,6 +286,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **HTTP SPARQL endpoint** - W3C SPARQL 1.1 Protocol compliance
 - [x] **W3C test suite integration** - Automated testing infrastructure
 - [x] **Code quality tools** - staticcheck, gosec, comprehensive linting
+- [x] **CONSTRUCT queries** - Template-based RDF graph construction with N-Triples serialization
 
 ## References
 

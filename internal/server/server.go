@@ -259,6 +259,22 @@ func (s *Server) writeResult(w http.ResponseWriter, result executor.QueryResult,
 	var err error
 	var contentType string
 
+	// Handle CONSTRUCT results separately (they return RDF, not SPARQL results)
+	if constructResult, ok := result.(*executor.ConstructResult); ok {
+		// CONSTRUCT queries return RDF triples in N-Triples format
+		contentType = "application/n-triples; charset=utf-8"
+		data, err = FormatConstructResultNTriples(constructResult)
+		if err != nil {
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Formatting error: %v", err))
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data) // #nosec G104 - error writing response is logged elsewhere if needed
+		return
+	}
+
+	// Handle SELECT and ASK results
 	switch format {
 	case "xml":
 		contentType = "application/sparql-results+xml; charset=utf-8"

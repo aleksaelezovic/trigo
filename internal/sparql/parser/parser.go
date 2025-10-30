@@ -50,6 +50,12 @@ func (p *Parser) Parse() (*Query, error) {
 			return nil, err
 		}
 		query.Ask = askQuery
+	case QueryTypeConstruct:
+		constructQuery, err := p.parseConstruct()
+		if err != nil {
+			return nil, err
+		}
+		query.Construct = constructQuery
 	default:
 		return nil, fmt.Errorf("query type not yet implemented: %v", queryType)
 	}
@@ -140,6 +146,56 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 // parseAsk parses an ASK query
 func (p *Parser) parseAsk() (*AskQuery, error) {
 	query := &AskQuery{}
+
+	// Parse WHERE clause
+	if !p.matchKeyword("WHERE") {
+		return nil, fmt.Errorf("expected WHERE clause")
+	}
+
+	where, err := p.parseGraphPattern()
+	if err != nil {
+		return nil, err
+	}
+	query.Where = where
+
+	return query, nil
+}
+
+// parseConstruct parses a CONSTRUCT query
+func (p *Parser) parseConstruct() (*ConstructQuery, error) {
+	query := &ConstructQuery{}
+
+	// Parse template - expects { triple pattern ... }
+	p.skipWhitespace()
+	if p.peek() != '{' {
+		return nil, fmt.Errorf("expected '{' to start CONSTRUCT template")
+	}
+	p.advance() // skip '{'
+
+	// Parse triple patterns for the template
+	var template []*TriplePattern
+	for {
+		p.skipWhitespace()
+		if p.peek() == '}' {
+			p.advance() // skip '}'
+			break
+		}
+
+		// Parse a triple pattern
+		pattern, err := p.parseTriplePattern()
+		if err != nil {
+			return nil, err
+		}
+		template = append(template, pattern)
+
+		p.skipWhitespace()
+		// Optionally consume '.' separator
+		if p.peek() == '.' {
+			p.advance()
+		}
+	}
+
+	query.Template = template
 
 	// Parse WHERE clause
 	if !p.matchKeyword("WHERE") {

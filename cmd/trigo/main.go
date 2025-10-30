@@ -228,6 +228,20 @@ func runQuery(sparqlQuery string) {
 		}
 	} else if askResult, ok := result.(*executor.AskResult); ok {
 		fmt.Printf("Result: %t\n", askResult.Result)
+	} else if constructResult, ok := result.(*executor.ConstructResult); ok {
+		fmt.Printf("Constructed %d triples:\n", len(constructResult.Triples))
+		for _, triple := range constructResult.Triples {
+			// Format as N-Triples
+			fmt.Printf("<%s> <%s> ", triple.Subject.Value, triple.Predicate.Value)
+			if triple.Object.Type == "iri" {
+				fmt.Printf("<%s>", triple.Object.Value)
+			} else if triple.Object.Type == "literal" {
+				fmt.Printf("\"%s\"", triple.Object.Value)
+			} else {
+				fmt.Printf("_:%s", triple.Object.Value)
+			}
+			fmt.Println(" .")
+		}
 	}
 }
 

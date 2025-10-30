@@ -6,6 +6,7 @@ import (
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/store"
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // Executor executes SPARQL queries using the Volcano iterator model
@@ -27,6 +28,8 @@ func (e *Executor) Execute(query *optimizer.OptimizedQuery) (QueryResult, error)
 		return e.executeSelect(query)
 	case parser.QueryTypeAsk:
 		return e.executeAsk(query)
+	case parser.QueryTypeConstruct:
+		return e.executeConstruct(query)
 	default:
 		return nil, fmt.Errorf("unsupported query type")
 	}
@@ -51,6 +54,26 @@ type AskResult struct {
 }
 
 func (r *AskResult) resultType() {}
+
+// ConstructResult represents the result of a CONSTRUCT query
+type ConstructResult struct {
+	Triples []*Triple
+}
+
+// Triple represents an RDF triple (subject, predicate, object)
+type Triple struct {
+	Subject   Term
+	Predicate Term
+	Object    Term
+}
+
+// Term represents an RDF term (for CONSTRUCT results)
+type Term struct {
+	Type  string // "iri", "blank", "literal"
+	Value string
+}
+
+func (r *ConstructResult) resultType() {}
 
 // executeSelect executes a SELECT query
 func (e *Executor) executeSelect(query *optimizer.OptimizedQuery) (*SelectResult, error) {
@@ -88,6 +111,108 @@ func (e *Executor) executeAsk(query *optimizer.OptimizedQuery) (*AskResult, erro
 	result := iter.Next()
 
 	return &AskResult{Result: result}, nil
+}
+
+// executeConstruct executes a CONSTRUCT query
+func (e *Executor) executeConstruct(query *optimizer.OptimizedQuery) (*ConstructResult, error) {
+	// Get the template from the construct plan
+	constructPlan, ok := query.Plan.(*optimizer.ConstructPlan)
+	if !ok {
+		return nil, fmt.Errorf("expected ConstructPlan")
+	}
+
+	// Create iterator from the input plan (WHERE clause)
+	iter, err := e.createIterator(constructPlan.Input)
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+
+	// Collect triples by instantiating template for each binding
+	var triples []*Triple
+	seenTriples := make(map[string]bool) // For deduplication
+
+	for iter.Next() {
+		binding := iter.Binding()
+
+		// Instantiate each triple pattern in the template
+		for _, pattern := range constructPlan.Template {
+			triple, err := e.instantiateTriplePattern(pattern, binding)
+			if err != nil {
+				// Skip triples that can't be instantiated (e.g., unbound variables)
+				continue
+			}
+
+			// Deduplicate triples
+			key := fmt.Sprintf("%s|%s|%s", triple.Subject.Value, triple.Predicate.Value, triple.Object.Value)
+			if !seenTriples[key] {
+				seenTriples[key] = true
+				triples = append(triples, triple)
+			}
+		}
+	}
+
+	return &ConstructResult{Triples: triples}, nil
+}
+
+// instantiateTriplePattern creates a triple from a pattern and binding
+func (e *Executor) instantiateTriplePattern(pattern *parser.TriplePattern, binding *store.Binding) (*Triple, error) {
+	subject, err := e.instantiateTerm(pattern.Subject, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	predicate, err := e.instantiateTerm(pattern.Predicate, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	object, err := e.instantiateTerm(pattern.Object, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Triple{
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
+	}, nil
+}
+
+// instantiateTerm converts a TermOrVariable to a concrete Term using bindings
+func (e *Executor) instantiateTerm(termOrVar parser.TermOrVariable, binding *store.Binding) (Term, error) {
+	if termOrVar.IsVariable() {
+		// Look up variable in binding
+		value, found := binding.Vars[termOrVar.Variable.Name]
+		if !found {
+			return Term{}, fmt.Errorf("unbound variable: %s", termOrVar.Variable.Name)
+		}
+		return e.rdfTermToExecutorTerm(value), nil
+	}
+
+	// It's a constant term
+	return e.rdfTermToExecutorTerm(termOrVar.Term), nil
+}
+
+// rdfTermToExecutorTerm converts an rdf.Term to an executor.Term
+func (e *Executor) rdfTermToExecutorTerm(rdfTerm rdf.Term) Term {
+	switch t := rdfTerm.(type) {
+	case *rdf.NamedNode:
+		return Term{Type: "iri", Value: t.IRI}
+	case *rdf.BlankNode:
+		return Term{Type: "blank", Value: t.ID}
+	case *rdf.Literal:
+		// For literals, include datatype/language if present
+		value := t.Value
+		if t.Language != "" {
+			value = fmt.Sprintf("%s@%s", value, t.Language)
+		} else if t.Datatype != nil && t.Datatype.IRI != "http://www.w3.org/2001/XMLSchema#string" {
+			value = fmt.Sprintf("%s^^<%s>", value, t.Datatype.IRI)
+		}
+		return Term{Type: "literal", Value: value}
+	default:
+		return Term{Type: "unknown", Value: fmt.Sprintf("%v", rdfTerm)}
+	}
 }
 
 // createIterator creates an iterator from a query plan

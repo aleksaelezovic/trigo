@@ -42,6 +42,12 @@ func (o *Optimizer) Optimize(query *parser.Query) (*OptimizedQuery, error) {
 			return nil, err
 		}
 		optimized.Plan = plan
+	case parser.QueryTypeConstruct:
+		plan, err := o.optimizeConstruct(query.Construct)
+		if err != nil {
+			return nil, err
+		}
+		optimized.Plan = plan
 	}
 
 	return optimized, nil
@@ -130,6 +136,14 @@ type DistinctPlan struct {
 
 func (p *DistinctPlan) planNode() {}
 
+// ConstructPlan represents a CONSTRUCT operation
+type ConstructPlan struct {
+	Input    QueryPlan
+	Template []*parser.TriplePattern
+}
+
+func (p *ConstructPlan) planNode() {}
+
 // optimizeSelect optimizes a SELECT query
 func (o *Optimizer) optimizeSelect(query *parser.SelectQuery) (QueryPlan, error) {
 	// Start with the WHERE clause
@@ -192,6 +206,21 @@ func (o *Optimizer) optimizeAsk(query *parser.AskQuery) (QueryPlan, error) {
 	return &LimitPlan{
 		Input: plan,
 		Limit: 1,
+	}, nil
+}
+
+// optimizeConstruct optimizes a CONSTRUCT query
+func (o *Optimizer) optimizeConstruct(query *parser.ConstructQuery) (QueryPlan, error) {
+	// Optimize the WHERE clause to get bindings
+	plan, err := o.optimizeGraphPattern(query.Where)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap in a ConstructPlan that will apply the template
+	return &ConstructPlan{
+		Input:    plan,
+		Template: query.Template,
 	}, nil
 }
 
