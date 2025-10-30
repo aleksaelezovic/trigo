@@ -1,5 +1,5 @@
-# Binaries
-trigo
+# Binaries (root level only)
+/trigo
 *.exe
 *.dll
 *.so
