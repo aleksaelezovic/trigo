@@ -128,6 +128,27 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 	}
 	query.Where = where
 
+	// Parse optional GROUP BY
+	if p.matchKeyword("GROUP") {
+		if !p.matchKeyword("BY") {
+			return nil, fmt.Errorf("expected BY after GROUP")
+		}
+		groupBy, err := p.parseGroupBy()
+		if err != nil {
+			return nil, err
+		}
+		query.GroupBy = groupBy
+	}
+
+	// Parse optional HAVING
+	if p.matchKeyword("HAVING") {
+		having, err := p.parseHaving()
+		if err != nil {
+			return nil, err
+		}
+		query.Having = having
+	}
+
 	// Parse optional ORDER BY
 	if p.matchKeyword("ORDER") {
 		if !p.matchKeyword("BY") {
@@ -783,6 +804,109 @@ func (p *Parser) parseBind() (*Bind, error) {
 
 	// TODO: Parse expression properly
 	return &Bind{Variable: variable}, nil
+}
+
+// parseGroupBy parses GROUP BY clause
+func (p *Parser) parseGroupBy() ([]*GroupCondition, error) {
+	var conditions []*GroupCondition
+
+	for {
+		p.skipWhitespace()
+
+		// Check for end of GROUP BY clause
+		ch := p.peek()
+		if ch != '?' && ch != '$' && ch != '(' {
+			break
+		}
+
+		// Parse expression or variable
+		if ch == '(' {
+			// GROUP BY (expression AS ?var) or GROUP BY (expression)
+			p.advance() // skip '('
+
+			// Skip to AS or closing paren
+			depth := 1
+			for p.pos < p.length && depth > 0 {
+				if p.peek() == '(' {
+					depth++
+					p.advance()
+				} else if p.peek() == ')' {
+					depth--
+					if depth > 0 {
+						p.advance()
+					}
+				} else if depth == 1 && p.matchKeyword("AS") {
+					// Variable after AS
+					p.skipWhitespace()
+					if p.peek() == '?' || p.peek() == '$' {
+						_, err := p.parseVariable()
+						if err != nil {
+							return nil, err
+						}
+					}
+					p.skipWhitespace()
+					if p.peek() == ')' {
+						p.advance()
+						break
+					}
+				} else {
+					p.advance()
+				}
+			}
+
+			conditions = append(conditions, &GroupCondition{})
+		} else {
+			// Simple variable
+			variable, err := p.parseVariable()
+			if err != nil {
+				return nil, err
+			}
+			conditions = append(conditions, &GroupCondition{Variable: variable})
+		}
+
+		p.skipWhitespace()
+	}
+
+	return conditions, nil
+}
+
+// parseHaving parses HAVING clause
+func (p *Parser) parseHaving() ([]*Filter, error) {
+	var filters []*Filter
+
+	for {
+		p.skipWhitespace()
+
+		// Check if we're at the end of HAVING
+		if p.peek() != '(' {
+			// Try to match EXISTS or NOT
+			savedPos := p.pos
+			if !p.matchKeyword("EXISTS") {
+				p.pos = savedPos
+				if !p.matchKeyword("NOT") {
+					p.pos = savedPos
+					break
+				}
+				p.pos = savedPos
+			} else {
+				p.pos = savedPos
+			}
+		}
+
+		filter, err := p.parseFilter()
+		if err != nil {
+			return nil, err
+		}
+		filters = append(filters, filter)
+
+		p.skipWhitespace()
+	}
+
+	if len(filters) == 0 {
+		return nil, fmt.Errorf("expected at least one condition in HAVING")
+	}
+
+	return filters, nil
 }
 
 // parseOrderBy parses ORDER BY clause

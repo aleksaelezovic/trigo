@@ -25,12 +25,14 @@ const (
 
 // SelectQuery represents a SELECT query
 type SelectQuery struct {
-	Variables  []*Variable      // Variables to select (* for all)
-	Distinct   bool             // DISTINCT modifier
-	Where      *GraphPattern    // WHERE clause
+	Variables  []*Variable       // Variables to select (* for all)
+	Distinct   bool              // DISTINCT modifier
+	Where      *GraphPattern     // WHERE clause
+	GroupBy    []*GroupCondition // GROUP BY clause
+	Having     []*Filter         // HAVING clause
 	OrderBy    []*OrderCondition // ORDER BY clause
-	Limit      *int             // LIMIT clause
-	Offset     *int             // OFFSET clause
+	Limit      *int              // LIMIT clause
+	Offset     *int              // OFFSET clause
 }
 
 // ConstructQuery represents a CONSTRUCT query
@@ -196,4 +198,10 @@ const (
 type OrderCondition struct {
 	Expression Expression
 	Ascending  bool
+}
+
+// GroupCondition represents a GROUP BY condition
+type GroupCondition struct {
+	Expression Expression
+	Variable   *Variable
 }
