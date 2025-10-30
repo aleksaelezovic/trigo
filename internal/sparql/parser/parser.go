@@ -333,6 +333,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 		Patterns: []*TriplePattern{},
 		Filters:  []*Filter{},
 		Binds:    []*Bind{},
+		Elements: []PatternElement{},
 	}
 
 	for {
@@ -365,6 +366,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				return nil, err
 			}
 			pattern.Filters = append(pattern.Filters, filter)
+			pattern.Elements = append(pattern.Elements, PatternElement{Filter: filter})
 			continue
 		}
 
@@ -375,6 +377,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				return nil, err
 			}
 			pattern.Binds = append(pattern.Binds, bind)
+			pattern.Elements = append(pattern.Elements, PatternElement{Bind: bind})
 			continue
 		}
 
@@ -477,6 +480,10 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			return nil, err
 		}
 		pattern.Patterns = append(pattern.Patterns, triples...)
+		// Add each triple to Elements to preserve order
+		for _, triple := range triples {
+			pattern.Elements = append(pattern.Elements, PatternElement{Triple: triple})
+		}
 
 		// Skip optional '.' separator
 		p.skipWhitespace()

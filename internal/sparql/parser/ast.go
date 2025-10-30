@@ -60,6 +60,14 @@ type GraphPattern struct {
 	Binds    []*Bind           // BIND expressions
 	Children []*GraphPattern   // For complex patterns (UNION, OPTIONAL, etc.)
 	Graph    *GraphTerm        // For GRAPH patterns
+	Elements []PatternElement  // Ordered list of patterns, binds, and filters
+}
+
+// PatternElement represents an element in a graph pattern (triple, BIND, or FILTER)
+type PatternElement struct {
+	Triple *TriplePattern
+	Bind   *Bind
+	Filter *Filter
 }
 
 // GraphPatternType represents the type of graph pattern

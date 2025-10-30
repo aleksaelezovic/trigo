@@ -297,24 +297,83 @@ func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (Que
 func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
 	var plan QueryPlan
 
-	// Handle triple patterns if present
-	if len(pattern.Patterns) > 0 {
-		// Reorder triple patterns by selectivity (greedy approach)
-		orderedPatterns := o.reorderBySelectivity(pattern.Patterns)
+	// Use Elements if available (preserves order of triples, BINDs, FILTERs)
+	if len(pattern.Elements) > 0 {
+		// Process elements in order to respect BIND/FILTER semantics
+		for _, elem := range pattern.Elements {
+			if elem.Triple != nil {
+				// Add triple pattern as scan or join
+				scanPlan := &ScanPlan{Pattern: elem.Triple}
+				if plan == nil {
+					plan = scanPlan
+				} else {
+					plan = &JoinPlan{
+						Left:  plan,
+						Right: scanPlan,
+						Type:  JoinTypeNestedLoop,
+					}
+				}
+			} else if elem.Bind != nil {
+				// Apply BIND immediately (makes variable available to subsequent patterns)
+				if plan != nil {
+					plan = &BindPlan{
+						Input:      plan,
+						Expression: elem.Bind.Expression,
+						Variable:   elem.Bind.Variable,
+					}
+				}
+			} else if elem.Filter != nil {
+				// Apply FILTER immediately
+				if plan != nil {
+					plan = &FilterPlan{
+						Input:  plan,
+						Filter: elem.Filter,
+					}
+				}
+			}
+		}
+	} else {
+		// Fallback to old behavior if Elements not populated (for backwards compatibility)
+		// Handle triple patterns if present
+		if len(pattern.Patterns) > 0 {
+			// Reorder triple patterns by selectivity (greedy approach)
+			orderedPatterns := o.reorderBySelectivity(pattern.Patterns)
 
-		// Build join plan from ordered patterns
-		plan = &ScanPlan{Pattern: orderedPatterns[0]}
+			// Build join plan from ordered patterns
+			plan = &ScanPlan{Pattern: orderedPatterns[0]}
 
-		for i := 1; i < len(orderedPatterns); i++ {
-			rightPlan := &ScanPlan{Pattern: orderedPatterns[i]}
+			for i := 1; i < len(orderedPatterns); i++ {
+				rightPlan := &ScanPlan{Pattern: orderedPatterns[i]}
 
-			// Decide join type based on estimated cost
-			joinType := o.selectJoinType(plan, rightPlan)
+				// Decide join type based on estimated cost
+				joinType := o.selectJoinType(plan, rightPlan)
 
-			plan = &JoinPlan{
-				Left:  plan,
-				Right: rightPlan,
-				Type:  joinType,
+				plan = &JoinPlan{
+					Left:  plan,
+					Right: rightPlan,
+					Type:  joinType,
+				}
+			}
+		}
+
+		// Apply filters (filter push-down)
+		for _, filter := range pattern.Filters {
+			if plan != nil {
+				plan = &FilterPlan{
+					Input:  plan,
+					Filter: filter,
+				}
+			}
+		}
+
+		// Apply BIND operations
+		for _, bind := range pattern.Binds {
+			if plan != nil {
+				plan = &BindPlan{
+					Input:      plan,
+					Expression: bind.Expression,
+					Variable:   bind.Variable,
+				}
 			}
 		}
 	}
@@ -355,27 +414,6 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 						Type:  JoinTypeNestedLoop,
 					}
 				}
-			}
-		}
-	}
-
-	// Apply filters (filter push-down)
-	for _, filter := range pattern.Filters {
-		if plan != nil {
-			plan = &FilterPlan{
-				Input:  plan,
-				Filter: filter,
-			}
-		}
-	}
-
-	// Apply BIND operations
-	for _, bind := range pattern.Binds {
-		if plan != nil {
-			plan = &BindPlan{
-				Input:      plan,
-				Expression: bind.Expression,
-				Variable:   bind.Variable,
 			}
 		}
 	}
