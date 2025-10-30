@@ -111,23 +111,79 @@ trigo/
 
 ## SPARQL Support
 
-### Supported Query Types
-- ✅ SELECT (with variables and *)
-- ✅ ASK
-- 🚧 CONSTRUCT (planned)
-- 🚧 DESCRIBE (planned)
+Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://github.com/oxigraph/oxigraph)'s architecture. The query engine uses a Volcano iterator model with query optimization.
 
-### Supported Features
-- ✅ Triple patterns with variables
-- ✅ Multiple triple patterns (joins)
-- ✅ DISTINCT
-- ✅ LIMIT
-- ✅ OFFSET
-- ✅ ORDER BY (parsed, execution TODO)
-- 🚧 FILTER (parsed, evaluation TODO)
-- 🚧 OPTIONAL
-- 🚧 UNION
-- 🚧 Named graphs in queries
+### Query Types
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **SELECT** | ✅ Implemented | Full support with projection, variables, and `*` |
+| **ASK** | ✅ Implemented | Boolean queries working |
+| **CONSTRUCT** | 🚧 Parsed only | AST support, execution TODO |
+| **DESCRIBE** | 🚧 Parsed only | AST support, execution TODO |
+
+### Query Modifiers
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **DISTINCT** | ✅ Implemented | Hash-based deduplication |
+| **LIMIT** | ✅ Implemented | Result limiting |
+| **OFFSET** | ✅ Implemented | Result skipping |
+| **ORDER BY** | 🚧 Parsed only | Sorting expressions parsed, execution TODO |
+
+### Graph Patterns
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Basic Graph Patterns** | ✅ Implemented | Triple patterns with variables |
+| **Joins** | ✅ Implemented | Nested loop joins with optimization |
+| **FILTER** | 🚧 Parsed only | Expression parsing done, evaluation TODO |
+| **OPTIONAL** | 🚧 Parsed only | Left joins planned |
+| **UNION** | 🚧 Parsed only | Alternation planned |
+| **GRAPH** | 🚧 Parsed only | Named graph queries planned |
+| **MINUS** | 🚧 Parsed only | Negation planned |
+
+### Operators & Functions
+
+**Parsed (evaluation TODO):**
+- **Logical:** `&&`, `||`, `!`
+- **Comparison:** `=`, `!=`, `<`, `<=`, `>`, `>=`
+- **Arithmetic:** `+`, `-`, `*`, `/`
+- **String Functions:** `REGEX`, `STR`, `LANG`, `DATATYPE`
+- **Numeric Functions:** `isNumeric`, `ABS`, `CEIL`, `FLOOR`, `ROUND`
+
+**Planned:**
+- Built-in functions: `BOUND`, `sameTerm`, `isIRI`, `isBlank`, `isLiteral`
+- String functions: `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `CONTAINS`, `STRSTARTS`, `STRENDS`
+- Date/time functions: `NOW`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`
+- Hash functions: `MD5`, `SHA1`, `SHA256`, `SHA512`
+- Aggregates: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`, `SAMPLE`
+
+### Advanced Features (Not Yet Implemented)
+
+- ❌ **Subqueries** - Nested SELECT queries
+- ❌ **Property Paths** - Transitive property queries
+- ❌ **Aggregation** - GROUP BY, HAVING, aggregate functions
+- ❌ **BIND** - Variable assignment in patterns
+- ❌ **VALUES** - Inline data
+- ❌ **SERVICE** - Federated queries
+- ❌ **SPARQL UPDATE** - INSERT, DELETE, LOAD, CLEAR operations
+- ❌ **Blank Node Property Lists** - `[ foaf:name "Alice" ]` syntax
+- ❌ **Collection Syntax** - `( item1 item2 )` for RDF lists
+
+### RDF Serialization Formats
+
+**Query Results:**
+- ✅ **SPARQL JSON** - application/sparql-results+json
+- ✅ **SPARQL XML** - application/sparql-results+xml
+
+**RDF Data (Planned):**
+- ❌ **Turtle** - text/turtle
+- ❌ **TriG** - application/trig (with named graphs)
+- ❌ **N-Triples** - application/n-triples
+- ❌ **N-Quads** - application/n-quads
+- ❌ **RDF/XML** - application/rdf+xml
+- ❌ **JSON-LD** - application/ld+json
 
 ## HTTP SPARQL Endpoint
 
@@ -191,23 +247,45 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 
 ## Dependencies
 
-- [BadgerDB](https://github.com/dgraph-io/badger) - Fast LSM-tree based key-value store
-- [xxh3](https://github.com/zeebo/xxh3) - Fast xxHash3 implementation for Go
+**Runtime:**
+- [BadgerDB](https://github.com/dgraph-io/badger) v4.8.0 - Fast LSM-tree based key-value store
+- [xxh3](https://github.com/zeebo/xxh3) v1.0.2 - Fast xxHash3 implementation for Go
+
+**Development Tools:**
+- [staticcheck](https://staticcheck.io/) - Go static analyzer
+- [gosec](https://github.com/securego/gosec) - Go security checker
 
 ## Roadmap
 
-- [ ] Complete FILTER expression evaluation
-- [ ] Implement OPTIONAL and UNION
-- [ ] Add CONSTRUCT and DESCRIBE query support
-- [ ] Implement ORDER BY execution
-- [ ] Add support for RDF-star (quoted triples)
-- [ ] Property paths in SPARQL
-- [ ] Aggregation functions (COUNT, SUM, AVG, etc.)
-- [ ] SPARQL UPDATE support (INSERT, DELETE)
-- [ ] Implement W3C SPARQL test suite runner
-- [ ] Benchmarking against other triplestores
-- [x] **HTTP SPARQL endpoint** ✅
-- [ ] Bulk data loading (Turtle, N-Triples, RDF/XML)
+### Near-term (Query Execution)
+- [ ] **FILTER expression evaluation** - Complete evaluator for all parsed operators
+- [ ] **ORDER BY execution** - Implement result sorting
+- [ ] **CONSTRUCT/DESCRIBE** - Execute template-based queries
+- [ ] **OPTIONAL patterns** - Left join implementation
+- [ ] **UNION patterns** - Alternation support
+
+### Medium-term (Advanced SPARQL)
+- [ ] **Aggregation** - GROUP BY, HAVING, COUNT, SUM, AVG, MIN, MAX
+- [ ] **Subqueries** - Nested SELECT support
+- [ ] **BIND** - Variable assignment in patterns
+- [ ] **VALUES** - Inline data blocks
+- [ ] **Property paths** - Transitive/recursive queries (`*`, `+`, `?`, `/`, `|`)
+- [ ] **Built-in functions** - Complete SPARQL 1.1 function library
+- [ ] **GRAPH patterns** - Named graph query execution
+
+### Long-term (Ecosystem)
+- [ ] **SPARQL UPDATE** - INSERT DATA, DELETE DATA, INSERT/DELETE WHERE, LOAD, CLEAR
+- [ ] **RDF-star** - Quoted triples support (following RDF-star spec)
+- [ ] **Federated queries** - SERVICE keyword for remote endpoints
+- [ ] **Full-text search** - Integrate text indexing
+- [ ] **Bulk loading** - Efficient import of Turtle, N-Triples, N-Quads, RDF/XML
+- [ ] **Benchmarking** - Performance comparisons with Oxigraph, Blazegraph, Jena
+- [ ] **Query optimization** - Statistics-based join ordering, cost-based optimization
+
+### Completed ✅
+- [x] **HTTP SPARQL endpoint** - W3C SPARQL 1.1 Protocol compliance
+- [x] **W3C test suite integration** - Automated testing infrastructure
+- [x] **Code quality tools** - staticcheck, gosec, comprehensive linting
 
 ## References
 
