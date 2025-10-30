@@ -5,10 +5,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
+	"github.com/aleksaelezovic/trigo/internal/sparqlxml"
 	"github.com/aleksaelezovic/trigo/internal/storage"
 	"github.com/aleksaelezovic/trigo/internal/store"
+	"github.com/aleksaelezovic/trigo/internal/turtle"
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // TestRunner runs W3C SPARQL test suite tests
@@ -166,14 +170,19 @@ func (r *TestRunner) runNegativeSyntaxTest(manifest *TestManifest, test *TestCas
 
 // runQueryEvaluationTest runs a query and compares results
 func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCase) TestResult {
-	// TODO: Implement full evaluation test
-	// This would require:
-	// 1. Loading data files into the store
-	// 2. Executing the query
-	// 3. Comparing results with expected output
-	// 4. Handling different result formats (XML, JSON, etc.)
+	// Clear store before each test
+	if err := r.clearStore(); err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to clear store: %v", err))
+		return TestResultError
+	}
 
-	// For now, just try to parse and optimize
+	// Load data files
+	if err := r.loadTestData(manifest, test); err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to load test data: %v", err))
+		return TestResultError
+	}
+
+	// Read and parse query
 	if test.Action == "" {
 		r.recordError(test, "No action file specified")
 		return TestResultError
@@ -186,7 +195,7 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 		return TestResultError
 	}
 
-	// Parse
+	// Parse query
 	p := parser.NewParser(string(queryBytes))
 	query, err := p.Parse()
 	if err != nil {
@@ -194,19 +203,152 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 		return TestResultFail
 	}
 
-	// Optimize
+	// Optimize query
 	count, _ := r.store.Count()
 	stats := &optimizer.Statistics{TotalTriples: count}
 	opt := optimizer.NewOptimizer(stats)
-	_, err = opt.Optimize(query)
+	plan, err := opt.Optimize(query)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Optimizer error: %v", err))
 		return TestResultFail
 	}
 
-	// TODO: Execute and compare results
-	// For now, skip these tests
-	return TestResultSkip
+	// Execute query
+	exec := executor.NewExecutor(r.store)
+	result, err := exec.Execute(plan)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
+		return TestResultFail
+	}
+
+	// Convert results to bindings (only handle SELECT queries for now)
+	selectResult, ok := result.(*executor.SelectResult)
+	if !ok {
+		r.recordError(test, fmt.Sprintf("Only SELECT queries supported for now, got: %T", result))
+		return TestResultFail
+	}
+
+	actualBindings, err := r.resultsToBindings(selectResult)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to convert results: %v", err))
+		return TestResultFail
+	}
+
+	// Load expected results
+	if test.Result == "" {
+		r.recordError(test, "No result file specified")
+		return TestResultError
+	}
+
+	expectedBindings, err := r.loadExpectedResults(manifest, test)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to load expected results: %v", err))
+		return TestResultFail
+	}
+
+	// Compare results
+	if !sparqlxml.CompareResults(expectedBindings, actualBindings) {
+		r.recordError(test, fmt.Sprintf("Results mismatch: expected %d bindings, got %d bindings", len(expectedBindings), len(actualBindings)))
+		return TestResultFail
+	}
+
+	return TestResultPass
+}
+
+// clearStore removes all triples from the store
+func (r *TestRunner) clearStore() error {
+	// Simple approach: clear by iterating and deleting
+	// For a production system, would want a more efficient Clear() method
+	pattern := &store.Pattern{
+		Subject:   &store.Variable{Name: "s"},
+		Predicate: &store.Variable{Name: "p"},
+		Object:    &store.Variable{Name: "o"},
+		Graph:     &store.Variable{Name: "g"},
+	}
+	iter, err := r.store.Query(pattern)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	var triples []*rdf.Triple
+	for iter.Next() {
+		quad, err := iter.Quad()
+		if err != nil {
+			return err
+		}
+		// Convert quad to triple (ignore graph for now)
+		triple := rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
+		triples = append(triples, triple)
+	}
+
+	for _, triple := range triples {
+		if err := r.store.DeleteTriple(triple); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// loadTestData loads test data files into the store
+func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error {
+	for _, dataFile := range test.Data {
+		dataPath := manifest.ResolveFile(dataFile)
+		dataBytes, err := os.ReadFile(dataPath) // #nosec G304 - test suite legitimately reads test data files
+		if err != nil {
+			return fmt.Errorf("failed to read data file %s: %w", dataFile, err)
+		}
+
+		// Parse Turtle data
+		turtleParser := turtle.NewParser(string(dataBytes))
+		triples, err := turtleParser.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse Turtle data in %s: %w", dataFile, err)
+		}
+
+		// Insert triples
+		for _, triple := range triples {
+			if err := r.store.InsertTriple(triple); err != nil {
+				return fmt.Errorf("failed to insert triple: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// resultsToBindings converts query results to bindings
+func (r *TestRunner) resultsToBindings(results *executor.SelectResult) ([]map[string]rdf.Term, error) {
+	var bindings []map[string]rdf.Term
+
+	for _, result := range results.Bindings {
+		binding := make(map[string]rdf.Term)
+		for k, v := range result.Vars {
+			binding[k] = v
+		}
+		bindings = append(bindings, binding)
+	}
+
+	return bindings, nil
+}
+
+// loadExpectedResults loads expected results from file
+func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase) ([]map[string]rdf.Term, error) {
+	resultPath := manifest.ResolveFile(test.Result)
+	resultFile, err := os.Open(resultPath) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		return nil, fmt.Errorf("failed to open result file: %w", err)
+	}
+	defer resultFile.Close()
+
+	// Parse SPARQL XML results
+	results, err := sparqlxml.ParseXMLResults(resultFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse XML results: %w", err)
+	}
+
+	return results.ToBindings()
 }
 
 // recordError records a test error
