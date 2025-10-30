@@ -264,7 +264,7 @@ go build -o test-runner ./cmd/test-runner
 # - Boolean literals (true/false) in expressions working
 #
 # EXECUTION TESTS (End-to-End Validation):
-# - bind/ (BIND expressions): 50.0% (5/10 tests) ✅
+# - bind/ (BIND expressions): 70.0% (7/10 tests) ✅ IMPROVED!
 # - construct/ (CONSTRUCT queries): 28.6% (2/7 tests)
 # - exists/ (EXISTS/NOT EXISTS): 0% (evaluation not implemented)
 # - negation/ (MINUS): 0% (complex query patterns)
@@ -272,6 +272,8 @@ go build -o test-runner ./cmd/test-runner
 # Passing execution tests validate:
 # ✅ Full query pipeline (parse → optimize → execute)
 # ✅ BIND with arithmetic expressions (?o+10)
+# ✅ BIND variables usable in subsequent patterns
+# ✅ FILTER on BIND-defined variables
 # ✅ String functions (UCASE, LCASE, CONCAT)
 # ✅ Expression evaluation in execution context
 # ✅ Variable scoping rules
