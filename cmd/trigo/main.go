@@ -48,7 +48,8 @@ func main() {
 }
 
 func runDemo() {
-	fmt.Println("=== Trigo RDF Triplestore Demo ===\n")
+	fmt.Println("=== Trigo RDF Triplestore Demo ===")
+	fmt.Println()
 
 	// Create storage
 	dbPath := "./trigo_data"
@@ -62,7 +63,8 @@ func runDemo() {
 
 	// Create triplestore
 	tripleStore := store.NewTripleStore(badgerStorage)
-	fmt.Println("Triplestore initialized\n")
+	fmt.Println("Triplestore initialized")
+	fmt.Println()
 
 	// Insert sample data
 	fmt.Println("Inserting sample data...")
@@ -105,7 +107,9 @@ func runDemo() {
 	fmt.Printf("\nTotal triples stored: %d\n", count)
 
 	// Query example
-	fmt.Println("\n=== Querying Data ===\n")
+	fmt.Println()
+	fmt.Println("=== Querying Data ===")
+	fmt.Println()
 
 	sparqlQuery := `
 		SELECT ?person ?name ?age
@@ -140,7 +144,8 @@ func runDemo() {
 	if err != nil {
 		log.Fatalf("Failed to execute query: %v", err)
 	}
-	fmt.Println("✓ Query executed successfully\n")
+	fmt.Println("✓ Query executed successfully")
+	fmt.Println()
 
 	// Display results
 	fmt.Println("Results:")

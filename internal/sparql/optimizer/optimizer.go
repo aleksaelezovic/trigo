@@ -295,19 +295,3 @@ func (o *Optimizer) selectJoinType(left, right QueryPlan) JoinType {
 	return JoinTypeNestedLoop
 }
 
-// CountVariables counts the number of distinct variables in a pattern
-func (o *Optimizer) countVariables(pattern *parser.TriplePattern) int {
-	vars := make(map[string]bool)
-
-	if pattern.Subject.IsVariable() {
-		vars[pattern.Subject.Variable.Name] = true
-	}
-	if pattern.Predicate.IsVariable() {
-		vars[pattern.Predicate.Variable.Name] = true
-	}
-	if pattern.Object.IsVariable() {
-		vars[pattern.Object.Variable.Name] = true
-	}
-
-	return len(vars)
-}

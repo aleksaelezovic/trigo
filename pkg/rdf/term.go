@@ -229,12 +229,12 @@ func NewDateTimeLiteral(value time.Time) *Literal {
 // Utility functions for encoding numeric values
 func EncodeInt64BigEndian(value int64) []byte {
 	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(value))
+	binary.BigEndian.PutUint64(buf, uint64(value)) // #nosec G115 - intentional bit-pattern conversion for binary encoding
 	return buf
 }
 
 func DecodeInt64BigEndian(buf []byte) int64 {
-	return int64(binary.BigEndian.Uint64(buf))
+	return int64(binary.BigEndian.Uint64(buf)) // #nosec G115 - intentional bit-pattern conversion for binary decoding
 }
 
 func EncodeFloat64BigEndian(value float64) []byte {

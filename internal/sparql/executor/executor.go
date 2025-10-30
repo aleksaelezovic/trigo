@@ -297,7 +297,7 @@ func (it *nestedLoopJoinIterator) Next() bool {
 				continue
 			}
 			// Right exhausted, close it
-			it.currentRight.Close()
+			_ = it.currentRight.Close() // #nosec G104 - close error doesn't affect iteration logic
 			it.currentRight = nil
 		}
 
@@ -323,7 +323,7 @@ func (it *nestedLoopJoinIterator) Binding() *store.Binding {
 
 func (it *nestedLoopJoinIterator) Close() error {
 	if it.currentRight != nil {
-		it.currentRight.Close()
+		_ = it.currentRight.Close() // #nosec G104 - right close error less critical than left close error
 	}
 	return it.left.Close()
 }

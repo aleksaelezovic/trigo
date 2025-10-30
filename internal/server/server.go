@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
@@ -40,11 +41,20 @@ func NewServer(store *store.TripleStore, addr string) *Server {
 
 // Start starts the HTTP server
 func (s *Server) Start() error {
-	http.HandleFunc("/sparql", s.handleSPARQL)
-	http.HandleFunc("/", s.handleRoot)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sparql", s.handleSPARQL)
+	mux.HandleFunc("/", s.handleRoot)
+
+	server := &http.Server{
+		Addr:         s.addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 
 	log.Printf("Starting SPARQL endpoint at http://%s/sparql", s.addr)
-	return http.ListenAndServe(s.addr, nil)
+	return server.ListenAndServe()
 }
 
 // handleRoot provides information about the endpoint
@@ -110,7 +120,7 @@ LIMIT 10</pre>
 </body>
 </html>`
 
-	w.Write([]byte(html))
+	_, _ = w.Write([]byte(html)) // #nosec G104 - error writing response is logged elsewhere if needed
 }
 
 // handleSPARQL handles SPARQL query requests according to SPARQL 1.1 Protocol
@@ -276,7 +286,7 @@ func (s *Server) writeResult(w http.ResponseWriter, result executor.QueryResult,
 
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	_, _ = w.Write(data) // #nosec G104 - error writing response is logged elsewhere if needed
 }
 
 // writeError writes an error response
@@ -287,5 +297,5 @@ func (s *Server) writeError(w http.ResponseWriter, statusCode int, message strin
 	w.WriteHeader(statusCode)
 
 	// Simple JSON serialization
-	w.Write([]byte(fmt.Sprintf(`{"error":{"code":%d,"message":"%s"}}`, statusCode, message)))
+	_, _ = w.Write([]byte(fmt.Sprintf(`{"error":{"code":%d,"message":"%s"}}`, statusCode, message))) // #nosec G104 - error writing response is logged elsewhere if needed
 }

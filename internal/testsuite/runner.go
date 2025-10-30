@@ -119,7 +119,7 @@ func (r *TestRunner) runPositiveSyntaxTest(manifest *TestManifest, test *TestCas
 	}
 
 	queryFile := manifest.ResolveFile(test.Action)
-	queryBytes, err := os.ReadFile(queryFile)
+	queryBytes, err := os.ReadFile(queryFile) // #nosec G304 - test suite legitimately reads test query files
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Failed to read query file: %v", err))
 		return TestResultError
@@ -145,7 +145,7 @@ func (r *TestRunner) runNegativeSyntaxTest(manifest *TestManifest, test *TestCas
 	}
 
 	queryFile := manifest.ResolveFile(test.Action)
-	queryBytes, err := os.ReadFile(queryFile)
+	queryBytes, err := os.ReadFile(queryFile) // #nosec G304 - test suite legitimately reads test query files
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Failed to read query file: %v", err))
 		return TestResultError
@@ -180,7 +180,7 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 	}
 
 	queryFile := manifest.ResolveFile(test.Action)
-	queryBytes, err := os.ReadFile(queryFile)
+	queryBytes, err := os.ReadFile(queryFile) // #nosec G304 - test suite legitimately reads test query files
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Failed to read query file: %v", err))
 		return TestResultError

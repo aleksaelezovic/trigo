@@ -165,7 +165,7 @@ func (e *TermEncoder) encodeIntegerLiteral(lit *rdf.Literal) (EncodedTerm, *stri
 	}
 
 	// Store as big endian signed integer
-	binary.BigEndian.PutUint64(encoded[1:9], uint64(value))
+	binary.BigEndian.PutUint64(encoded[1:9], uint64(value)) // #nosec G115 - intentional bit-pattern conversion for binary encoding
 	// Zero out remaining bytes
 	for i := 9; i < EncodedTermSize; i++ {
 		encoded[i] = 0
@@ -246,7 +246,7 @@ func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (EncodedTerm, *str
 
 	// Store as Unix timestamp (nanoseconds since epoch)
 	nanos := t.UnixNano()
-	binary.BigEndian.PutUint64(encoded[1:9], uint64(nanos))
+	binary.BigEndian.PutUint64(encoded[1:9], uint64(nanos)) // #nosec G115 - intentional bit-pattern conversion for timestamp encoding
 
 	// Zero out remaining bytes
 	for i := 9; i < EncodedTermSize; i++ {
@@ -268,7 +268,7 @@ func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (EncodedTerm, *string,
 
 	// Store as Unix timestamp (days since epoch)
 	days := t.Unix() / 86400
-	binary.BigEndian.PutUint64(encoded[1:9], uint64(days))
+	binary.BigEndian.PutUint64(encoded[1:9], uint64(days)) // #nosec G115 - intentional bit-pattern conversion for date encoding
 
 	// Zero out remaining bytes
 	for i := 9; i < EncodedTermSize; i++ {

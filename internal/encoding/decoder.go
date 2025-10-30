@@ -66,7 +66,7 @@ func (d *TermDecoder) DecodeTerm(encoded EncodedTerm, stringValue *string) (rdf.
 		return rdf.NewLiteral(*stringValue), nil
 
 	case rdf.TermTypeIntegerLiteral:
-		value := int64(binary.BigEndian.Uint64(encoded[1:9]))
+		value := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for binary decoding
 		return rdf.NewIntegerLiteral(value), nil
 
 	case rdf.TermTypeDecimalLiteral:
@@ -84,12 +84,12 @@ func (d *TermDecoder) DecodeTerm(encoded EncodedTerm, stringValue *string) (rdf.
 		return rdf.NewBooleanLiteral(value), nil
 
 	case rdf.TermTypeDateTimeLiteral:
-		nanos := int64(binary.BigEndian.Uint64(encoded[1:9]))
+		nanos := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for timestamp decoding
 		t := time.Unix(0, nanos)
 		return rdf.NewDateTimeLiteral(t), nil
 
 	case rdf.TermTypeDateLiteral:
-		days := int64(binary.BigEndian.Uint64(encoded[1:9]))
+		days := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for date decoding
 		t := time.Unix(days*86400, 0)
 		return rdf.NewLiteralWithDatatype(t.Format("2006-01-02"), rdf.XSDDate), nil
 

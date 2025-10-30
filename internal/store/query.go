@@ -83,14 +83,14 @@ func (s *TripleStore) Query(pattern *Pattern) (QuadIterator, error) {
 	// Build the prefix for scanning
 	prefix, err := s.buildScanPrefix(pattern, keyPattern)
 	if err != nil {
-		txn.Rollback()
+		_ = txn.Rollback() // #nosec G104 - rollback error less important than original error
 		return nil, err
 	}
 
 	// Create iterator
 	it, err := txn.Scan(table, prefix, nil)
 	if err != nil {
-		txn.Rollback()
+		_ = txn.Rollback() // #nosec G104 - rollback error less important than original error
 		return nil, err
 	}
 
@@ -291,7 +291,7 @@ func (qi *quadIterator) Close() error {
 		return nil
 	}
 	qi.closed = true
-	qi.it.Close()
+	_ = qi.it.Close() // #nosec G104 - iterator close error less critical than transaction rollback error
 	return qi.txn.Rollback()
 }
 

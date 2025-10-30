@@ -54,7 +54,7 @@ const (
 // ParseManifest parses a Turtle manifest file (simplified parser)
 // This is a basic implementation - a full parser would use a proper Turtle library
 func ParseManifest(path string) (*TestManifest, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 - test suite legitimately reads test manifest files
 	if err != nil {
 		return nil, fmt.Errorf("failed to open manifest: %w", err)
 	}
