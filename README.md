@@ -127,9 +127,11 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **DISTINCT** | ✅ Implemented | Hash-based deduplication |
+| **GROUP BY** | ✅ Parsed | Grouping with variables and expressions, execution TODO |
+| **HAVING** | ✅ Parsed | Filter conditions on groups, execution TODO |
+| **ORDER BY** | ✅ Parsed | Sorting expressions parsed, execution TODO |
 | **LIMIT** | ✅ Implemented | Result limiting |
 | **OFFSET** | ✅ Implemented | Result skipping |
-| **ORDER BY** | 🚧 Parsed only | Sorting expressions parsed, execution TODO |
 
 ### Graph Patterns
 
@@ -173,12 +175,14 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 - ✅ **UNION** - Pattern alternation (parsed)
 - ✅ **MINUS** - Pattern negation (parsed)
 - ✅ **EXISTS/NOT EXISTS** - Subpattern testing in FILTER (parsed)
+- ✅ **GROUP BY** - Grouping with variables and expressions (parsed)
+- ✅ **HAVING** - Filter conditions on groups (parsed)
+- ✅ **Subquery detection** - Recognize nested SELECT/ASK/CONSTRUCT/DESCRIBE (skip for now)
 
 ### Advanced Features (Not Yet Implemented)
 
-- ❌ **Subqueries** - Nested SELECT queries
+- 🚧 **Subqueries** - Nested SELECT queries (detected, parsing TODO)
 - ❌ **Property Paths** - Transitive property queries (`*`, `+`, `?`, `/`, `|`)
-- ❌ **Aggregation with GROUP BY** - GROUP BY, HAVING clauses
 - ❌ **VALUES** - Inline data blocks
 - ❌ **SERVICE** - Federated queries
 - ❌ **SPARQL UPDATE** - INSERT, DELETE, LOAD, CLEAR operations
@@ -238,10 +242,13 @@ go build -o test-runner ./cmd/test-runner
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
 
 # Current parser test results:
-# - syntax-query: 68.1% pass rate (64/94 tests)
+# - syntax-query: 70.2% pass rate (66/94 tests)
 # - All SELECT expression tests passing (5/5)
 # - All aggregate syntax tests passing (15/15)
 # - All MINUS/EXISTS/NOT EXISTS tests passing (7/7)
+# - BIND tests: 100% parse correctly (10/10)
+# - Negation tests: 100% parse correctly (12/12)
+# - Subquery tests: 78.6% parse correctly (11/14)
 # - CONSTRUCT WHERE tests: 28.6% (2/7)
 ```
 
@@ -278,17 +285,17 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 
 ### Near-term (Query Execution)
 - [ ] **FILTER expression evaluation** - Complete evaluator for all parsed operators
-- [ ] **ORDER BY execution** - Implement result sorting
+- [ ] **ORDER BY execution** - Implement result sorting (parser done ✅)
 - [ ] **DESCRIBE** - Execute resource description queries
 - [ ] **OPTIONAL patterns execution** - Left join implementation (parser done ✅)
 - [ ] **UNION patterns execution** - Alternation support (parser done ✅)
 - [ ] **MINUS patterns execution** - Set difference implementation (parser done ✅)
 - [ ] **BIND execution** - Variable assignment evaluation (parser done ✅)
 - [ ] **EXISTS/NOT EXISTS execution** - Subpattern testing (parser done ✅)
+- [ ] **Aggregation execution** - GROUP BY, HAVING, aggregate functions (parser done ✅)
 
 ### Medium-term (Advanced SPARQL)
-- [ ] **Aggregation with GROUP BY** - GROUP BY, HAVING, aggregate function execution (syntax parsed ✅)
-- [ ] **Subqueries** - Nested SELECT support
+- [ ] **Subquery parsing** - Nested SELECT support (detection done ✅)
 - [ ] **VALUES** - Inline data blocks
 - [ ] **Property paths** - Transitive/recursive queries (`*`, `+`, `?`, `/`, `|`)
 - [ ] **Built-in functions** - Complete SPARQL 1.1 function library
@@ -313,6 +320,8 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **PREFIX/BASE declarations** - Namespace support with prefixed name expansion
 - [x] **SELECT expressions** - Projection expressions and aggregate syntax
 - [x] **Parser improvements** - Comments, 'a' keyword, OPTIONAL/UNION/MINUS/BIND/EXISTS parsing
+- [x] **GROUP BY & HAVING** - Grouping and filter conditions parsed
+- [x] **Subquery detection** - Recognize nested queries to prevent parse errors
 
 ## References
 
