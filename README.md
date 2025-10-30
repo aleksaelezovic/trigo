@@ -237,7 +237,7 @@ curl -X POST http://localhost:8080/sparql \
 
 ## Testing with W3C SPARQL Test Suite
 
-Trigo includes the official W3C SPARQL 1.1 test suite:
+Trigo includes the official W3C SPARQL 1.1 test suite with both syntax and execution validation:
 
 ```bash
 # Clone with test suite (submodule)
@@ -245,17 +245,37 @@ git clone --recursive https://github.com/aleksaelezovic/trigo.git
 
 # Build and run test runner
 go build -o test-runner ./cmd/test-runner
+
+# Run syntax tests (parser validation)
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
 
-# Current parser test results:
+# Run execution tests (end-to-end validation)
+./test-runner testdata/rdf-tests/sparql/sparql11/bind
+
+# Current test results:
+#
+# SYNTAX TESTS (Parser Validation):
 # - syntax-query: 69.1% pass rate (65/94 tests)
 # - All SELECT expression tests passing (5/5)
 # - All aggregate syntax tests passing (15/15)
 # - All IN/NOT IN tests passing (3/3)
-# - EXISTS/NOT EXISTS parsing working (syntax tests passing)
+# - EXISTS/NOT EXISTS parsing working
 # - Property list shorthand (semicolon/comma) working
 # - Boolean literals (true/false) in expressions working
-# - CONSTRUCT WHERE tests: 28.6% (2/7)
+#
+# EXECUTION TESTS (End-to-End Validation):
+# - bind/ (BIND expressions): 50.0% (5/10 tests) ✅
+# - construct/ (CONSTRUCT queries): 28.6% (2/7 tests)
+# - exists/ (EXISTS/NOT EXISTS): 0% (evaluation not implemented)
+# - negation/ (MINUS): 0% (complex query patterns)
+#
+# Passing execution tests validate:
+# ✅ Full query pipeline (parse → optimize → execute)
+# ✅ BIND with arithmetic expressions (?o+10)
+# ✅ String functions (UCASE, LCASE, CONCAT)
+# ✅ Expression evaluation in execution context
+# ✅ Variable scoping rules
+# ✅ Result correctness vs W3C expected outputs
 ```
 
 📖 **See [TESTING.md](TESTING.md) for complete testing documentation**
