@@ -165,6 +165,15 @@ type ExistsExpression struct {
 
 func (e *ExistsExpression) expressionNode() {}
 
+// InExpression represents IN or NOT IN operator
+type InExpression struct {
+	Not        bool         // true for NOT IN, false for IN
+	Expression Expression   // the expression to test
+	Values     []Expression // the list of values to test against
+}
+
+func (e *InExpression) expressionNode() {}
+
 // Operator represents an operator in expressions
 type Operator int
 

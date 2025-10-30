@@ -39,6 +39,8 @@ func (e *Evaluator) Evaluate(expr parser.Expression, binding *store.Binding) (rd
 		return e.evaluateFunctionCall(ex, binding)
 	case *parser.ExistsExpression:
 		return e.evaluateExistsExpression(ex, binding)
+	case *parser.InExpression:
+		return e.evaluateInExpression(ex, binding)
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}
@@ -79,4 +81,37 @@ func (e *Evaluator) evaluateExistsExpression(expr *parser.ExistsExpression, bind
 	// and checking if any results are returned.
 	// For now, return an error to indicate it's not yet implemented.
 	return nil, fmt.Errorf("EXISTS/NOT EXISTS evaluation not yet implemented")
+}
+
+// evaluateInExpression evaluates IN or NOT IN operator
+// x IN (e1, e2, ...) is equivalent to (x = e1) || (x = e2) || ...
+// x NOT IN (e1, e2, ...) is equivalent to !((x = e1) || (x = e2) || ...)
+func (e *Evaluator) evaluateInExpression(expr *parser.InExpression, binding *store.Binding) (rdf.Term, error) {
+	// Evaluate the left-hand expression
+	leftValue, err := e.Evaluate(expr.Expression, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if leftValue equals any of the values in the list
+	found := false
+	for _, valueExpr := range expr.Values {
+		rightValue, err := e.Evaluate(valueExpr, binding)
+		if err != nil {
+			// If evaluation fails for any value, skip it (SPARQL semantics)
+			continue
+		}
+
+		// Check equality
+		if leftValue.Equals(rightValue) {
+			found = true
+			break
+		}
+	}
+
+	// Apply NOT if needed
+	if expr.Not {
+		return rdf.NewBooleanLiteral(!found), nil
+	}
+	return rdf.NewBooleanLiteral(found), nil
 }

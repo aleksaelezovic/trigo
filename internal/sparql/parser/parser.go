@@ -1341,7 +1341,7 @@ func (p *Parser) parseLogicalAndExpression() (Expression, error) {
 	return left, nil
 }
 
-// parseComparisonExpression parses comparison operators
+// parseComparisonExpression parses comparison operators and IN/NOT IN
 func (p *Parser) parseComparisonExpression() (Expression, error) {
 	left, err := p.parseAdditiveExpression()
 	if err != nil {
@@ -1350,33 +1350,91 @@ func (p *Parser) parseComparisonExpression() (Expression, error) {
 
 	p.skipWhitespace()
 
-	var op Operator
-	if p.match("<=") {
-		op = OpLessThanOrEqual
-	} else if p.match(">=") {
-		op = OpGreaterThanOrEqual
-	} else if p.match("!=") {
-		op = OpNotEqual
-	} else if p.match("=") {
-		op = OpEqual
-	} else if p.match("<") {
-		op = OpLessThan
-	} else if p.match(">") {
-		op = OpGreaterThan
+	// Check for IN or NOT IN operators
+	savedPos := p.pos
+	notIn := false
+	if p.matchKeyword("NOT") {
+		p.skipWhitespace()
+		if p.matchKeyword("IN") {
+			notIn = true
+		} else {
+			// NOT not followed by IN, restore and try regular operators
+			p.pos = savedPos
+		}
+	} else if p.matchKeyword("IN") {
+		notIn = false
 	} else {
-		// No comparison operator
-		return left, nil
+		// Not IN operator, check for comparison operators
+		p.pos = savedPos
+		var op Operator
+		if p.match("<=") {
+			op = OpLessThanOrEqual
+		} else if p.match(">=") {
+			op = OpGreaterThanOrEqual
+		} else if p.match("!=") {
+			op = OpNotEqual
+		} else if p.match("=") {
+			op = OpEqual
+		} else if p.match("<") {
+			op = OpLessThan
+		} else if p.match(">") {
+			op = OpGreaterThan
+		} else {
+			// No comparison operator
+			return left, nil
+		}
+
+		right, err := p.parseAdditiveExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		return &BinaryExpression{
+			Left:     left,
+			Operator: op,
+			Right:    right,
+		}, nil
 	}
 
-	right, err := p.parseAdditiveExpression()
-	if err != nil {
-		return nil, err
+	// Parse IN or NOT IN
+	p.skipWhitespace()
+	if p.peek() != '(' {
+		return nil, fmt.Errorf("expected '(' after IN/NOT IN")
+	}
+	p.advance() // skip '('
+
+	// Parse value list
+	var values []Expression
+	p.skipWhitespace()
+
+	// Check for empty list
+	if p.peek() != ')' {
+		for {
+			expr, err := p.parseAdditiveExpression()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse IN value: %w", err)
+			}
+			values = append(values, expr)
+
+			p.skipWhitespace()
+			if p.peek() == ',' {
+				p.advance() // skip ','
+				p.skipWhitespace()
+			} else {
+				break
+			}
+		}
 	}
 
-	return &BinaryExpression{
-		Left:     left,
-		Operator: op,
-		Right:    right,
+	if p.peek() != ')' {
+		return nil, fmt.Errorf("expected ')' after IN value list")
+	}
+	p.advance() // skip ')'
+
+	return &InExpression{
+		Not:        notIn,
+		Expression: left,
+		Values:     values,
 	}, nil
 }
 
