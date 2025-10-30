@@ -1,5 +1,6 @@
 # Binaries (root level only)
 /trigo
+/test-runner
 *.exe
 *.dll
 *.so
@@ -19,6 +20,7 @@ vendor/
 
 # Database files
 trigo_data/
+test_db_temp/
 *.db
 *.badger
 

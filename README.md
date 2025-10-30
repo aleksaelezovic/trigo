@@ -156,15 +156,21 @@ curl -X POST http://localhost:8080/sparql \
 
 ## Testing with W3C SPARQL Test Suite
 
-The project is designed to be tested against the official W3C SPARQL test suite:
+Trigo includes the official W3C SPARQL 1.1 test suite:
 
 ```bash
-# Clone the test suite
-git clone https://github.com/w3c/rdf-tests.git
+# Clone with test suite (submodule)
+git clone --recursive https://github.com/aleksaelezovic/trigo.git
 
-# Run tests (TODO: implement test runner)
-go test ./... -v
+# Build and run test runner
+go build -o test-runner ./cmd/test-runner
+./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
+
+# Current results: 30.9% pass rate on syntax tests
+# (Missing features: aggregates, subqueries, BIND, VALUES, etc.)
 ```
+
+📖 **See [TESTING.md](TESTING.md) for complete testing documentation**
 
 ## Performance Considerations
 
