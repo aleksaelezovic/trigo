@@ -55,6 +55,7 @@ type GraphPattern struct {
 	Type     GraphPatternType
 	Patterns []*TriplePattern // For basic graph patterns
 	Filters  []*Filter         // FILTER expressions
+	Binds    []*Bind           // BIND expressions
 	Children []*GraphPattern   // For complex patterns (UNION, OPTIONAL, etc.)
 	Graph    *GraphTerm        // For GRAPH patterns
 }
@@ -102,6 +103,12 @@ type GraphTerm struct {
 // Filter represents a FILTER expression
 type Filter struct {
 	Expression Expression
+}
+
+// Bind represents a BIND expression (assigns an expression to a variable)
+type Bind struct {
+	Expression Expression
+	Variable   *Variable
 }
 
 // Expression represents a SPARQL expression

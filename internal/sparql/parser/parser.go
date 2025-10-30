@@ -11,23 +11,43 @@ import (
 
 // Parser parses SPARQL queries
 type Parser struct {
-	input  string
-	pos    int
-	length int
+	input    string
+	pos      int
+	length   int
+	prefixes map[string]string // Maps prefix to IRI
 }
 
 // NewParser creates a new SPARQL parser
 func NewParser(input string) *Parser {
 	return &Parser{
-		input:  input,
-		pos:    0,
-		length: len(input),
+		input:    input,
+		pos:      0,
+		length:   len(input),
+		prefixes: make(map[string]string),
 	}
 }
 
 // Parse parses a SPARQL query
 func (p *Parser) Parse() (*Query, error) {
 	p.skipWhitespace()
+
+	// Skip PREFIX and BASE declarations
+	for {
+		p.skipWhitespace()
+		if p.matchKeyword("PREFIX") {
+			// Skip PREFIX prefix: <iri>
+			if err := p.skipPrefix(); err != nil {
+				return nil, err
+			}
+		} else if p.matchKeyword("BASE") {
+			// Skip BASE <iri>
+			if err := p.skipBase(); err != nil {
+				return nil, err
+			}
+		} else {
+			break
+		}
+	}
 
 	// Determine query type
 	queryType, err := p.parseQueryType()
@@ -99,10 +119,8 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 	}
 	query.Variables = variables
 
-	// Parse WHERE clause
-	if !p.matchKeyword("WHERE") {
-		return nil, fmt.Errorf("expected WHERE clause")
-	}
+	// Parse WHERE clause (WHERE keyword is optional)
+	p.matchKeyword("WHERE") // consume WHERE if present, but don't require it
 
 	where, err := p.parseGraphPattern()
 	if err != nil {
@@ -165,10 +183,34 @@ func (p *Parser) parseAsk() (*AskQuery, error) {
 func (p *Parser) parseConstruct() (*ConstructQuery, error) {
 	query := &ConstructQuery{}
 
-	// Parse template - expects { triple pattern ... }
 	p.skipWhitespace()
+
+	// Check for CONSTRUCT WHERE shorthand syntax
+	if p.matchKeyword("WHERE") {
+		// CONSTRUCT WHERE { pattern } is shorthand for CONSTRUCT { pattern } WHERE { pattern }
+		// BUT only when the pattern contains only triple patterns (no FILTER)
+		where, err := p.parseGraphPattern()
+		if err != nil {
+			return nil, err
+		}
+
+		// CONSTRUCT WHERE is only valid when there are no FILTER expressions
+		// GRAPH patterns and other constructs are allowed
+		if len(where.Filters) > 0 {
+			return nil, fmt.Errorf("CONSTRUCT WHERE cannot contain FILTER expressions")
+		}
+
+		query.Where = where
+
+		// Use the WHERE pattern as the template
+		query.Template = where.Patterns
+
+		return query, nil
+	}
+
+	// Parse template - expects { triple pattern ... }
 	if p.peek() != '{' {
-		return nil, fmt.Errorf("expected '{' to start CONSTRUCT template")
+		return nil, fmt.Errorf("expected '{' to start CONSTRUCT template or WHERE keyword")
 	}
 	p.advance() // skip '{'
 
@@ -254,6 +296,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 		Type:     GraphPatternTypeBasic,
 		Patterns: []*TriplePattern{},
 		Filters:  []*Filter{},
+		Binds:    []*Bind{},
 	}
 
 	for {
@@ -286,6 +329,16 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				return nil, err
 			}
 			pattern.Filters = append(pattern.Filters, filter)
+			continue
+		}
+
+		// Check for BIND
+		if p.matchKeyword("BIND") {
+			bind, err := p.parseBind()
+			if err != nil {
+				return nil, err
+			}
+			pattern.Binds = append(pattern.Binds, bind)
 			continue
 		}
 
@@ -428,6 +481,15 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 		return &TermOrVariable{Term: literal}, nil
 	}
 
+	// Prefixed name (like :foo or prefix:foo)
+	if ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+		prefixedName, err := p.parsePrefixedName()
+		if err != nil {
+			return nil, err
+		}
+		return &TermOrVariable{Term: rdf.NewNamedNode(prefixedName)}, nil
+	}
+
 	return nil, fmt.Errorf("unexpected character: %c", ch)
 }
 
@@ -555,6 +617,61 @@ func (p *Parser) parseFilter() (*Filter, error) {
 	return &Filter{}, nil
 }
 
+// parseBind parses a BIND expression: BIND(<expression> AS ?variable)
+func (p *Parser) parseBind() (*Bind, error) {
+	p.skipWhitespace()
+
+	if p.peek() != '(' {
+		return nil, fmt.Errorf("expected '(' after BIND")
+	}
+	p.advance() // skip '('
+
+	// Parse expression - for now, skip until 'AS' keyword
+	// Find 'AS' keyword
+	startPos := p.pos
+	depth := 1
+	for p.pos < p.length {
+		if p.peek() == '(' {
+			depth++
+			p.advance()
+		} else if p.peek() == ')' {
+			depth--
+			if depth == 0 {
+				// Found closing paren without AS - error
+				return nil, fmt.Errorf("expected AS keyword in BIND expression")
+			}
+			p.advance()
+		} else if depth == 1 && p.matchKeyword("AS") {
+			// Found AS at the right depth
+			break
+		} else {
+			p.advance()
+		}
+	}
+
+	// Save the expression text (we'll just store it as a placeholder for now)
+	_ = p.input[startPos : p.pos-2] // Skip the " AS" we just consumed
+
+	p.skipWhitespace()
+
+	// Parse variable
+	variable, err := p.parseVariable()
+	if err != nil {
+		return nil, fmt.Errorf("expected variable after AS in BIND: %w", err)
+	}
+
+	p.skipWhitespace()
+
+	// Expect closing parenthesis
+	if p.peek() != ')' {
+		return nil, fmt.Errorf("expected ')' to close BIND expression")
+	}
+	p.advance() // skip ')'
+
+	// TODO: Parse expression properly
+	return &Bind{Variable: variable}, nil
+}
+
 // parseOrderBy parses ORDER BY clause
 func (p *Parser) parseOrderBy() ([]*OrderCondition, error) {
 	// Simplified implementation
@@ -654,4 +771,108 @@ func (p *Parser) matchKeyword(keyword string) bool {
 		return true
 	}
 	return false
+}
+
+// skipPrefix parses and stores a PREFIX declaration (prefix: <iri>)
+func (p *Parser) skipPrefix() error {
+	p.skipWhitespace()
+
+	// Read prefix name (can be empty for default prefix)
+	prefixStart := p.pos
+	for p.pos < p.length && p.input[p.pos] != ':' {
+		p.advance()
+	}
+	prefix := p.input[prefixStart:p.pos]
+
+	if p.pos >= p.length {
+		return fmt.Errorf("expected ':' in PREFIX declaration")
+	}
+	p.advance() // skip ':'
+
+	p.skipWhitespace()
+
+	// Parse IRI <...>
+	if p.peek() != '<' {
+		return fmt.Errorf("expected '<' to start IRI in PREFIX declaration")
+	}
+	p.advance() // skip '<'
+
+	iriStart := p.pos
+	for p.pos < p.length && p.input[p.pos] != '>' {
+		p.advance()
+	}
+	iri := p.input[iriStart:p.pos]
+
+	if p.pos >= p.length {
+		return fmt.Errorf("expected '>' to end IRI in PREFIX declaration")
+	}
+	p.advance() // skip '>'
+
+	// Store the prefix mapping
+	p.prefixes[prefix] = iri
+
+	return nil
+}
+
+// skipBase skips a BASE declaration (<iri>)
+func (p *Parser) skipBase() error {
+	p.skipWhitespace()
+
+	// Skip IRI <...>
+	if p.peek() != '<' {
+		return fmt.Errorf("expected '<' to start IRI in BASE declaration")
+	}
+	p.advance() // skip '<'
+
+	// Skip until '>'
+	for p.pos < p.length && p.input[p.pos] != '>' {
+		p.advance()
+	}
+
+	if p.pos >= p.length {
+		return fmt.Errorf("expected '>' to end IRI in BASE declaration")
+	}
+	p.advance() // skip '>'
+
+	return nil
+}
+
+// parsePrefixedName parses a prefixed name (like :foo or prefix:foo) and expands it to a full IRI
+func (p *Parser) parsePrefixedName() (string, error) {
+	// Read prefix part (everything before ':')
+	prefixStart := p.pos
+	for p.pos < p.length && p.input[p.pos] != ':' {
+		ch := p.input[p.pos]
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+			break
+		}
+		p.advance()
+	}
+	prefix := p.input[prefixStart:p.pos]
+
+	// Expect ':'
+	if p.peek() != ':' {
+		return "", fmt.Errorf("expected ':' in prefixed name")
+	}
+	p.advance() // skip ':'
+
+	// Read local part (everything after ':')
+	localStart := p.pos
+	for p.pos < p.length {
+		ch := p.input[p.pos]
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+			break
+		}
+		p.advance()
+	}
+	local := p.input[localStart:p.pos]
+
+	// Look up prefix in prefix map
+	baseIRI, ok := p.prefixes[prefix]
+	if !ok {
+		return "", fmt.Errorf("undefined prefix: '%s'", prefix)
+	}
+
+	// Expand to full IRI
+	return baseIRI + local, nil
 }
