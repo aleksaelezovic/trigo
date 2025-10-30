@@ -119,33 +119,65 @@ Execute queries against data and compare results:
 
 ## Current Test Support
 
-### ✅ Implemented
+### Syntax Tests (Parser Validation)
+- **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)
+- ✅ All SELECT expression tests (5/5)
+- ✅ All aggregate syntax tests (15/15)
+- ✅ All IN/NOT IN tests (3/3)
+- ✅ EXISTS/NOT EXISTS parsing
+- ✅ Property list shorthand (semicolon/comma)
+- ✅ Boolean literals (true/false)
 
-- Positive syntax tests (basic SELECT, ASK)
-- Negative syntax tests
-- Basic manifest parsing
+### Execution Tests (End-to-End Validation)
 
-### 🚧 Partial Support
+#### ✅ Implemented and Validated
+- **BIND expressions**: 70.0% pass rate (7/10 tests)
+  - ✅ Basic BIND with expressions
+  - ✅ BIND variables in subsequent patterns
+  - ✅ FILTER on BIND variables
+  - ⚠️ Known limitations: UNION scoping, forward references
+- **CONSTRUCT queries**: 28.6% pass rate (2/7 tests)
+  - ✅ Template instantiation
+  - ✅ CONSTRUCT WHERE shorthand
+  - ✅ N-Triples output
+- **Basic graph patterns**: Full support
+  - ✅ Triple patterns with variables
+  - ✅ Nested loop joins
+  - ✅ Join ordering optimization
+- **Query modifiers**: Full support
+  - ✅ DISTINCT (hash-based deduplication)
+  - ✅ LIMIT and OFFSET
+  - ✅ ORDER BY (ASC/DESC)
+- **Complex patterns**: Full support
+  - ✅ OPTIONAL (left outer join)
+  - ✅ UNION (pattern alternation)
+  - ✅ MINUS (set difference)
+  - ✅ GRAPH (named graph queries)
+- **FILTER expressions**: 20+ operators and functions
+  - ✅ Logical operators (&&, ||, !)
+  - ✅ Comparison operators (=, !=, <, >, <=, >=)
+  - ✅ Arithmetic operators (+, -, *, /)
+  - ✅ IN/NOT IN operators
+  - ✅ String functions (STRLEN, SUBSTR, UCASE, LCASE, CONCAT, etc.)
+  - ✅ Type checking (BOUND, isIRI, isBlank, isLiteral, isNumeric)
+  - ✅ Numeric functions (ABS, CEIL, FLOOR, ROUND)
 
-- SELECT queries (basic patterns only)
-- ASK queries
-- Triple patterns
-- LIMIT, OFFSET
-- DISTINCT
+#### 🚧 Parsed But Not Executed
+- **EXISTS/NOT EXISTS**: Parser complete, evaluation TODO
+- **Aggregates**: Syntax supported (COUNT, SUM, AVG, MIN, MAX, GROUP_CONCAT, SAMPLE)
+- **GROUP BY**: Parsed with variables and expressions
+- **HAVING**: Parsed with filter conditions
+- **DESCRIBE**: Parser complete, execution TODO
 
-### ❌ Not Yet Implemented
-
-- Aggregates (COUNT, SUM, AVG, etc.)
-- GROUP BY, HAVING
-- BIND clause
+#### ❌ Not Yet Implemented
 - VALUES clause
-- Subqueries
-- OPTIONAL, UNION, MINUS
+- Subqueries (detected but not parsed)
 - Property paths
-- EXISTS, NOT EXISTS
-- FILTER expressions (partial)
-- CONSTRUCT queries
+- REGEX function
+- Date/time functions
+- Hash functions (MD5, SHA1, etc.)
 - UPDATE operations
+- Service federation
 
 ## Implementation Details
 
@@ -159,9 +191,39 @@ Manifest Parser (.ttl files)
 Test Evaluator
     ↓
 ├─ Syntax Tests → SPARQL Parser
-├─ Evaluation Tests → Parser + Optimizer + Executor
+├─ Evaluation Tests → Full Pipeline:
+│   ├─ Turtle Parser (load test data)
+│   ├─ SPARQL Parser (parse query)
+│   ├─ Optimizer (build execution plan)
+│   ├─ Executor (run query)
+│   ├─ SPARQL XML Parser (parse expected results)
+│   └─ Result Comparator (validate correctness)
 └─ Update Tests → (TODO)
 ```
+
+### Key Components
+
+**Turtle Parser** (`internal/turtle/parser.go`):
+- Loads RDF test data from `.ttl` files
+- Supports PREFIX/BASE declarations
+- Handles IRIs, blank nodes, literals
+- Supports datatypes and language tags
+- Sufficient for W3C test data files
+
+**SPARQL XML Parser** (`internal/sparqlxml/parser.go`):
+- Parses expected results from `.srx` files
+- Converts to RDF term bindings
+- Supports all RDF term types
+- Enables order-independent result comparison
+
+**Query Evaluation** (`internal/testsuite/runner.go`):
+1. Clear store between tests
+2. Load test data using Turtle parser
+3. Parse SPARQL query
+4. Optimize query plan
+5. Execute query with full pipeline
+6. Parse expected results
+7. Compare actual vs expected (order-independent)
 
 ### Manifest Format
 

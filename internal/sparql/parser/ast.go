@@ -55,15 +55,20 @@ type DescribeQuery struct {
 // GraphPattern represents a graph pattern
 type GraphPattern struct {
 	Type     GraphPatternType
-	Patterns []*TriplePattern // For basic graph patterns
-	Filters  []*Filter         // FILTER expressions
-	Binds    []*Bind           // BIND expressions
+	Patterns []*TriplePattern // For basic graph patterns (kept for backward compatibility)
+	Filters  []*Filter         // FILTER expressions (kept for backward compatibility)
+	Binds    []*Bind           // BIND expressions (kept for backward compatibility)
 	Children []*GraphPattern   // For complex patterns (UNION, OPTIONAL, etc.)
 	Graph    *GraphTerm        // For GRAPH patterns
-	Elements []PatternElement  // Ordered list of patterns, binds, and filters
+	// Elements preserves the textual order of patterns, BINDs, and FILTERs.
+	// This is critical for correct SPARQL semantics where BIND makes variables
+	// available to subsequent patterns.
+	Elements []PatternElement
 }
 
-// PatternElement represents an element in a graph pattern (triple, BIND, or FILTER)
+// PatternElement represents an element in a graph pattern (triple, BIND, or FILTER).
+// Used to preserve the ordering of elements as they appear in the query text,
+// which is necessary for correct BIND variable scoping.
 type PatternElement struct {
 	Triple *TriplePattern
 	Bind   *Bind

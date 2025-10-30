@@ -293,13 +293,23 @@ func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (Que
 	}, nil
 }
 
-// optimizeBasicGraphPattern optimizes a basic graph pattern
+// optimizeBasicGraphPattern optimizes a basic graph pattern.
+// This function handles two execution paths:
+// 1. Order-preserving (when Elements is populated): Processes patterns, BINDs, and
+//    FILTERs in their textual order to ensure BIND variables are available to
+//    subsequent patterns. This is the correct SPARQL semantics.
+// 2. Legacy selectivity-based (fallback): Reorders patterns by selectivity for
+//    optimization, but may produce incorrect results when BIND variables are
+//    used in subsequent patterns.
 func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
 	var plan QueryPlan
 
 	// Use Elements if available (preserves order of triples, BINDs, FILTERs)
 	if len(pattern.Elements) > 0 {
-		// Process elements in order to respect BIND/FILTER semantics
+		// Process elements in order to respect BIND/FILTER semantics.
+		// IMPORTANT: This preserves the semantics where:
+		//   ?s ?p ?o . BIND(?o+1 AS ?z) ?s1 ?p1 ?z
+		// makes ?z available to the second triple pattern.
 		for _, elem := range pattern.Elements {
 			if elem.Triple != nil {
 				// Add triple pattern as scan or join
