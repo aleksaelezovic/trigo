@@ -761,24 +761,21 @@ func (p *Parser) parseFilter() (*Filter, error) {
 	if p.peek() != '(' {
 		return nil, fmt.Errorf("expected '(' after FILTER")
 	}
+	p.advance() // skip '('
 
-	// Find matching closing parenthesis
-	depth := 0
-	for p.pos < p.length {
-		if p.peek() == '(' {
-			depth++
-		} else if p.peek() == ')' {
-			depth--
-			if depth == 0 {
-				p.advance()
-				break
-			}
-		}
-		p.advance()
+	// Parse the expression
+	expr, err := p.parseExpression()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing FILTER expression: %w", err)
 	}
 
-	// TODO: Parse expression properly
-	return &Filter{}, nil
+	p.skipWhitespace()
+	if p.peek() != ')' {
+		return nil, fmt.Errorf("expected ')' after FILTER expression")
+	}
+	p.advance() // skip ')'
+
+	return &Filter{Expression: expr}, nil
 }
 
 // parseBind parses a BIND expression: BIND(<expression> AS ?variable)
@@ -790,31 +787,18 @@ func (p *Parser) parseBind() (*Bind, error) {
 	}
 	p.advance() // skip '('
 
-	// Parse expression - for now, skip until 'AS' keyword
-	// Find 'AS' keyword
-	startPos := p.pos
-	depth := 1
-	for p.pos < p.length {
-		if p.peek() == '(' {
-			depth++
-			p.advance()
-		} else if p.peek() == ')' {
-			depth--
-			if depth == 0 {
-				// Found closing paren without AS - error
-				return nil, fmt.Errorf("expected AS keyword in BIND expression")
-			}
-			p.advance()
-		} else if depth == 1 && p.matchKeyword("AS") {
-			// Found AS at the right depth
-			break
-		} else {
-			p.advance()
-		}
+	// Parse the expression
+	expr, err := p.parseExpression()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing BIND expression: %w", err)
 	}
 
-	// Save the expression text (we'll just store it as a placeholder for now)
-	_ = p.input[startPos : p.pos-2] // Skip the " AS" we just consumed
+	p.skipWhitespace()
+
+	// Expect 'AS' keyword
+	if !p.matchKeyword("AS") {
+		return nil, fmt.Errorf("expected AS keyword in BIND expression")
+	}
 
 	p.skipWhitespace()
 
@@ -832,8 +816,7 @@ func (p *Parser) parseBind() (*Bind, error) {
 	}
 	p.advance() // skip ')'
 
-	// TODO: Parse expression properly
-	return &Bind{Variable: variable}, nil
+	return &Bind{Expression: expr, Variable: variable}, nil
 }
 
 // parseGroupBy parses GROUP BY clause
@@ -1211,4 +1194,369 @@ func (p *Parser) parsePrefixedName() (string, error) {
 
 	// Expand to full IRI
 	return baseIRI + local, nil
+}
+
+// Expression parsing with operator precedence
+// Grammar:
+// Expression → LogicalOrExpression
+// LogicalOrExpression → LogicalAndExpression ( '||' LogicalAndExpression )*
+// LogicalAndExpression → ComparisonExpression ( '&&' ComparisonExpression )*
+// ComparisonExpression → AdditiveExpression ( ('=' | '!=' | '<' | '<=' | '>' | '>=') AdditiveExpression )?
+// AdditiveExpression → MultiplicativeExpression ( ('+' | '-') MultiplicativeExpression )*
+// MultiplicativeExpression → UnaryExpression ( ('*' | '/') UnaryExpression )*
+// UnaryExpression → ('!' | '-' | '+')? PrimaryExpression
+// PrimaryExpression → Variable | Literal | FunctionCall | '(' Expression ')'
+
+// parseExpression parses a SPARQL expression (entry point)
+func (p *Parser) parseExpression() (Expression, error) {
+	return p.parseLogicalOrExpression()
+}
+
+// parseLogicalOrExpression parses logical OR (lowest precedence)
+func (p *Parser) parseLogicalOrExpression() (Expression, error) {
+	left, err := p.parseLogicalAndExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		p.skipWhitespace()
+		if p.match("||") {
+			right, err := p.parseLogicalAndExpression()
+			if err != nil {
+				return nil, err
+			}
+			left = &BinaryExpression{
+				Left:     left,
+				Operator: OpOr,
+				Right:    right,
+			}
+		} else {
+			break
+		}
+	}
+
+	return left, nil
+}
+
+// parseLogicalAndExpression parses logical AND
+func (p *Parser) parseLogicalAndExpression() (Expression, error) {
+	left, err := p.parseComparisonExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		p.skipWhitespace()
+		if p.match("&&") {
+			right, err := p.parseComparisonExpression()
+			if err != nil {
+				return nil, err
+			}
+			left = &BinaryExpression{
+				Left:     left,
+				Operator: OpAnd,
+				Right:    right,
+			}
+		} else {
+			break
+		}
+	}
+
+	return left, nil
+}
+
+// parseComparisonExpression parses comparison operators
+func (p *Parser) parseComparisonExpression() (Expression, error) {
+	left, err := p.parseAdditiveExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	p.skipWhitespace()
+
+	var op Operator
+	if p.match("<=") {
+		op = OpLessThanOrEqual
+	} else if p.match(">=") {
+		op = OpGreaterThanOrEqual
+	} else if p.match("!=") {
+		op = OpNotEqual
+	} else if p.match("=") {
+		op = OpEqual
+	} else if p.match("<") {
+		op = OpLessThan
+	} else if p.match(">") {
+		op = OpGreaterThan
+	} else {
+		// No comparison operator
+		return left, nil
+	}
+
+	right, err := p.parseAdditiveExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	return &BinaryExpression{
+		Left:     left,
+		Operator: op,
+		Right:    right,
+	}, nil
+}
+
+// parseAdditiveExpression parses addition and subtraction
+func (p *Parser) parseAdditiveExpression() (Expression, error) {
+	left, err := p.parseMultiplicativeExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		p.skipWhitespace()
+		var op Operator
+		if p.match("+") {
+			op = OpAdd
+		} else if p.match("-") {
+			op = OpSubtract
+		} else {
+			break
+		}
+
+		right, err := p.parseMultiplicativeExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &BinaryExpression{
+			Left:     left,
+			Operator: op,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
+// parseMultiplicativeExpression parses multiplication and division
+func (p *Parser) parseMultiplicativeExpression() (Expression, error) {
+	left, err := p.parseUnaryExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		p.skipWhitespace()
+		var op Operator
+		if p.match("*") {
+			op = OpMultiply
+		} else if p.match("/") {
+			op = OpDivide
+		} else {
+			break
+		}
+
+		right, err := p.parseUnaryExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		left = &BinaryExpression{
+			Left:     left,
+			Operator: op,
+			Right:    right,
+		}
+	}
+
+	return left, nil
+}
+
+// parseUnaryExpression parses unary operators
+func (p *Parser) parseUnaryExpression() (Expression, error) {
+	p.skipWhitespace()
+
+	// Check for unary operators
+	if p.match("!") {
+		operand, err := p.parseUnaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		return &UnaryExpression{
+			Operator: OpNot,
+			Operand:  operand,
+		}, nil
+	}
+
+	if p.match("+") {
+		// Unary plus is essentially a no-op, just parse the operand
+		return p.parseUnaryExpression()
+	}
+
+	if p.match("-") {
+		// Unary minus
+		operand, err := p.parseUnaryExpression()
+		if err != nil {
+			return nil, err
+		}
+		// Represent as 0 - operand
+		return &BinaryExpression{
+			Left:     &LiteralExpression{Literal: rdf.NewIntegerLiteral(0)},
+			Operator: OpSubtract,
+			Right:    operand,
+		}, nil
+	}
+
+	return p.parsePrimaryExpression()
+}
+
+// parsePrimaryExpression parses primary expressions (variables, literals, functions, parentheses)
+func (p *Parser) parsePrimaryExpression() (Expression, error) {
+	p.skipWhitespace()
+
+	// Check for parenthesized expression
+	if p.peek() == '(' {
+		p.advance() // skip '('
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		p.skipWhitespace()
+		if p.peek() != ')' {
+			return nil, fmt.Errorf("expected ')' after expression")
+		}
+		p.advance() // skip ')'
+		return expr, nil
+	}
+
+	// Check for variable
+	if p.peek() == '?' || p.peek() == '$' {
+		variable, err := p.parseVariable()
+		if err != nil {
+			return nil, err
+		}
+		return &VariableExpression{Variable: variable}, nil
+	}
+
+	// Check for function call (uppercase letter at start)
+	ch := p.peek()
+	if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+		// Try to parse as function call
+		savedPos := p.pos
+		_ = p.readWhile(func(c byte) bool {
+			return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+		})
+
+		p.skipWhitespace()
+		if p.peek() == '(' {
+			// It's a function call
+			p.pos = savedPos // restore position
+			return p.parseFunctionCall()
+		}
+
+		// Not a function call, restore and try as literal/keyword
+		p.pos = savedPos
+	}
+
+	// Check for literals - parse using parseTermOrVariable
+	termOrVar, err := p.parseTermOrVariable()
+	if err != nil {
+		return nil, fmt.Errorf("expected expression: %w", err)
+	}
+
+	// If it's a variable, we shouldn't get here (handled above)
+	// If it's a term, wrap it in a LiteralExpression
+	if termOrVar.Term != nil {
+		return &LiteralExpression{Literal: termOrVar.Term}, nil
+	}
+
+	// If we got a variable here, it's already been handled above, but just in case
+	if termOrVar.Variable != nil {
+		return &VariableExpression{Variable: termOrVar.Variable}, nil
+	}
+
+	return nil, fmt.Errorf("failed to parse expression term")
+}
+
+// parseFunctionCall parses a function call expression
+func (p *Parser) parseFunctionCall() (Expression, error) {
+	p.skipWhitespace()
+
+	// Read function name
+	funcName := p.readWhile(func(c byte) bool {
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+	})
+
+	if funcName == "" {
+		return nil, fmt.Errorf("expected function name")
+	}
+
+	p.skipWhitespace()
+	if p.peek() != '(' {
+		return nil, fmt.Errorf("expected '(' after function name")
+	}
+	p.advance() // skip '('
+
+	// Parse arguments
+	var args []Expression
+	p.skipWhitespace()
+
+	// Check for empty argument list
+	if p.peek() == ')' {
+		p.advance() // skip ')'
+		return &FunctionCallExpression{
+			Function:  funcName,
+			Arguments: args,
+		}, nil
+	}
+
+	// Parse first argument
+	for {
+		// Special case for COUNT(*) and similar
+		if funcName == "COUNT" && p.peek() == '*' {
+			p.advance()
+			// Add a special marker for COUNT(*)
+			args = append(args, &VariableExpression{Variable: &Variable{Name: "*"}})
+		} else {
+			arg, err := p.parseExpression()
+			if err != nil {
+				return nil, fmt.Errorf("error parsing function argument: %w", err)
+			}
+			args = append(args, arg)
+		}
+
+		p.skipWhitespace()
+		if p.peek() == ',' {
+			p.advance() // skip ','
+			p.skipWhitespace()
+			continue
+		}
+		break
+	}
+
+	p.skipWhitespace()
+	if p.peek() != ')' {
+		return nil, fmt.Errorf("expected ')' after function arguments")
+	}
+	p.advance() // skip ')'
+
+	return &FunctionCallExpression{
+		Function:  funcName,
+		Arguments: args,
+	}, nil
+}
+
+// match checks if the next characters match the given string and advances if they do
+func (p *Parser) match(s string) bool {
+	if p.pos+len(s) > p.length {
+		return false
+	}
+
+	for i := 0; i < len(s); i++ {
+		if p.input[p.pos+i] != s[i] {
+			return false
+		}
+	}
+
+	p.pos += len(s)
+	return true
 }
