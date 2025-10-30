@@ -3,6 +3,7 @@ package executor
 import (
 	"fmt"
 
+	"github.com/aleksaelezovic/trigo/internal/sparql/evaluator"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/store"
@@ -300,8 +301,9 @@ func (e *Executor) createFilterIterator(plan *optimizer.FilterPlan) (store.Bindi
 	}
 
 	return &filterIterator{
-		input:  input,
-		filter: plan.Filter,
+		input:     input,
+		filter:    plan.Filter,
+		evaluator: evaluator.NewEvaluator(),
 	}, nil
 }
 
@@ -485,15 +487,42 @@ func (it *nestedLoopJoinIterator) mergeBindings(left, right *store.Binding) *sto
 
 // filterIterator implements filter operations
 type filterIterator struct {
-	input  store.BindingIterator
-	filter *parser.Filter
+	input     store.BindingIterator
+	filter    *parser.Filter
+	evaluator *evaluator.Evaluator
 }
 
 func (it *filterIterator) Next() bool {
 	for it.input.Next() {
-		// TODO: Evaluate filter expression
-		// For now, pass through all bindings
-		return true
+		binding := it.input.Binding()
+
+		// If no expression, pass through (shouldn't happen)
+		if it.filter.Expression == nil {
+			return true
+		}
+
+		// Evaluate the filter expression
+		result, err := it.evaluator.Evaluate(it.filter.Expression, binding)
+		if err != nil {
+			// Expression evaluation error - filter out this binding
+			continue
+		}
+
+		// Check effective boolean value
+		lit, ok := result.(*rdf.Literal)
+		if !ok {
+			// Non-literal result - filter out
+			continue
+		}
+
+		// Check if it's a boolean literal with value true
+		if lit.Datatype != nil && lit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#boolean" {
+			if lit.Value == "true" || lit.Value == "1" {
+				return true
+			}
+		}
+
+		// Not true - continue to next binding
 	}
 	return false
 }
@@ -791,6 +820,7 @@ func (e *Executor) createBindIterator(plan *optimizer.BindPlan) (store.BindingIt
 		input:      input,
 		expression: plan.Expression,
 		variable:   plan.Variable,
+		evaluator:  evaluator.NewEvaluator(),
 	}, nil
 }
 
@@ -799,6 +829,7 @@ type bindIterator struct {
 	input      store.BindingIterator
 	expression parser.Expression
 	variable   *parser.Variable
+	evaluator  *evaluator.Evaluator
 }
 
 func (it *bindIterator) Next() bool {
@@ -808,14 +839,24 @@ func (it *bindIterator) Next() bool {
 func (it *bindIterator) Binding() *store.Binding {
 	inputBinding := it.input.Binding()
 
-	// TODO: Evaluate expression and bind result to variable
-	// For now, just pass through the input binding
-	// When expression evaluation is implemented, this should:
-	// 1. Evaluate it.expression using inputBinding
-	// 2. Add the result to inputBinding.Vars[it.variable.Name]
-	// 3. Return the extended binding
+	// Evaluate the expression
+	result, err := it.evaluator.Evaluate(it.expression, inputBinding)
+	if err != nil {
+		// If evaluation fails, skip this binding by continuing without adding the variable
+		// In SPARQL, BIND failures cause the solution to be dropped
+		// However, we can't drop it here (we're in Binding() not Next())
+		// So we return the input binding unchanged
+		// TODO: Consider adding error handling in Next() instead
+		return inputBinding
+	}
 
-	return inputBinding
+	// Clone the input binding to avoid modifying it
+	extendedBinding := inputBinding.Clone()
+
+	// Add the result to the extended binding
+	extendedBinding.Vars[it.variable.Name] = result
+
+	return extendedBinding
 }
 
 func (it *bindIterator) Close() error {
