@@ -1,0 +1,44 @@
+# Binaries
+trigo
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Database files
+trigo_data/
+*.db
+*.badger
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+/tmp/
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Environment files
+.env
+.env.local
