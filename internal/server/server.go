@@ -82,8 +82,8 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trigo SPARQL Endpoint</title>
-    <link href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>
+    <link href="https://unpkg.com/@zazuko/yasgui@4.5.0/build/yasgui.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@zazuko/yasgui@4.5.0/build/yasgui.min.js"></script>
     <style>
         body {
             margin: 0;
