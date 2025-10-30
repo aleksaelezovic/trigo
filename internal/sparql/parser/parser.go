@@ -357,6 +357,69 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			continue
 		}
 
+		// Check for OPTIONAL
+		if p.matchKeyword("OPTIONAL") {
+			optionalPattern, err := p.parseGraphPattern()
+			if err != nil {
+				return nil, err
+			}
+			optionalPattern.Type = GraphPatternTypeOptional
+			if pattern.Children == nil {
+				pattern.Children = []*GraphPattern{}
+			}
+			pattern.Children = append(pattern.Children, optionalPattern)
+			continue
+		}
+
+		// Check for MINUS
+		if p.matchKeyword("MINUS") {
+			minusPattern, err := p.parseGraphPattern()
+			if err != nil {
+				return nil, err
+			}
+			minusPattern.Type = GraphPatternTypeMinus
+			if pattern.Children == nil {
+				pattern.Children = []*GraphPattern{}
+			}
+			pattern.Children = append(pattern.Children, minusPattern)
+			continue
+		}
+
+		// Check for UNION (needs special handling since it's infix)
+		// For now, we'll handle it in a simplified way
+
+		// Check for nested graph pattern { ... }
+		if p.peek() == '{' {
+			nestedPattern, err := p.parseGraphPattern()
+			if err != nil {
+				return nil, err
+			}
+			if pattern.Children == nil {
+				pattern.Children = []*GraphPattern{}
+			}
+			pattern.Children = append(pattern.Children, nestedPattern)
+
+			// Check for UNION after the nested pattern
+			p.skipWhitespace()
+			if p.matchKeyword("UNION") {
+				// Parse the right side of UNION
+				rightPattern, err := p.parseGraphPattern()
+				if err != nil {
+					return nil, err
+				}
+
+				// Create a UNION pattern containing both sides
+				unionPattern := &GraphPattern{
+					Type:     GraphPatternTypeUnion,
+					Children: []*GraphPattern{nestedPattern, rightPattern},
+				}
+
+				// Replace the last child with the union pattern
+				pattern.Children[len(pattern.Children)-1] = unionPattern
+			}
+			continue
+		}
+
 		// Parse triple pattern
 		triple, err := p.parseTriplePattern()
 		if err != nil {
@@ -620,6 +683,29 @@ func (p *Parser) parseFilter() (*Filter, error) {
 	// Simple implementation - just consume until end of expression
 	// Full implementation would parse the expression tree
 	p.skipWhitespace()
+
+	// Check for EXISTS or NOT EXISTS (without parentheses around the keyword)
+	if p.matchKeyword("EXISTS") {
+		// FILTER EXISTS { pattern }
+		_, err := p.parseGraphPattern()
+		if err != nil {
+			return nil, err
+		}
+		return &Filter{}, nil
+	}
+
+	if p.matchKeyword("NOT") {
+		p.skipWhitespace()
+		if p.matchKeyword("EXISTS") {
+			// FILTER NOT EXISTS { pattern }
+			_, err := p.parseGraphPattern()
+			if err != nil {
+				return nil, err
+			}
+			return &Filter{}, nil
+		}
+		// If not EXISTS, fall through to normal expression parsing
+	}
 
 	if p.peek() != '(' {
 		return nil, fmt.Errorf("expected '(' after FILTER")
