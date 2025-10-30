@@ -285,13 +285,9 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 
 ### Near-term (Query Execution)
 - [ ] **FILTER expression evaluation** - Complete evaluator for all parsed operators
-- [ ] **ORDER BY execution** - Implement result sorting (parser done ✅)
+- [ ] **Expression evaluator** - Core evaluator for BIND, FILTER, ORDER BY expressions
 - [ ] **DESCRIBE** - Execute resource description queries
-- [ ] **OPTIONAL patterns execution** - Left join implementation (parser done ✅)
-- [ ] **UNION patterns execution** - Alternation support (parser done ✅)
-- [ ] **MINUS patterns execution** - Set difference implementation (parser done ✅)
-- [ ] **BIND execution** - Variable assignment evaluation (parser done ✅)
-- [ ] **EXISTS/NOT EXISTS execution** - Subpattern testing (parser done ✅)
+- [ ] **EXISTS/NOT EXISTS execution** - Subpattern testing in FILTER (parser done ✅)
 - [ ] **Aggregation execution** - GROUP BY, HAVING, aggregate functions (parser done ✅)
 
 ### Medium-term (Advanced SPARQL)
@@ -322,6 +318,11 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **Parser improvements** - Comments, 'a' keyword, OPTIONAL/UNION/MINUS/BIND/EXISTS parsing
 - [x] **GROUP BY & HAVING** - Grouping and filter conditions parsed
 - [x] **Subquery detection** - Recognize nested queries to prevent parse errors
+- [x] **BIND execution** - Variable assignment structure (expression evaluation TODO)
+- [x] **OPTIONAL patterns execution** - Left outer join implementation
+- [x] **UNION patterns execution** - Pattern alternation support
+- [x] **MINUS patterns execution** - Set difference for pattern negation
+- [x] **ORDER BY execution** - Result sorting with ASC/DESC support
 
 ## References
 
