@@ -322,6 +322,34 @@ go mod tidy
 4. Try implementing support for additional SPARQL features
 5. Run the W3C SPARQL test suite (coming soon)
 
+## Using the Web UI
+
+Trigo includes an interactive web interface powered by YASGUI:
+
+```bash
+# Start the server
+./trigo serve
+
+# Open your browser to:
+# http://localhost:8080/
+```
+
+The web UI provides:
+- Interactive SPARQL query editor with syntax highlighting
+- Multiple result visualization formats (table, charts, raw)
+- Query history and saved queries
+- Real-time database statistics
+
+Try this query in the web UI:
+```sparql
+SELECT ?person ?name ?age
+WHERE {
+    ?person <http://xmlns.com/foaf/0.1/name> ?name .
+    ?person <http://xmlns.com/foaf/0.1/age> ?age .
+}
+ORDER BY ?age
+```
+
 ## Getting Help
 
 - Check existing documentation in this repository

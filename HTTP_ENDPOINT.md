@@ -183,10 +183,57 @@ curl -X POST http://localhost:8080/sparql \
 
 ## Web Interface
 
-Visit `http://localhost:8080/` in your browser for:
-- Endpoint documentation
-- Usage examples
-- Database statistics
+Visit `http://localhost:8080/` in your browser for a full-featured SPARQL query interface powered by [YASGUI](https://github.com/zazuko/Yasgui).
+
+### Features
+
+- **Interactive Query Editor**
+  - Syntax highlighting for SPARQL queries
+  - Auto-completion for keywords and IRIs
+  - Multi-line editing with proper indentation
+
+- **Result Visualization**
+  - Table view with sortable columns
+  - Pivot tables for data analysis
+  - Chart visualizations (bar, line, pie)
+  - Raw JSON/XML response view
+
+- **Query Management**
+  - Save queries for reuse
+  - Query history with timestamps
+  - Multiple query tabs
+  - Share queries via URL
+
+- **Endpoint Information**
+  - Display current endpoint URL
+  - Show database statistics (triple count)
+  - Real-time query execution
+
+### Quick Start with Web UI
+
+1. Start the server:
+   ```bash
+   ./trigo serve
+   ```
+
+2. Open browser to `http://localhost:8080/`
+
+3. Enter a SPARQL query in the editor:
+   ```sparql
+   SELECT ?s ?p ?o
+   WHERE {
+     ?s ?p ?o .
+   }
+   LIMIT 10
+   ```
+
+4. Click "Execute" or press Ctrl+Enter
+
+5. View results in table, chart, or raw format
+
+### YASGUI Configuration
+
+The UI is pre-configured to use the local `/sparql` endpoint. No additional setup required!
 
 ## CORS Support
 

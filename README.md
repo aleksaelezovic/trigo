@@ -9,6 +9,7 @@ Trigo is an RDF triplestore implementation in Go, inspired by [Oxigraph](https:/
 - **xxHash3 128-bit**: Fast hashing using xxhash3 128-bit variant for string identifiers
 - **SPARQL Support**: Parser for SPARQL SELECT and ASK queries
 - **HTTP SPARQL Endpoint**: W3C SPARQL 1.1 Protocol compliant REST API
+- **Web UI**: Interactive YASGUI-based query interface with syntax highlighting and result visualization
 - **Query Optimization**: Greedy join reordering based on selectivity and filter push-down
 - **Volcano Iterator Model**: Efficient query execution using the iterator model
 - **RDF Data Types**: Support for IRIs, blank nodes, literals (strings, integers, doubles, booleans, dates)
@@ -87,7 +88,7 @@ go build -o trigo ./cmd/trigo
 
 # Start HTTP SPARQL endpoint
 ./trigo serve
-# Then visit http://localhost:8080/sparql
+# Then visit http://localhost:8080/ for the web UI
 ```
 
 ## Project Structure
@@ -213,7 +214,23 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 
 ## HTTP SPARQL Endpoint
 
-Trigo includes a W3C SPARQL 1.1 Protocol compliant HTTP endpoint:
+Trigo includes a W3C SPARQL 1.1 Protocol compliant HTTP endpoint with an interactive web interface:
+
+### Web UI
+
+Visit `http://localhost:8080/` in your browser for a full-featured SPARQL query interface:
+
+- **Interactive Query Editor** - YASGUI-based interface with syntax highlighting and auto-completion
+- **Multiple Result Formats** - Table, pivot tables, charts, and raw response views
+- **Query Management** - Save queries, view history, organize in tabs
+- **Real-time Execution** - Run queries and see results instantly
+- **Database Statistics** - View endpoint info and triple counts
+
+![YASGUI Interface](https://triply.cc/imgs/yasgui-screenshot.png)
+
+### Programmatic Access
+
+Query via HTTP using curl or any HTTP client:
 
 ```bash
 # Start the server
@@ -232,7 +249,7 @@ curl -X POST http://localhost:8080/sparql \
 - SPARQL XML Results format
 - Content negotiation
 - CORS support
-- Web UI with documentation
+- **Interactive Web UI** powered by [YASGUI](https://github.com/zazuko/Yasgui)
 - **Bulk data upload** via POST /data endpoint
 
 ### Bulk Data Upload
@@ -395,6 +412,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **EXISTS/NOT EXISTS parsing** - Subpattern testing syntax (evaluation TODO)
 - [x] **Bulk data loading** - HTTP POST /data endpoint with N-Triples, N-Quads, and Turtle support
 - [x] **Batch insert operations** - Transaction batching for bulk inserts (10-100x faster)
+- [x] **YASGUI Web UI** - Interactive query interface with syntax highlighting and result visualization
 
 ## References
 
