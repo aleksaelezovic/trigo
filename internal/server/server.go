@@ -68,58 +68,87 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Get current endpoint URL from request
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	endpointURL := fmt.Sprintf("%s://%s/sparql", scheme, r.Host)
+
 	html := `<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trigo SPARQL Endpoint</title>
+    <link href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 0 20px; }
-        h1 { color: #333; }
-        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .example { margin: 20px 0; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 500;
+        }
+        .header .info {
+            margin-top: 5px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .header .info code {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        #yasgui {
+            flex: 1;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
-    <h1>🎯 Trigo SPARQL Endpoint</h1>
-    <p>Welcome to the Trigo RDF Triplestore SPARQL endpoint.</p>
-
-    <h2>Endpoint URL</h2>
-    <p><code>POST /sparql</code> or <code>GET /sparql?query=...</code></p>
-
-    <h2>Example Query (GET)</h2>
-    <div class="example">
-        <pre>GET /sparql?query=SELECT%20%3Fs%20%3Fp%20%3Fo%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%2010</pre>
+    <div class="header">
+        <h1>🎯 Trigo SPARQL Endpoint</h1>
+        <div class="info">
+            Endpoint: <code>` + endpointURL + `</code> |
+            Total triples: <strong>` + fmt.Sprintf("%d", s.Stats().TotalTriples) + `</strong>
+        </div>
     </div>
-
-    <h2>Example Query (POST)</h2>
-    <div class="example">
-        <pre>POST /sparql
-Content-Type: application/sparql-query
-
-SELECT ?s ?p ?o
-WHERE {
-    ?s ?p ?o .
-}
-LIMIT 10</pre>
-    </div>
-
-    <h2>Example using curl</h2>
-    <div class="example">
-        <pre>curl -X POST http://localhost:8080/sparql \
-  -H "Content-Type: application/sparql-query" \
-  -H "Accept: application/sparql-results+json" \
-  -d "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10"</pre>
-    </div>
-
-    <h2>Supported Formats</h2>
-    <ul>
-        <li><code>application/sparql-results+json</code> (default)</li>
-        <li><code>application/sparql-results+xml</code></li>
-    </ul>
-
-    <h2>Statistics</h2>
-    <p>Total triples: <strong>` + fmt.Sprintf("%d", s.Stats().TotalTriples) + `</strong></p>
+    <div id="yasgui"></div>
+    <script>
+        const yasgui = new Yasgui(document.getElementById("yasgui"), {
+            requestConfig: {
+                endpoint: "` + endpointURL + `",
+                method: "POST"
+            },
+            copyEndpointOnNewTab: false,
+            endpointCatalogueOptions: {
+                getData: function() {
+                    return [
+                        {
+                            endpoint: "` + endpointURL + `",
+                            label: "Trigo Local"
+                        }
+                    ];
+                }
+            }
+        });
+    </script>
 </body>
 </html>`
 
