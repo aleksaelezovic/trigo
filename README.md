@@ -47,7 +47,7 @@ Trigo follows Oxigraph's architecture principles:
 go get github.com/aleksaelezovic/trigo
 ```
 
-## Quickstart
+## Quick Start
 
 For a quick guide to get started with Trigo, see the [Quickstart Guide](quickstart.md).
 
