@@ -2,6 +2,10 @@
 
 Trigo is an RDF triplestore implementation in Go, inspired by [Oxigraph](https://github.com/oxigraph/oxigraph). It provides efficient storage and querying of RDF data using SPARQL.
 
+## Motivation
+
+Go is an excellent choice for building open-source, maintainable software due to its simplicity, strong standard library, and excellent tooling ecosystem. Inspired by [Oxigraph](https://github.com/oxigraph/oxigraph), we set out to build a high-performance RDF triplestore using an LSM-tree as the underlying storage structure. [BadgerDB](https://github.com/dgraph-io/badger), a pure Go LSM-tree based key-value store, proved to be an ideal foundation for this architecture, offering ACID transactions, efficient range scans, and excellent performance characteristics that align perfectly with the access patterns of RDF data.
+
 ## Features
 
 - **Efficient Storage**: Uses BadgerDB (LSM-tree based) for persistent storage
@@ -42,6 +46,10 @@ Trigo follows Oxigraph's architecture principles:
 ```bash
 go get github.com/aleksaelezovic/trigo
 ```
+
+## Quickstart
+
+For a quick guide to get started with Trigo, see the [Quickstart Guide](quickstart.md).
 
 ## Usage
 
