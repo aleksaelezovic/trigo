@@ -2,6 +2,7 @@ package rdf
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -191,6 +192,28 @@ func (p *TriGParser) parseTerm() (Term, error) {
 		// Variables not supported in data (only in queries)
 		return nil, fmt.Errorf("variables not allowed in data")
 	default:
+		// Number literal
+		if (ch >= '0' && ch <= '9') || ch == '-' || ch == '+' {
+			return p.parseNumber()
+		}
+
+		// Check for 'a' keyword (shorthand for rdf:type)
+		if ch == 'a' {
+			// Check if next character is a name character
+			if p.pos+1 < p.length {
+				next := p.input[p.pos+1]
+				isName := (next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') || (next >= '0' && next <= '9') || next == '_' || next == '-'
+				if !isName {
+					p.pos++ // skip 'a'
+					return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+				}
+			} else {
+				// 'a' at end of input
+				p.pos++ // skip 'a'
+				return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+			}
+		}
+
 		// Try prefixed name
 		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
 			return p.parsePrefixedName()
@@ -321,6 +344,52 @@ func (p *TriGParser) parseLiteral() (*Literal, error) {
 	}
 
 	return lit, nil
+}
+
+// parseNumber parses a number literal (integer or double)
+func (p *TriGParser) parseNumber() (Term, error) {
+	start := p.pos
+
+	// Handle sign
+	if p.pos < p.length && (p.input[p.pos] == '+' || p.input[p.pos] == '-') {
+		p.pos++
+	}
+
+	// Read digits
+	hasDigits := false
+	for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+		p.pos++
+		hasDigits = true
+	}
+
+	if !hasDigits {
+		return nil, fmt.Errorf("expected digits in number")
+	}
+
+	// Check for decimal point
+	if p.pos < p.length && p.input[p.pos] == '.' {
+		p.pos++
+		// Read fractional digits
+		for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+			p.pos++
+		}
+
+		// It's a double
+		numStr := p.input[start:p.pos]
+		val, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse double: %w", err)
+		}
+		return NewDoubleLiteral(val), nil
+	}
+
+	// It's an integer
+	numStr := p.input[start:p.pos]
+	val, err := strconv.ParseInt(numStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse integer: %w", err)
+	}
+	return NewIntegerLiteral(val), nil
 }
 
 // parsePrefixedName parses a prefixed name: prefix:localName or :localName (empty prefix)

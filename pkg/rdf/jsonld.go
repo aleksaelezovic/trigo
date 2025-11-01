@@ -84,8 +84,8 @@ func (p *JSONLDParser) Parse(reader io.Reader) ([]*Quad, error) {
 	return quads, nil
 }
 
-// parseObject parses a JSON-LD object and returns quads
-func (p *JSONLDParser) parseObject(obj map[string]interface{}, context map[string]interface{}, blankNodeCounter *int) ([]*Quad, error) {
+// parseObjectWithSubject parses a JSON-LD object and returns quads and the subject
+func (p *JSONLDParser) parseObjectWithSubject(obj map[string]interface{}, context map[string]interface{}, blankNodeCounter *int) ([]*Quad, Term, error) {
 	var quads []*Quad
 
 	// Get subject
@@ -129,7 +129,7 @@ func (p *JSONLDParser) parseObject(obj map[string]interface{}, context map[strin
 			// Value object or nested object
 			objQuads, err := p.parseValue(subject, predicate, v, context, blankNodeCounter)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			quads = append(quads, objQuads...)
 
@@ -145,7 +145,7 @@ func (p *JSONLDParser) parseObject(obj map[string]interface{}, context map[strin
 				case map[string]interface{}:
 					objQuads, err := p.parseValue(subject, predicate, itemVal, context, blankNodeCounter)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 					quads = append(quads, objQuads...)
 				}
@@ -153,7 +153,13 @@ func (p *JSONLDParser) parseObject(obj map[string]interface{}, context map[strin
 		}
 	}
 
-	return quads, nil
+	return quads, subject, nil
+}
+
+// parseObject parses a JSON-LD object and returns quads
+func (p *JSONLDParser) parseObject(obj map[string]interface{}, context map[string]interface{}, blankNodeCounter *int) ([]*Quad, error) {
+	quads, _, err := p.parseObjectWithSubject(obj, context, blankNodeCounter)
+	return quads, err
 }
 
 // parseValue parses a value object (with @value, @id, @type, @language, etc.)
@@ -197,16 +203,15 @@ func (p *JSONLDParser) parseValue(subject, predicate Term, value map[string]inte
 	}
 
 	// Otherwise, treat as nested object (blank node)
-	*blankNodeCounter++
-	object := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
-	quad := NewQuad(subject, predicate, object, NewDefaultGraph())
-	quads = append(quads, quad)
-
-	// Parse nested object
-	nestedQuads, err := p.parseObject(value, context, blankNodeCounter)
+	// Parse nested object first to get its subject (the blank node)
+	nestedQuads, nestedSubject, err := p.parseObjectWithSubject(value, context, blankNodeCounter)
 	if err != nil {
 		return nil, err
 	}
+
+	// Create triple linking to the nested object
+	quad := NewQuad(subject, predicate, nestedSubject, NewDefaultGraph())
+	quads = append(quads, quad)
 	quads = append(quads, nestedQuads...)
 
 	return quads, nil
@@ -219,6 +224,14 @@ func (p *JSONLDParser) expandIRI(iri string, context map[string]interface{}) str
 		return iri
 	}
 
+	// Check if it's a term defined in context first
+	if context != nil {
+		if expanded, ok := context[iri].(string); ok {
+			// Recursively expand the result
+			return p.expandIRI(expanded, context)
+		}
+	}
+
 	// Check for prefix:localName pattern
 	parts := strings.SplitN(iri, ":", 2)
 	if len(parts) == 2 && context != nil {
@@ -228,13 +241,6 @@ func (p *JSONLDParser) expandIRI(iri string, context map[string]interface{}) str
 		// Look up prefix in context
 		if ns, ok := context[prefix].(string); ok {
 			return ns + localName
-		}
-	}
-
-	// Check if it's a term defined in context
-	if context != nil {
-		if expanded, ok := context[iri].(string); ok {
-			return expanded
 		}
 	}
 
