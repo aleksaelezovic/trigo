@@ -93,8 +93,15 @@ func (e *Executor) executeSelect(query *optimizer.OptimizedQuery) (*SelectResult
 		bindings = append(bindings, binding.Clone())
 	}
 
+	// Determine variables list
+	variables := query.Original.Select.Variables
+	if variables == nil {
+		// SELECT * - extract variables from WHERE clause in order they appear
+		variables = extractVariablesFromGraphPattern(query.Original.Select.Where)
+	}
+
 	return &SelectResult{
-		Variables: query.Original.Select.Variables,
+		Variables: variables,
 		Bindings:  bindings,
 	}, nil
 }
@@ -1229,4 +1236,70 @@ func (it *orderByIterator) compareTerms(a, b rdf.Term) int {
 		return 1
 	}
 	return 0
+}
+
+// extractVariablesFromGraphPattern extracts all variables from a graph pattern
+// in the order they first appear. This is used for SELECT * queries to determine
+// the column order in result sets.
+func extractVariablesFromGraphPattern(pattern *parser.GraphPattern) []*parser.Variable {
+	if pattern == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var variables []*parser.Variable
+
+	// Helper to add variable if not seen
+	addVar := func(v *parser.Variable) {
+		if v != nil && !seen[v.Name] {
+			seen[v.Name] = true
+			variables = append(variables, v)
+		}
+	}
+
+	// Helper to extract variables from TermOrVariable
+	extractFromTerm := func(t parser.TermOrVariable) {
+		addVar(t.Variable)
+	}
+
+	// Process patterns in order
+	var processPattern func(*parser.GraphPattern)
+	processPattern = func(p *parser.GraphPattern) {
+		if p == nil {
+			return
+		}
+
+		// Process elements in order (preserves query text order)
+		for _, elem := range p.Elements {
+			if elem.Triple != nil {
+				extractFromTerm(elem.Triple.Subject)
+				extractFromTerm(elem.Triple.Predicate)
+				extractFromTerm(elem.Triple.Object)
+			}
+			if elem.Bind != nil {
+				addVar(elem.Bind.Variable)
+			}
+			// Filters don't introduce new variables
+		}
+
+		// Also process legacy Patterns array (for backward compatibility)
+		for _, triple := range p.Patterns {
+			extractFromTerm(triple.Subject)
+			extractFromTerm(triple.Predicate)
+			extractFromTerm(triple.Object)
+		}
+
+		// Process BIND expressions (legacy)
+		for _, bind := range p.Binds {
+			addVar(bind.Variable)
+		}
+
+		// Recursively process child patterns (UNION, OPTIONAL, etc.)
+		for _, child := range p.Children {
+			processPattern(child)
+		}
+	}
+
+	processPattern(pattern)
+	return variables
 }

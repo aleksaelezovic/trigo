@@ -316,6 +316,10 @@ go build -o test-runner ./cmd/test-runner
 # Run execution tests (end-to-end validation)
 ./test-runner testdata/rdf-tests/sparql/sparql11/bind
 
+# Run result format tests
+./test-runner testdata/rdf-tests/sparql/sparql11/csv-tsv-res
+./test-runner testdata/rdf-tests/sparql/sparql11/json-res
+
 # Current test results:
 #
 # SYNTAX TESTS (Parser Validation):
@@ -332,6 +336,11 @@ go build -o test-runner ./cmd/test-runner
 # - construct/ (CONSTRUCT queries): 28.6% (2/7 tests)
 # - exists/ (EXISTS/NOT EXISTS): 0% (evaluation not implemented)
 # - negation/ (MINUS): 0% (complex query patterns)
+#
+# RESULT FORMAT TESTS:
+# - csv-tsv-res/ (CSV/TSV formats): Variable ordering ✅, format compliance ✅
+#   Note: Blank node labels differ (implementation-specific, spec-compliant)
+# - json-res/ (JSON format): Variable ordering ✅, format compliance ✅
 #
 # Passing execution tests validate:
 # ✅ Full query pipeline (parse → optimize → execute)

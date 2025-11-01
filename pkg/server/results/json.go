@@ -41,7 +41,8 @@ func FormatSelectResultsJSON(result *executor.SelectResult) ([]byte, error) {
 	// Extract variable names
 	var varNames []string
 	if result.Variables == nil {
-		// SELECT * - collect all variables from bindings
+		// SELECT * without variables list (shouldn't happen with new executor)
+		// Fallback: collect all variables from bindings (alphabetically sorted for consistency)
 		varSet := make(map[string]bool)
 		for _, binding := range result.Bindings {
 			for varName := range binding.Vars {
@@ -51,10 +52,9 @@ func FormatSelectResultsJSON(result *executor.SelectResult) ([]byte, error) {
 				}
 			}
 		}
-		// Sort variables alphabetically for consistent ordering
 		sort.Strings(varNames)
 	} else {
-		// Specific variables
+		// Use variables from query (preserves query order)
 		for _, v := range result.Variables {
 			varNames = append(varNames, v.Name)
 		}
