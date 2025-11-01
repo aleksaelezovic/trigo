@@ -16,7 +16,7 @@ Go is an excellent choice for building open-source, maintainable software due to
 - **Web UI**: Interactive YASGUI-based query interface with syntax highlighting and result visualization
 - **Query Optimization**: Greedy join reordering based on selectivity and filter push-down
 - **Volcano Iterator Model**: Efficient query execution using the iterator model
-- **RDF Data Types**: Support for IRIs, blank nodes, literals (strings, integers, doubles, booleans, dates)
+- **RDF Data Types**: Support for IRIs, blank nodes, literals (strings, integers, doubles, booleans, dates with flexible parsing)
 - **Named Graphs**: Full support for quads and named graphs
 - **Multiple Result Formats**: SPARQL JSON, XML, CSV, and TSV results
 
@@ -133,7 +133,7 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 | **SELECT** | ✅ Implemented | Full support with projection, variables, `*`, and expressions |
 | **ASK** | ✅ Implemented | Boolean queries working |
 | **CONSTRUCT** | ✅ Implemented | Template instantiation with N-Triples output, CONSTRUCT WHERE shorthand |
-| **DESCRIBE** | 🚧 Parsed only | AST support, execution TODO |
+| **DESCRIBE** | ✅ Implemented | Concise Bounded Description (CBD) of resources, supports WHERE clause |
 
 ### Query Modifiers
 
@@ -389,7 +389,6 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 ## Roadmap
 
 ### Near-term (Query Execution)
-- [ ] **DESCRIBE** - Execute resource description queries (parser done ✅)
 - [ ] **EXISTS/NOT EXISTS execution** - Subpattern testing in FILTER (parser done ✅)
 - [ ] **Aggregation execution** - GROUP BY, HAVING, aggregate functions (parser done ✅)
 - [ ] **REGEX function** - Regular expression matching
@@ -412,6 +411,8 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [ ] **Query optimization** - Statistics-based join ordering, cost-based optimization
 
 ### Completed ✅
+- [x] **DESCRIBE queries** - Resource description with CBD strategy
+- [x] **DateTime literal parsing** - Support for both RFC3339 and ISO8601 formats
 - [x] **HTTP SPARQL endpoint** - W3C SPARQL 1.1 Protocol compliance
 - [x] **W3C test suite integration** - Automated testing infrastructure
 - [x] **Code quality tools** - staticcheck, gosec, comprehensive linting

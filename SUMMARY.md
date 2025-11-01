@@ -13,7 +13,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 - Blank nodes
 - Literals (simple, typed, language-tagged)
 - Triples and Quads
-- XSD datatype support (integers, doubles, booleans, dates)
+- XSD datatype support (integers, doubles, booleans, dates with flexible parsing)
 
 **Lines of Code:** ~300
 
@@ -25,6 +25,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 - Inline storage for strings ≤16 bytes
 - Direct binary encoding for numeric types
 - Full round-trip encoding/decoding
+- Flexible datetime parsing (RFC3339 and ISO8601 without timezone)
 
 **Lines of Code:** ~350
 
@@ -61,7 +62,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 
 - Hand-written recursive descent parser
 - Abstract Syntax Tree (AST) representation
-- **Query types:** SELECT, ASK, CONSTRUCT, DESCRIBE (parsed)
+- **Query types:** SELECT, ASK, CONSTRUCT, DESCRIBE (all implemented)
 - **Patterns:** Triple patterns, OPTIONAL, UNION, MINUS, GRAPH, BIND
 - **Modifiers:** DISTINCT, LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING
 - **Expressions:** 20+ operators and functions
