@@ -143,17 +143,24 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 - `tsv.go` - SPARQL TSV Results format
 - `formatter.go` - Common formatting utilities
 
-### 10. Turtle/N-Triples Parser ✅
-**Files:** `pkg/rdf/turtle.go`
+### 10. RDF Format Parsers ✅
+**Files:** `pkg/rdf/turtle.go`, `trig.go`, `rdfxml.go`, `jsonld.go`, `nquads.go`, `io.go`
+
+**Formats Supported:**
+- **Turtle** - PREFIX/BASE declarations, prefixed names, property lists
+- **N-Triples** - Simple triple format (subset of Turtle)
+- **N-Quads** - Quad format with named graphs
+- **TriG** - Turtle + GRAPH blocks for named graphs
+- **RDF/XML** - rdf:Description, properties, datatypes, nested blank nodes
+- **JSON-LD** - @context, @id, @value, @type, @language
 
 **Features:**
-- PREFIX/BASE declarations
-- IRIs, blank nodes, literals
-- Datatypes and language tags
-- Prefixed name expansion
-- Used for loading W3C test data
+- Content-type negotiation
+- Bulk import via POST /data endpoint
+- All parsers return quads for unified processing
+- Error handling and validation
 
-**Lines of Code:** ~460
+**Lines of Code:** ~2,500 (all parsers + I/O layer)
 
 ### 11. Result Parsers ✅
 **Files:** `pkg/server/results/xml.go` (includes XML parser functionality)
@@ -456,7 +463,12 @@ trigo/
 └── pkg/
     ├── rdf/
     │   ├── term.go              # RDF data model
-    │   └── turtle.go            # Turtle/N-Triples parser
+    │   ├── turtle.go            # Turtle/N-Triples parser
+    │   ├── nquads.go            # N-Quads parser
+    │   ├── trig.go              # TriG parser (Turtle + named graphs)
+    │   ├── rdfxml.go            # RDF/XML parser
+    │   ├── jsonld.go            # JSON-LD parser
+    │   └── io.go                # Parser I/O and content-type handling
     ├── store/
     │   ├── store.go             # 11-index triplestore
     │   └── query.go             # Pattern matching

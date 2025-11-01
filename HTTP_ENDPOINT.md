@@ -221,6 +221,109 @@ curl -X POST http://localhost:8080/sparql \
 }
 ```
 
+## Bulk Data Loading
+
+The `/data` endpoint allows bulk uploading of RDF data in various formats.
+
+### Endpoint
+
+```
+POST http://localhost:8080/data
+```
+
+### Supported Formats
+
+| Format | Content-Type | File Extension | Description |
+|--------|-------------|----------------|-------------|
+| N-Triples | `application/n-triples` | `.nt` | Triples only (default graph) |
+| N-Quads | `application/n-quads` | `.nq` | Quads with named graphs |
+| Turtle | `text/turtle` | `.ttl` | Compact syntax with prefixes |
+| TriG | `application/trig` | `.trig` | Turtle + named graphs |
+| RDF/XML | `application/rdf+xml` | `.rdf`, `.owl` | XML-based format |
+| JSON-LD | `application/ld+json` | `.jsonld` | JSON-based linked data |
+
+### Examples
+
+#### Upload N-Triples
+
+```bash
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/n-triples' \
+  --data-binary @data.nt
+```
+
+#### Upload Turtle
+
+```bash
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: text/turtle' \
+  --data-binary @data.ttl
+```
+
+#### Upload TriG (Named Graphs)
+
+```bash
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/trig' \
+  --data-binary @data.trig
+```
+
+#### Upload RDF/XML
+
+```bash
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/rdf+xml' \
+  --data-binary @data.rdf
+```
+
+#### Upload JSON-LD
+
+```bash
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/ld+json' \
+  --data-binary @data.jsonld
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "statistics": {
+    "quadsInserted": 1000,
+    "durationMs": 245,
+    "quadsPerSecond": 4081.63
+  }
+}
+```
+
+### Format Notes
+
+**TriG**: Extends Turtle with GRAPH blocks for named graphs
+```turtle
+PREFIX ex: <http://example.org/>
+
+# Default graph
+ex:alice ex:name "Alice" .
+
+# Named graph
+GRAPH ex:graph1 {
+  ex:bob ex:name "Bob" .
+}
+```
+
+**RDF/XML**: Simplified parser supporting common patterns
+- rdf:Description elements
+- Property elements with text or rdf:resource
+- rdf:datatype and xml:lang attributes
+- Nested blank nodes
+
+**JSON-LD**: Simplified parser supporting common patterns
+- @context for prefix expansion
+- @id for resource IRIs
+- @value objects with @type and @language
+- Nested objects as blank nodes
+
 ## Web Interface
 
 Visit `http://localhost:8080/` in your browser for a full-featured SPARQL query interface powered by [YASGUI](https://github.com/zazuko/Yasgui).

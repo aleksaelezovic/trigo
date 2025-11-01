@@ -222,9 +222,9 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 - ✅ **N-Triples** - application/n-triples (triples only)
 - ✅ **N-Quads** - application/n-quads (quads with named graphs)
 - ✅ **Turtle** - text/turtle (property lists, `a` keyword, prefixed names)
-- ❌ **TriG** - application/trig (Turtle + named graphs) - TODO
-- ❌ **RDF/XML** - application/rdf+xml - TODO
-- ❌ **JSON-LD** - application/ld+json - TODO
+- ✅ **TriG** - application/trig (Turtle + named graphs, GRAPH blocks)
+- ✅ **RDF/XML** - application/rdf+xml (rdf:Description, properties, datatypes, nested blank nodes)
+- ✅ **JSON-LD** - application/ld+json (@context, @id, @value, @type, @language)
 
 ## HTTP SPARQL Endpoint
 
@@ -287,6 +287,21 @@ curl -X POST http://localhost:8080/data \
 curl -X POST http://localhost:8080/data \
   -H 'Content-Type: text/turtle' \
   --data-binary @data.ttl
+
+# Upload TriG data (Turtle + named graphs)
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/trig' \
+  --data-binary @data.trig
+
+# Upload RDF/XML data
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/rdf+xml' \
+  --data-binary @data.rdf
+
+# Upload JSON-LD data
+curl -X POST http://localhost:8080/data \
+  -H 'Content-Type: application/ld+json' \
+  --data-binary @data.jsonld
 ```
 
 **Response:**
@@ -406,11 +421,11 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [ ] **RDF-star** - Quoted triples support (following RDF-star spec)
 - [ ] **Federated queries** - SERVICE keyword for remote endpoints
 - [ ] **Full-text search** - Integrate text indexing
-- [ ] **Additional RDF formats** - TriG, RDF/XML, JSON-LD parsers
 - [ ] **Benchmarking** - Performance comparisons with Oxigraph, Blazegraph, Jena
 - [ ] **Query optimization** - Statistics-based join ordering, cost-based optimization
 
 ### Completed ✅
+- [x] **Additional RDF formats** - TriG, RDF/XML, and JSON-LD parsers for bulk data import
 - [x] **DESCRIBE queries** - Resource description with CBD strategy
 - [x] **DateTime literal parsing** - Support for both RFC3339 and ISO8601 formats
 - [x] **HTTP SPARQL endpoint** - W3C SPARQL 1.1 Protocol compliance
@@ -436,7 +451,7 @@ Current limitations that match Oxigraph's acknowledged trade-offs:
 - [x] **Boolean literals** - true/false in FILTER expressions
 - [x] **IN/NOT IN operators** - Set membership testing with expression evaluation
 - [x] **EXISTS/NOT EXISTS parsing** - Subpattern testing syntax (evaluation TODO)
-- [x] **Bulk data loading** - HTTP POST /data endpoint with N-Triples, N-Quads, and Turtle support
+- [x] **Bulk data loading** - HTTP POST /data endpoint with N-Triples, N-Quads, Turtle, TriG, RDF/XML, and JSON-LD support
 - [x] **Batch insert operations** - Transaction batching for bulk inserts (10-100x faster)
 - [x] **YASGUI Web UI** - Interactive query interface with syntax highlighting and result visualization
 
