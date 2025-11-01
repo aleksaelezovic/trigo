@@ -30,6 +30,8 @@ func NewParser(contentType string) (RDFParser, error) {
 		return &NQuadsIOParser{}, nil
 	case "text/turtle", "application/x-turtle":
 		return &TurtleIOParser{}, nil
+	case "application/trig", "application/x-trig":
+		return &TriGIOParser{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported content type: %s", contentType)
 	}
@@ -129,6 +131,30 @@ func (p *TurtleIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	return quads, nil
 }
 
+// TriGIOParser parses TriG format (Turtle + named graphs, quads)
+type TriGIOParser struct{}
+
+func (p *TriGIOParser) ContentType() string {
+	return "application/trig"
+}
+
+func (p *TriGIOParser) Parse(reader io.Reader) ([]*Quad, error) {
+	// Read all data
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("error reading input: %w", err)
+	}
+
+	// Use TriG parser
+	trigParser := NewTriGParser(string(data))
+	quads, err := trigParser.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing TriG: %w", err)
+	}
+
+	return quads, nil
+}
+
 // GetSupportedContentTypes returns a list of all supported content types
 func GetSupportedContentTypes() []string {
 	return []string{
@@ -136,6 +162,8 @@ func GetSupportedContentTypes() []string {
 		"application/n-quads",
 		"text/turtle",
 		"application/x-turtle",
+		"application/trig",
+		"application/x-trig",
 		"text/plain", // Alias for N-Triples
 	}
 }
