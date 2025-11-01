@@ -11,7 +11,6 @@ import (
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/sparqlxml"
 	"github.com/aleksaelezovic/trigo/internal/storage"
-	"github.com/aleksaelezovic/trigo/internal/turtle"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )
@@ -302,7 +301,7 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 		}
 
 		// Parse Turtle data
-		turtleParser := turtle.NewParser(string(dataBytes))
+		turtleParser := rdf.NewTurtleParser(string(dataBytes))
 		triples, err := turtleParser.Parse()
 		if err != nil {
 			return fmt.Errorf("failed to parse Turtle data in %s: %w", dataFile, err)

@@ -1,24 +1,22 @@
-package turtle
+package rdf
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
-// Parser is a simple Turtle/N-Triples parser for loading test data
-type Parser struct {
+// TurtleParser is a simple Turtle/N-Triples parser for loading test data
+type TurtleParser struct {
 	input    string
 	pos      int
 	length   int
 	prefixes map[string]string
 }
 
-// NewParser creates a new Turtle parser
-func NewParser(input string) *Parser {
-	return &Parser{
+// NewTurtleParser creates a new Turtle parser
+func NewTurtleParser(input string) *TurtleParser {
+	return &TurtleParser{
 		input:    input,
 		pos:      0,
 		length:   len(input),
@@ -27,8 +25,8 @@ func NewParser(input string) *Parser {
 }
 
 // Parse parses the Turtle document and returns triples
-func (p *Parser) Parse() ([]*rdf.Triple, error) {
-	var triples []*rdf.Triple
+func (p *TurtleParser) Parse() ([]*Triple, error) {
+	var triples []*Triple
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
@@ -66,7 +64,7 @@ func (p *Parser) Parse() ([]*rdf.Triple, error) {
 }
 
 // skipWhitespaceAndComments skips whitespace and comments
-func (p *Parser) skipWhitespaceAndComments() {
+func (p *TurtleParser) skipWhitespaceAndComments() {
 	for p.pos < p.length {
 		ch := p.input[p.pos]
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
@@ -85,7 +83,7 @@ func (p *Parser) skipWhitespaceAndComments() {
 }
 
 // matchKeyword checks if the current position matches a keyword
-func (p *Parser) matchKeyword(keyword string) bool {
+func (p *TurtleParser) matchKeyword(keyword string) bool {
 	if p.pos+len(keyword) > p.length {
 		return false
 	}
@@ -111,7 +109,7 @@ func (p *Parser) matchKeyword(keyword string) bool {
 }
 
 // parsePrefix parses a PREFIX declaration
-func (p *Parser) parsePrefix() error {
+func (p *TurtleParser) parsePrefix() error {
 	p.skipWhitespaceAndComments()
 
 	// Read prefix name (until ':')
@@ -145,7 +143,7 @@ func (p *Parser) parsePrefix() error {
 }
 
 // parseBase parses a BASE declaration
-func (p *Parser) parseBase() error {
+func (p *TurtleParser) parseBase() error {
 	p.skipWhitespaceAndComments()
 
 	// Read IRI
@@ -163,7 +161,7 @@ func (p *Parser) parseBase() error {
 }
 
 // parseTriple parses a triple
-func (p *Parser) parseTriple() (*rdf.Triple, error) {
+func (p *TurtleParser) parseTriple() (*Triple, error) {
 	p.skipWhitespaceAndComments()
 	if p.pos >= p.length {
 		return nil, nil
@@ -199,11 +197,11 @@ func (p *Parser) parseTriple() (*rdf.Triple, error) {
 	}
 	p.pos++ // skip '.'
 
-	return rdf.NewTriple(subject, predicate, object), nil
+	return NewTriple(subject, predicate, object), nil
 }
 
 // parseTerm parses an RDF term (IRI, blank node, or literal)
-func (p *Parser) parseTerm() (rdf.Term, error) {
+func (p *TurtleParser) parseTerm() (Term, error) {
 	p.skipWhitespaceAndComments()
 
 	if p.pos >= p.length {
@@ -218,7 +216,7 @@ func (p *Parser) parseTerm() (rdf.Term, error) {
 		if err != nil {
 			return nil, err
 		}
-		return rdf.NewNamedNode(iri), nil
+		return NewNamedNode(iri), nil
 	}
 
 	// Blank node
@@ -245,7 +243,7 @@ func (p *Parser) parseTerm() (rdf.Term, error) {
 }
 
 // parseIRI parses an IRI in angle brackets
-func (p *Parser) parseIRI() (string, error) {
+func (p *TurtleParser) parseIRI() (string, error) {
 	if p.pos >= p.length || p.input[p.pos] != '<' {
 		return "", fmt.Errorf("expected '<' at start of IRI")
 	}
@@ -267,7 +265,7 @@ func (p *Parser) parseIRI() (string, error) {
 }
 
 // parseBlankNode parses a blank node
-func (p *Parser) parseBlankNode() (rdf.Term, error) {
+func (p *TurtleParser) parseBlankNode() (Term, error) {
 	if p.pos+1 >= p.length || p.input[p.pos] != '_' || p.input[p.pos+1] != ':' {
 		return nil, fmt.Errorf("expected '_:' at start of blank node")
 	}
@@ -283,11 +281,11 @@ func (p *Parser) parseBlankNode() (rdf.Term, error) {
 	}
 
 	label := p.input[start:p.pos]
-	return rdf.NewBlankNode(label), nil
+	return NewBlankNode(label), nil
 }
 
 // parseLiteral parses a string literal
-func (p *Parser) parseLiteral() (rdf.Term, error) {
+func (p *TurtleParser) parseLiteral() (Term, error) {
 	if p.pos >= p.length || p.input[p.pos] != '"' {
 		return nil, fmt.Errorf("expected '\"' at start of literal")
 	}
@@ -338,7 +336,7 @@ func (p *Parser) parseLiteral() (rdf.Term, error) {
 			p.pos++
 		}
 		lang := p.input[langStart:p.pos]
-		return rdf.NewLiteralWithLanguage(value.String(), lang), nil
+		return NewLiteralWithLanguage(value.String(), lang), nil
 	}
 
 	if p.pos+1 < p.length && p.input[p.pos] == '^' && p.input[p.pos+1] == '^' {
@@ -348,14 +346,14 @@ func (p *Parser) parseLiteral() (rdf.Term, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse datatype: %w", err)
 		}
-		return rdf.NewLiteralWithDatatype(value.String(), rdf.NewNamedNode(datatypeIRI)), nil
+		return NewLiteralWithDatatype(value.String(), NewNamedNode(datatypeIRI)), nil
 	}
 
-	return rdf.NewLiteral(value.String()), nil
+	return NewLiteral(value.String()), nil
 }
 
 // parseNumber parses a numeric literal
-func (p *Parser) parseNumber() (rdf.Term, error) {
+func (p *TurtleParser) parseNumber() (Term, error) {
 	start := p.pos
 
 	// Handle sign
@@ -388,7 +386,7 @@ func (p *Parser) parseNumber() (rdf.Term, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse double: %w", err)
 		}
-		return rdf.NewDoubleLiteral(val), nil
+		return NewDoubleLiteral(val), nil
 	}
 
 	// It's an integer
@@ -397,11 +395,11 @@ func (p *Parser) parseNumber() (rdf.Term, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse integer: %w", err)
 	}
-	return rdf.NewIntegerLiteral(val), nil
+	return NewIntegerLiteral(val), nil
 }
 
 // parsePrefixedName parses a prefixed name (e.g., ex:foo or :foo)
-func (p *Parser) parsePrefixedName() (rdf.Term, error) {
+func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	start := p.pos
 
 	// Read prefix (until ':')
@@ -439,5 +437,5 @@ func (p *Parser) parsePrefixedName() (rdf.Term, error) {
 	}
 
 	fullIRI := baseIRI + localPart
-	return rdf.NewNamedNode(fullIRI), nil
+	return NewNamedNode(fullIRI), nil
 }

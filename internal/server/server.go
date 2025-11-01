@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aleksaelezovic/trigo/internal/rdfio"
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
@@ -362,9 +362,9 @@ func (s *Server) handleDataUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create appropriate parser based on content type
-	parser, err := rdfio.NewParser(contentType)
+	parser, err := rdf.NewParser(contentType)
 	if err != nil {
-		supportedTypes := rdfio.GetSupportedContentTypes()
+		supportedTypes := rdf.GetSupportedContentTypes()
 		s.writeError(w, http.StatusUnsupportedMediaType,
 			fmt.Sprintf("Unsupported content type: %s. Supported types: %v", contentType, supportedTypes))
 		return

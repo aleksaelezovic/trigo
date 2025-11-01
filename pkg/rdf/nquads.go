@@ -1,16 +1,14 @@
-package nquads
+package rdf
 
 import (
 	"fmt"
 	"strings"
-
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
-// Parser is an N-Quads parser that extends N-Triples with an optional 4th position for graphs
+// NQuadsParser is an N-Quads parser that extends N-Triples with an optional 4th position for graphs
 // N-Quads format: <subject> <predicate> <object> [<graph>] .
 // Compatible with N-Triples (3 positions) - defaults to default graph
-type Parser struct {
+type NQuadsParser struct {
 	input    string
 	pos      int
 	length   int
@@ -18,9 +16,9 @@ type Parser struct {
 	baseIRI  string
 }
 
-// NewParser creates a new N-Quads parser
-func NewParser(input string) *Parser {
-	return &Parser{
+// NewNQuadsParser creates a new N-Quads parser
+func NewNQuadsParser(input string) *NQuadsParser {
+	return &NQuadsParser{
 		input:    input,
 		pos:      0,
 		length:   len(input),
@@ -29,8 +27,8 @@ func NewParser(input string) *Parser {
 }
 
 // Parse parses the N-Quads document and returns quads
-func (p *Parser) Parse() ([]*rdf.Quad, error) {
-	var quads []*rdf.Quad
+func (p *NQuadsParser) Parse() ([]*Quad, error) {
+	var quads []*Quad
 
 	for p.pos < p.length {
 		p.skipWhitespaceAndComments()
@@ -68,7 +66,7 @@ func (p *Parser) Parse() ([]*rdf.Quad, error) {
 }
 
 // skipWhitespaceAndComments skips whitespace and comments
-func (p *Parser) skipWhitespaceAndComments() {
+func (p *NQuadsParser) skipWhitespaceAndComments() {
 	for p.pos < p.length {
 		ch := p.input[p.pos]
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
@@ -87,7 +85,7 @@ func (p *Parser) skipWhitespaceAndComments() {
 }
 
 // matchKeyword checks if the current position matches a keyword
-func (p *Parser) matchKeyword(keyword string) bool {
+func (p *NQuadsParser) matchKeyword(keyword string) bool {
 	if p.pos+len(keyword) > p.length {
 		return false
 	}
@@ -109,7 +107,7 @@ func (p *Parser) matchKeyword(keyword string) bool {
 }
 
 // parsePrefix parses a PREFIX directive
-func (p *Parser) parsePrefix() error {
+func (p *NQuadsParser) parsePrefix() error {
 	// Skip "PREFIX" or "@prefix"
 	for p.pos < p.length && p.input[p.pos] != ' ' && p.input[p.pos] != '\t' {
 		p.pos++
@@ -147,7 +145,7 @@ func (p *Parser) parsePrefix() error {
 }
 
 // parseBase parses a BASE directive
-func (p *Parser) parseBase() error {
+func (p *NQuadsParser) parseBase() error {
 	// Skip "BASE" or "@base"
 	for p.pos < p.length && p.input[p.pos] != ' ' && p.input[p.pos] != '\t' {
 		p.pos++
@@ -172,7 +170,7 @@ func (p *Parser) parseBase() error {
 }
 
 // parseQuad parses a quad: subject predicate object [graph] .
-func (p *Parser) parseQuad() (*rdf.Quad, error) {
+func (p *NQuadsParser) parseQuad() (*Quad, error) {
 	// Parse subject
 	subject, err := p.parseTerm()
 	if err != nil {
@@ -198,7 +196,7 @@ func (p *Parser) parseQuad() (*rdf.Quad, error) {
 	p.skipWhitespaceAndComments()
 
 	// Parse optional graph (4th position)
-	var graph rdf.Term
+	var graph Term
 	if p.pos < p.length && p.input[p.pos] == '<' {
 		// Graph IRI
 		graph, err = p.parseTerm()
@@ -222,19 +220,19 @@ func (p *Parser) parseQuad() (*rdf.Quad, error) {
 	p.pos++ // skip '.'
 
 	// Create quad
-	var quad *rdf.Quad
+	var quad *Quad
 	if graph == nil {
 		// No graph specified - use default graph
-		quad = rdf.NewQuad(subject, predicate, object, rdf.NewDefaultGraph())
+		quad = NewQuad(subject, predicate, object, NewDefaultGraph())
 	} else {
-		quad = rdf.NewQuad(subject, predicate, object, graph)
+		quad = NewQuad(subject, predicate, object, graph)
 	}
 
 	return quad, nil
 }
 
 // parseTerm parses an RDF term (IRI, blank node, or literal)
-func (p *Parser) parseTerm() (rdf.Term, error) {
+func (p *NQuadsParser) parseTerm() (Term, error) {
 	ch := p.input[p.pos]
 
 	switch ch {
@@ -244,7 +242,7 @@ func (p *Parser) parseTerm() (rdf.Term, error) {
 		if err != nil {
 			return nil, err
 		}
-		return rdf.NewNamedNode(iri), nil
+		return NewNamedNode(iri), nil
 
 	case '_':
 		// Blank node
@@ -268,7 +266,7 @@ func (p *Parser) parseTerm() (rdf.Term, error) {
 }
 
 // parseIRI parses an IRI enclosed in < >
-func (p *Parser) parseIRI() (string, error) {
+func (p *NQuadsParser) parseIRI() (string, error) {
 	if p.pos >= p.length || p.input[p.pos] != '<' {
 		return "", fmt.Errorf("expected '<' at start of IRI")
 	}
@@ -290,7 +288,7 @@ func (p *Parser) parseIRI() (string, error) {
 }
 
 // parseBlankNode parses a blank node
-func (p *Parser) parseBlankNode() (rdf.Term, error) {
+func (p *NQuadsParser) parseBlankNode() (Term, error) {
 	if p.pos >= p.length || p.input[p.pos] != '_' {
 		return nil, fmt.Errorf("expected '_' at start of blank node")
 	}
@@ -311,11 +309,11 @@ func (p *Parser) parseBlankNode() (rdf.Term, error) {
 	}
 
 	label := p.input[start:p.pos]
-	return rdf.NewBlankNode(label), nil
+	return NewBlankNode(label), nil
 }
 
 // parseLiteral parses a literal value
-func (p *Parser) parseLiteral() (rdf.Term, error) {
+func (p *NQuadsParser) parseLiteral() (Term, error) {
 	if p.pos >= p.length || p.input[p.pos] != '"' {
 		return nil, fmt.Errorf("expected '\"' at start of literal")
 	}
@@ -375,7 +373,7 @@ func (p *Parser) parseLiteral() (rdf.Term, error) {
 				p.pos++
 			}
 			lang := p.input[start:p.pos]
-			return rdf.NewLiteralWithLanguage(value.String(), lang), nil
+			return NewLiteralWithLanguage(value.String(), lang), nil
 		} else if p.input[p.pos] == '^' && p.pos+1 < p.length && p.input[p.pos+1] == '^' {
 			// Datatype
 			p.pos += 2 // skip '^^'
@@ -384,16 +382,16 @@ func (p *Parser) parseLiteral() (rdf.Term, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error parsing datatype: %w", err)
 			}
-			return rdf.NewLiteralWithDatatype(value.String(), rdf.NewNamedNode(datatypeIRI)), nil
+			return NewLiteralWithDatatype(value.String(), NewNamedNode(datatypeIRI)), nil
 		}
 	}
 
 	// Plain literal
-	return rdf.NewLiteral(value.String()), nil
+	return NewLiteral(value.String()), nil
 }
 
 // parseNumber parses a numeric literal
-func (p *Parser) parseNumber() (rdf.Term, error) {
+func (p *NQuadsParser) parseNumber() (Term, error) {
 	start := p.pos
 
 	// Optional sign
@@ -439,15 +437,15 @@ func (p *Parser) parseNumber() (rdf.Term, error) {
 
 	if isDecimal {
 		// Parse as double
-		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDouble), nil
+		return NewLiteralWithDatatype(numStr, XSDDouble), nil
 	} else {
 		// Parse as integer
-		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDInteger), nil
+		return NewLiteralWithDatatype(numStr, XSDInteger), nil
 	}
 }
 
 // parsePrefixedName parses a prefixed name (e.g., ex:foo)
-func (p *Parser) parsePrefixedName() (rdf.Term, error) {
+func (p *NQuadsParser) parsePrefixedName() (Term, error) {
 	start := p.pos
 
 	// Parse prefix
@@ -485,5 +483,5 @@ func (p *Parser) parsePrefixedName() (rdf.Term, error) {
 	}
 
 	fullIRI := baseIRI + localName
-	return rdf.NewNamedNode(fullIRI), nil
+	return NewNamedNode(fullIRI), nil
 }

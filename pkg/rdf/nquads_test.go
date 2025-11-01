@@ -1,9 +1,7 @@
-package nquads
+package rdf
 
 import (
 	"testing"
-
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 func TestParseNQuads(t *testing.T) {
@@ -64,7 +62,7 @@ ex:s ex:p ex:o .
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parser := NewParser(tt.input)
+			parser := NewNQuadsParser(tt.input)
 			quads, err := parser.Parse()
 
 			if tt.wantErr {
@@ -109,7 +107,7 @@ ex:s ex:p ex:o .
 func TestParseNQuadsWithGraph(t *testing.T) {
 	input := `<http://example.org/s> <http://example.org/p> <http://example.org/o> <http://example.org/g> .
 `
-	parser := NewParser(input)
+	parser := NewNQuadsParser(input)
 	quads, err := parser.Parse()
 
 	if err != nil {
@@ -123,12 +121,12 @@ func TestParseNQuadsWithGraph(t *testing.T) {
 	quad := quads[0]
 
 	// Check that graph is not the default graph
-	if quad.Graph.Type() == rdf.TermTypeDefaultGraph {
+	if quad.Graph.Type() == TermTypeDefaultGraph {
 		t.Error("expected named graph, got default graph")
 	}
 
 	// Check that graph is a named node with correct IRI
-	if quad.Graph.Type() != rdf.TermTypeNamedNode {
+	if quad.Graph.Type() != TermTypeNamedNode {
 		t.Errorf("expected named node for graph, got type %d", quad.Graph.Type())
 	}
 }
@@ -137,7 +135,7 @@ func TestParseNTriplesAsQuads(t *testing.T) {
 	// N-Triples should be parsed as quads in the default graph
 	input := `<http://example.org/s> <http://example.org/p> <http://example.org/o> .
 `
-	parser := NewParser(input)
+	parser := NewNQuadsParser(input)
 	quads, err := parser.Parse()
 
 	if err != nil {
@@ -151,7 +149,7 @@ func TestParseNTriplesAsQuads(t *testing.T) {
 	quad := quads[0]
 
 	// Check that graph is the default graph
-	if quad.Graph.Type() != rdf.TermTypeDefaultGraph {
+	if quad.Graph.Type() != TermTypeDefaultGraph {
 		t.Errorf("expected default graph, got type %d", quad.Graph.Type())
 	}
 }

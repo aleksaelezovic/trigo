@@ -1,19 +1,15 @@
-package rdfio
+package rdf
 
 import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/aleksaelezovic/trigo/internal/nquads"
-	"github.com/aleksaelezovic/trigo/internal/turtle"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // RDFParser is the interface for parsing RDF data in various formats
 type RDFParser interface {
 	// Parse parses RDF data from a reader and returns quads
-	Parse(reader io.Reader) ([]*rdf.Quad, error)
+	Parse(reader io.Reader) ([]*Quad, error)
 
 	// ContentType returns the MIME type this parser handles
 	ContentType() string
@@ -29,24 +25,24 @@ func NewParser(contentType string) (RDFParser, error) {
 
 	switch ct {
 	case "application/n-triples", "text/plain":
-		return &NTriplesParser{}, nil
+		return &NTriplesIOParser{}, nil
 	case "application/n-quads":
-		return &NQuadsParser{}, nil
+		return &NQuadsIOParser{}, nil
 	case "text/turtle", "application/x-turtle":
-		return &TurtleParser{}, nil
+		return &TurtleIOParser{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported content type: %s", contentType)
 	}
 }
 
-// NTriplesParser parses N-Triples format (triples only, default graph)
-type NTriplesParser struct{}
+// NTriplesIOParser parses N-Triples format (triples only, default graph)
+type NTriplesIOParser struct{}
 
-func (p *NTriplesParser) ContentType() string {
+func (p *NTriplesIOParser) ContentType() string {
 	return "application/n-triples"
 }
 
-func (p *NTriplesParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
+func (p *NTriplesIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	// Read all data
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -54,34 +50,34 @@ func (p *NTriplesParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
 	}
 
 	// Use turtle parser (which handles N-Triples as a subset)
-	turtleParser := turtle.NewParser(string(data))
+	turtleParser := NewTurtleParser(string(data))
 	triples, err := turtleParser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing N-Triples: %w", err)
 	}
 
 	// Convert triples to quads (default graph)
-	quads := make([]*rdf.Quad, len(triples))
+	quads := make([]*Quad, len(triples))
 	for i, triple := range triples {
-		quads[i] = rdf.NewQuad(
+		quads[i] = NewQuad(
 			triple.Subject,
 			triple.Predicate,
 			triple.Object,
-			rdf.NewDefaultGraph(),
+			NewDefaultGraph(),
 		)
 	}
 
 	return quads, nil
 }
 
-// NQuadsParser parses N-Quads format (quads with optional graph)
-type NQuadsParser struct{}
+// NQuadsIOParser parses N-Quads format (quads with optional graph)
+type NQuadsIOParser struct{}
 
-func (p *NQuadsParser) ContentType() string {
+func (p *NQuadsIOParser) ContentType() string {
 	return "application/n-quads"
 }
 
-func (p *NQuadsParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
+func (p *NQuadsIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	// Read all data
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -89,7 +85,7 @@ func (p *NQuadsParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
 	}
 
 	// Use N-Quads parser
-	nquadsParser := nquads.NewParser(string(data))
+	nquadsParser := NewNQuadsParser(string(data))
 	quads, err := nquadsParser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing N-Quads: %w", err)
@@ -98,14 +94,14 @@ func (p *NQuadsParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
 	return quads, nil
 }
 
-// TurtleParser parses Turtle format (triples with prefixes, default graph)
-type TurtleParser struct{}
+// TurtleIOParser parses Turtle format (triples with prefixes, default graph)
+type TurtleIOParser struct{}
 
-func (p *TurtleParser) ContentType() string {
+func (p *TurtleIOParser) ContentType() string {
 	return "text/turtle"
 }
 
-func (p *TurtleParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
+func (p *TurtleIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	// Read all data
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -113,20 +109,20 @@ func (p *TurtleParser) Parse(reader io.Reader) ([]*rdf.Quad, error) {
 	}
 
 	// Use turtle parser
-	turtleParser := turtle.NewParser(string(data))
+	turtleParser := NewTurtleParser(string(data))
 	triples, err := turtleParser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing Turtle: %w", err)
 	}
 
 	// Convert triples to quads (default graph)
-	quads := make([]*rdf.Quad, len(triples))
+	quads := make([]*Quad, len(triples))
 	for i, triple := range triples {
-		quads[i] = rdf.NewQuad(
+		quads[i] = NewQuad(
 			triple.Subject,
 			triple.Predicate,
 			triple.Object,
-			rdf.NewDefaultGraph(),
+			NewDefaultGraph(),
 		)
 	}
 
