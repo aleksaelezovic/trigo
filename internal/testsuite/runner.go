@@ -109,6 +109,12 @@ func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult 
 		return r.runNegativeSyntaxTest(manifest, test)
 	case TestTypeQueryEvaluation:
 		return r.runQueryEvaluationTest(manifest, test)
+	case TestTypeCSVResultFormat:
+		return r.runCSVFormatTest(manifest, test)
+	case TestTypeTSVResultFormat:
+		return r.runTSVFormatTest(manifest, test)
+	case TestTypeJSONResultFormat:
+		return r.runJSONFormatTest(manifest, test)
 	default:
 		// Skip unsupported test types for now
 		return TestResultSkip
@@ -388,4 +394,164 @@ func (r *TestRunner) printSummary() {
 // GetStats returns the current test statistics
 func (r *TestRunner) GetStats() *TestStats {
 	return r.stats
+}
+
+// runCSVFormatTest runs a CSV result format test
+func (r *TestRunner) runCSVFormatTest(manifest *TestManifest, test *TestCase) TestResult {
+	return r.runResultFormatTest(manifest, test, "csv")
+}
+
+// runTSVFormatTest runs a TSV result format test
+func (r *TestRunner) runTSVFormatTest(manifest *TestManifest, test *TestCase) TestResult {
+	return r.runResultFormatTest(manifest, test, "tsv")
+}
+
+// runJSONFormatTest runs a JSON result format test
+func (r *TestRunner) runJSONFormatTest(manifest *TestManifest, test *TestCase) TestResult {
+	return r.runResultFormatTest(manifest, test, "json")
+}
+
+// runResultFormatTest is a generic method for testing result formats
+func (r *TestRunner) runResultFormatTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	// Clear store before each test
+	if err := r.clearStore(); err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to clear store: %v", err))
+		return TestResultError
+	}
+
+	// Load data files
+	if err := r.loadTestData(manifest, test); err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to load test data: %v", err))
+		return TestResultError
+	}
+
+	// Read and parse query
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	queryFile := manifest.ResolveFile(test.Action)
+	queryBytes, err := os.ReadFile(queryFile) // #nosec G304 - test suite legitimately reads test query files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read query file: %v", err))
+		return TestResultError
+	}
+
+	// Parse query
+	p := parser.NewParser(string(queryBytes))
+	query, err := p.Parse()
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+		return TestResultFail
+	}
+
+	// Optimize query
+	count, _ := r.store.Count()
+	stats := &optimizer.Statistics{TotalTriples: count}
+	opt := optimizer.NewOptimizer(stats)
+	plan, err := opt.Optimize(query)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Optimizer error: %v", err))
+		return TestResultFail
+	}
+
+	// Execute query
+	exec := executor.NewExecutor(r.store)
+	result, err := exec.Execute(plan)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
+		return TestResultFail
+	}
+
+	// Format results in the requested format
+	var actualOutput []byte
+	switch format {
+	case "csv":
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			actualOutput, err = results.FormatSelectResultsCSV(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			actualOutput, err = results.FormatAskResultCSV(askResult)
+		} else {
+			r.recordError(test, fmt.Sprintf("Unsupported result type for CSV: %T", result))
+			return TestResultFail
+		}
+
+	case "tsv":
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			actualOutput, err = results.FormatSelectResultsTSV(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			actualOutput, err = results.FormatAskResultTSV(askResult)
+		} else {
+			r.recordError(test, fmt.Sprintf("Unsupported result type for TSV: %T", result))
+			return TestResultFail
+		}
+
+	case "json":
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			actualOutput, err = results.FormatSelectResultsJSON(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			actualOutput, err = results.FormatAskResultJSON(askResult)
+		} else {
+			r.recordError(test, fmt.Sprintf("Unsupported result type for JSON: %T", result))
+			return TestResultFail
+		}
+
+	default:
+		r.recordError(test, fmt.Sprintf("Unknown format: %s", format))
+		return TestResultError
+	}
+
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Format error: %v", err))
+		return TestResultFail
+	}
+
+	// Load expected results
+	if test.Result == "" {
+		r.recordError(test, "No result file specified")
+		return TestResultError
+	}
+
+	resultPath := manifest.ResolveFile(test.Result)
+	expectedOutput, err := os.ReadFile(resultPath) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read expected result file: %v", err))
+		return TestResultError
+	}
+
+	// Compare outputs (normalize line endings and whitespace)
+	if !compareOutputs(string(actualOutput), string(expectedOutput)) {
+		r.recordError(test, fmt.Sprintf("Output mismatch\nExpected:\n%s\n\nActual:\n%s", string(expectedOutput), string(actualOutput)))
+		return TestResultFail
+	}
+
+	return TestResultPass
+}
+
+// compareOutputs compares two output strings, normalizing line endings and trailing whitespace
+func compareOutputs(actual, expected string) bool {
+	// Normalize line endings
+	actual = strings.ReplaceAll(actual, "\r\n", "\n")
+	expected = strings.ReplaceAll(expected, "\r\n", "\n")
+
+	// Split into lines and compare
+	actualLines := strings.Split(strings.TrimSpace(actual), "\n")
+	expectedLines := strings.Split(strings.TrimSpace(expected), "\n")
+
+	if len(actualLines) != len(expectedLines) {
+		return false
+	}
+
+	for i := range actualLines {
+		// Trim trailing whitespace from each line
+		actualLine := strings.TrimRight(actualLines[i], " \t")
+		expectedLine := strings.TrimRight(expectedLines[i], " \t")
+
+		if actualLine != expectedLine {
+			return false
+		}
+	}
+
+	return true
 }

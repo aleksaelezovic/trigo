@@ -2,6 +2,7 @@ package results
 
 import (
 	"encoding/json"
+	"sort"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
@@ -50,6 +51,8 @@ func FormatSelectResultsJSON(result *executor.SelectResult) ([]byte, error) {
 				}
 			}
 		}
+		// Sort variables alphabetically for consistent ordering
+		sort.Strings(varNames)
 	} else {
 		// Specific variables
 		for _, v := range result.Variables {

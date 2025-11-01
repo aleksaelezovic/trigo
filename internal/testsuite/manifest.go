@@ -45,6 +45,11 @@ const (
 	// Evaluation tests
 	TestTypeQueryEvaluation      TestType = "QueryEvaluationTest"
 
+	// Result format tests
+	TestTypeCSVResultFormat      TestType = "CSVResultFormatTest"
+	TestTypeTSVResultFormat      TestType = "TSVResultFormatTest"
+	TestTypeJSONResultFormat     TestType = "JSONResultFormatTest"
+
 	// Update tests
 	TestTypePositiveUpdateSyntax TestType = "PositiveUpdateSyntaxTest11"
 	TestTypeNegativeUpdateSyntax TestType = "NegativeUpdateSyntaxTest11"
@@ -104,6 +109,10 @@ func ParseManifest(path string) (*TestManifest, error) {
 				currentTest.Type = TestTypeNegativeSyntax11
 			} else if strings.Contains(line, "NegativeSyntaxTest") {
 				currentTest.Type = TestTypeNegativeSyntax
+			} else if strings.Contains(line, "CSVResultFormatTest") {
+				currentTest.Type = TestTypeCSVResultFormat
+			} else if strings.Contains(line, "JSONResultFormatTest") {
+				currentTest.Type = TestTypeJSONResultFormat
 			} else if strings.Contains(line, "QueryEvaluationTest") {
 				currentTest.Type = TestTypeQueryEvaluation
 			}
@@ -156,6 +165,15 @@ func ParseManifest(path string) (*TestManifest, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading manifest: %w", err)
+	}
+
+	// Post-process tests to detect TSV result format tests
+	// TSV tests are marked as QueryEvaluationTest but have .tsv result files
+	for i := range manifest.Tests {
+		if manifest.Tests[i].Type == TestTypeQueryEvaluation &&
+		   strings.HasSuffix(manifest.Tests[i].Result, ".tsv") {
+			manifest.Tests[i].Type = TestTypeTSVResultFormat
+		}
 	}
 
 	return manifest, nil

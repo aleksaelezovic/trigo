@@ -1,6 +1,7 @@
 package results
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
@@ -27,6 +28,8 @@ func FormatSelectResultsTSV(result *executor.SelectResult) ([]byte, error) {
 				}
 			}
 		}
+		// Sort variables alphabetically for consistent ordering
+		sort.Strings(varNames)
 	} else {
 		// Specific variables
 		for _, v := range result.Variables {
@@ -82,9 +85,10 @@ func FormatAskResultTSV(result *executor.AskResult) ([]byte, error) {
 // termToTSVValue converts an RDF term to a TSV value string
 // According to SPARQL TSV spec:
 // - IRIs are enclosed in angle brackets: <iri>
-// - Literals are enclosed in double quotes: "value"
+// - Simple literals are enclosed in double quotes: "value"
+// - Numeric literals (integer, decimal, double) without quotes: 4, 5.5
 // - Language-tagged literals: "value"@language
-// - Typed literals: "value"^^<datatype>
+// - Typed literals: "value"^^<datatype> (except for standard numeric types)
 // - Blank nodes: _:label
 // - Special characters in literals must be escaped
 func termToTSVValue(term rdf.Term) string {
@@ -96,12 +100,25 @@ func termToTSVValue(term rdf.Term) string {
 		return "_:" + t.ID
 
 	case *rdf.Literal:
-		escaped := escapeTSVString(t.Value)
 		if t.Language != "" {
+			escaped := escapeTSVString(t.Value)
 			return "\"" + escaped + "\"@" + t.Language
 		} else if t.Datatype != nil {
-			return "\"" + escaped + "\"^^<" + t.Datatype.IRI + ">"
+			// For numeric types (integer, decimal, double), output without quotes or datatype
+			// according to SPARQL 1.1 TSV spec examples
+			datatypeIRI := t.Datatype.IRI
+			if datatypeIRI == "http://www.w3.org/2001/XMLSchema#integer" ||
+				datatypeIRI == "http://www.w3.org/2001/XMLSchema#decimal" ||
+				datatypeIRI == "http://www.w3.org/2001/XMLSchema#double" {
+				// Output numeric value without quotes or datatype
+				return t.Value
+			}
+			// For other typed literals, include the datatype
+			escaped := escapeTSVString(t.Value)
+			return "\"" + escaped + "\"^^<" + datatypeIRI + ">"
 		}
+		// Plain literal
+		escaped := escapeTSVString(t.Value)
 		return "\"" + escaped + "\""
 
 	default:

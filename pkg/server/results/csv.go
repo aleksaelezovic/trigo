@@ -2,6 +2,7 @@ package results
 
 import (
 	"encoding/csv"
+	"sort"
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
@@ -29,6 +30,8 @@ func FormatSelectResultsCSV(result *executor.SelectResult) ([]byte, error) {
 				}
 			}
 		}
+		// Sort variables alphabetically for consistent ordering
+		sort.Strings(varNames)
 	} else {
 		// Specific variables
 		for _, v := range result.Variables {
