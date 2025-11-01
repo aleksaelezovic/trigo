@@ -236,10 +236,18 @@ func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (store.EncodedTerm
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDateTimeLiteral)
 
-	// Parse RFC3339 datetime
-	t, err := time.Parse(time.RFC3339, strings.TrimSpace(lit.Value))
+	// Parse datetime - support both RFC3339 (with timezone) and ISO8601 (without timezone)
+	// Try RFC3339 first (e.g., "2011-02-01T01:02:03Z" or "2011-02-01T01:02:03+00:00")
+	trimmedValue := strings.TrimSpace(lit.Value)
+	t, err := time.Parse(time.RFC3339, trimmedValue)
 	if err != nil {
-		return encoded, nil, fmt.Errorf("invalid datetime literal: %w", err)
+		// Try ISO8601 without timezone (e.g., "2011-02-01T01:02:03"), assume UTC
+		t, err = time.Parse("2006-01-02T15:04:05", trimmedValue)
+		if err != nil {
+			return encoded, nil, fmt.Errorf("invalid datetime literal: %w", err)
+		}
+		// Explicitly set to UTC since no timezone was provided
+		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
 	}
 
 	// Store as Unix timestamp (nanoseconds since epoch)
