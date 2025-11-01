@@ -5,13 +5,14 @@ import (
 	"log"
 	"os"
 
+	"github.com/aleksaelezovic/trigo/internal/encoding"
 	"github.com/aleksaelezovic/trigo/internal/server"
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/storage"
-	"github.com/aleksaelezovic/trigo/internal/store"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 func main() {
@@ -62,7 +63,7 @@ func runDemo() {
 	defer badgerStorage.Close()
 
 	// Create triplestore
-	tripleStore := store.NewTripleStore(badgerStorage)
+	tripleStore := store.NewTripleStore(badgerStorage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 	fmt.Println("Triplestore initialized")
 	fmt.Println()
 
@@ -213,7 +214,7 @@ func runQuery(sparqlQuery string) {
 	}
 	defer badgerStorage.Close()
 
-	tripleStore := store.NewTripleStore(badgerStorage)
+	tripleStore := store.NewTripleStore(badgerStorage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 
 	// Parse query
 	p := parser.NewParser(sparqlQuery)
@@ -279,7 +280,7 @@ func runServer(addr string) {
 	}
 	defer badgerStorage.Close()
 
-	tripleStore := store.NewTripleStore(badgerStorage)
+	tripleStore := store.NewTripleStore(badgerStorage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 
 	// Get current count
 	count, _ := tripleStore.Count()

@@ -6,8 +6,8 @@ import (
 	"github.com/aleksaelezovic/trigo/internal/sparql/evaluator"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
-	"github.com/aleksaelezovic/trigo/internal/store"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 // Executor executes SPARQL queries using the Volcano iterator model
@@ -362,7 +362,7 @@ func (e *Executor) createDistinctIterator(plan *optimizer.DistinctPlan) (store.B
 }
 
 // convertTermOrVariable converts a parser term/variable to store format
-func (e *Executor) convertTermOrVariable(tov parser.TermOrVariable) interface{} {
+func (e *Executor) convertTermOrVariable(tov parser.TermOrVariable) any {
 	if tov.IsVariable() {
 		return store.NewVariable(tov.Variable.Name)
 	}
@@ -689,7 +689,7 @@ func (ge *graphExecutor) createGraphScanIterator(plan *optimizer.ScanPlan) (stor
 	}, nil
 }
 
-func (ge *graphExecutor) convertGraphTerm(graphTerm *parser.GraphTerm) interface{} {
+func (ge *graphExecutor) convertGraphTerm(graphTerm *parser.GraphTerm) any {
 	if graphTerm.Variable != nil {
 		return &store.Variable{Name: graphTerm.Variable.Name}
 	}

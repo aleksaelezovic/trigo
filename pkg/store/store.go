@@ -4,22 +4,22 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/aleksaelezovic/trigo/internal/encoding"
-	"github.com/aleksaelezovic/trigo/internal/storage"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // TripleStore manages the RDF triplestore with 11 indexes
 type TripleStore struct {
-	storage storage.Storage
-	encoder *encoding.TermEncoder
+	storage Storage
+	encoder TermEncoder
+	decoder TermDecoder
 }
 
 // NewTripleStore creates a new triplestore
-func NewTripleStore(storage storage.Storage) *TripleStore {
+func NewTripleStore(storage Storage, encoder TermEncoder, decoder TermDecoder) *TripleStore {
 	return &TripleStore{
 		storage: storage,
-		encoder: encoding.NewTermEncoder(),
+		encoder: encoder,
+		decoder: decoder,
 	}
 }
 
@@ -55,7 +55,7 @@ func (s *TripleStore) InsertTriple(triple *rdf.Triple) error {
 }
 
 // insertQuadInTxn inserts a quad within an existing transaction
-func (s *TripleStore) insertQuadInTxn(txn storage.Transaction, quad *rdf.Quad) error {
+func (s *TripleStore) insertQuadInTxn(txn Transaction, quad *rdf.Quad) error {
 	// Encode terms
 	subjEnc, subjStr, err := s.encoder.EncodeTerm(quad.Subject)
 	if err != nil {
@@ -99,41 +99,41 @@ func (s *TripleStore) insertQuadInTxn(txn storage.Transaction, quad *rdf.Quad) e
 
 	if isDefaultGraph {
 		// Insert into default graph indexes (3 permutations)
-		if err := txn.Set(storage.TableSPO, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc), emptyValue); err != nil {
+		if err := txn.Set(TableSPO, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc), emptyValue); err != nil {
 			return err
 		}
-		if err := txn.Set(storage.TablePOS, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc), emptyValue); err != nil {
+		if err := txn.Set(TablePOS, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc), emptyValue); err != nil {
 			return err
 		}
-		if err := txn.Set(storage.TableOSP, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc), emptyValue); err != nil {
+		if err := txn.Set(TableOSP, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc), emptyValue); err != nil {
 			return err
 		}
 	}
 
 	// Insert into named graph indexes (6 permutations)
 	// These are used for both named graphs and can serve as backup for default graph queries
-	if err := txn.Set(storage.TableSPOG, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc, graphEnc), emptyValue); err != nil {
+	if err := txn.Set(TableSPOG, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc, graphEnc), emptyValue); err != nil {
 		return err
 	}
-	if err := txn.Set(storage.TablePOSG, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc, graphEnc), emptyValue); err != nil {
+	if err := txn.Set(TablePOSG, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc, graphEnc), emptyValue); err != nil {
 		return err
 	}
-	if err := txn.Set(storage.TableOSPG, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc, graphEnc), emptyValue); err != nil {
+	if err := txn.Set(TableOSPG, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc, graphEnc), emptyValue); err != nil {
 		return err
 	}
-	if err := txn.Set(storage.TableGSPO, s.encoder.EncodeQuadKey(graphEnc, subjEnc, predEnc, objEnc), emptyValue); err != nil {
+	if err := txn.Set(TableGSPO, s.encoder.EncodeQuadKey(graphEnc, subjEnc, predEnc, objEnc), emptyValue); err != nil {
 		return err
 	}
-	if err := txn.Set(storage.TableGPOS, s.encoder.EncodeQuadKey(graphEnc, predEnc, objEnc, subjEnc), emptyValue); err != nil {
+	if err := txn.Set(TableGPOS, s.encoder.EncodeQuadKey(graphEnc, predEnc, objEnc, subjEnc), emptyValue); err != nil {
 		return err
 	}
-	if err := txn.Set(storage.TableGOSP, s.encoder.EncodeQuadKey(graphEnc, objEnc, subjEnc, predEnc), emptyValue); err != nil {
+	if err := txn.Set(TableGOSP, s.encoder.EncodeQuadKey(graphEnc, objEnc, subjEnc, predEnc), emptyValue); err != nil {
 		return err
 	}
 
 	// Track named graph
 	if !isDefaultGraph {
-		if err := txn.Set(storage.TableGraphs, graphEnc[:], emptyValue); err != nil {
+		if err := txn.Set(TableGraphs, graphEnc[:], emptyValue); err != nil {
 			return err
 		}
 	}
@@ -142,7 +142,7 @@ func (s *TripleStore) insertQuadInTxn(txn storage.Transaction, quad *rdf.Quad) e
 }
 
 // storeString stores a string in the id2str table if provided
-func (s *TripleStore) storeString(txn storage.Transaction, encoded encoding.EncodedTerm, str *string) error {
+func (s *TripleStore) storeString(txn Transaction, encoded EncodedTerm, str *string) error {
 	if str == nil {
 		return nil
 	}
@@ -152,15 +152,15 @@ func (s *TripleStore) storeString(txn storage.Transaction, encoded encoding.Enco
 	value := []byte(*str)
 
 	// Check if already exists to avoid unnecessary writes
-	existing, err := txn.Get(storage.TableID2Str, key)
+	existing, err := txn.Get(TableID2Str, key)
 	if err == nil && bytes.Equal(existing, value) {
 		return nil
 	}
-	if err != nil && err != storage.ErrNotFound {
+	if err != nil && err != ErrNotFound {
 		return err
 	}
 
-	return txn.Set(storage.TableID2Str, key, value)
+	return txn.Set(TableID2Str, key, value)
 }
 
 // DeleteQuad deletes a quad from the store
@@ -190,7 +190,7 @@ func (s *TripleStore) DeleteTriple(triple *rdf.Triple) error {
 }
 
 // deleteQuadInTxn deletes a quad within an existing transaction
-func (s *TripleStore) deleteQuadInTxn(txn storage.Transaction, quad *rdf.Quad) error {
+func (s *TripleStore) deleteQuadInTxn(txn Transaction, quad *rdf.Quad) error {
 	// Encode terms
 	subjEnc, _, err := s.encoder.EncodeTerm(quad.Subject)
 	if err != nil {
@@ -217,34 +217,34 @@ func (s *TripleStore) deleteQuadInTxn(txn storage.Transaction, quad *rdf.Quad) e
 
 	if isDefaultGraph {
 		// Delete from default graph indexes
-		if err := txn.Delete(storage.TableSPO, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc)); err != nil {
+		if err := txn.Delete(TableSPO, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc)); err != nil {
 			return err
 		}
-		if err := txn.Delete(storage.TablePOS, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc)); err != nil {
+		if err := txn.Delete(TablePOS, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc)); err != nil {
 			return err
 		}
-		if err := txn.Delete(storage.TableOSP, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc)); err != nil {
+		if err := txn.Delete(TableOSP, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc)); err != nil {
 			return err
 		}
 	}
 
 	// Delete from named graph indexes
-	if err := txn.Delete(storage.TableSPOG, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc, graphEnc)); err != nil {
+	if err := txn.Delete(TableSPOG, s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc, graphEnc)); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.TablePOSG, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc, graphEnc)); err != nil {
+	if err := txn.Delete(TablePOSG, s.encoder.EncodeQuadKey(predEnc, objEnc, subjEnc, graphEnc)); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.TableOSPG, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc, graphEnc)); err != nil {
+	if err := txn.Delete(TableOSPG, s.encoder.EncodeQuadKey(objEnc, subjEnc, predEnc, graphEnc)); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.TableGSPO, s.encoder.EncodeQuadKey(graphEnc, subjEnc, predEnc, objEnc)); err != nil {
+	if err := txn.Delete(TableGSPO, s.encoder.EncodeQuadKey(graphEnc, subjEnc, predEnc, objEnc)); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.TableGPOS, s.encoder.EncodeQuadKey(graphEnc, predEnc, objEnc, subjEnc)); err != nil {
+	if err := txn.Delete(TableGPOS, s.encoder.EncodeQuadKey(graphEnc, predEnc, objEnc, subjEnc)); err != nil {
 		return err
 	}
-	if err := txn.Delete(storage.TableGOSP, s.encoder.EncodeQuadKey(graphEnc, objEnc, subjEnc, predEnc)); err != nil {
+	if err := txn.Delete(TableGOSP, s.encoder.EncodeQuadKey(graphEnc, objEnc, subjEnc, predEnc)); err != nil {
 		return err
 	}
 
@@ -285,8 +285,8 @@ func (s *TripleStore) ContainsQuad(quad *rdf.Quad) (bool, error) {
 
 	// Check in SPOG index
 	key := s.encoder.EncodeQuadKey(subjEnc, predEnc, objEnc, graphEnc)
-	_, err = txn.Get(storage.TableSPOG, key)
-	if err == storage.ErrNotFound {
+	_, err = txn.Get(TableSPOG, key)
+	if err == ErrNotFound {
 		return false, nil
 	}
 	if err != nil {
@@ -305,7 +305,7 @@ func (s *TripleStore) Count() (int64, error) {
 	defer txn.Rollback()
 
 	// Count entries in SPOG index (primary index for quads)
-	it, err := txn.Scan(storage.TableSPOG, nil, nil)
+	it, err := txn.Scan(TableSPOG, nil, nil)
 	if err != nil {
 		return 0, err
 	}

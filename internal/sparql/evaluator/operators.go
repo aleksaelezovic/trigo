@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
-	"github.com/aleksaelezovic/trigo/internal/store"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 

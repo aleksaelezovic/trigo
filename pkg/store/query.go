@@ -3,17 +3,15 @@ package store
 import (
 	"fmt"
 
-	"github.com/aleksaelezovic/trigo/internal/encoding"
-	"github.com/aleksaelezovic/trigo/internal/storage"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // Pattern represents a triple or quad pattern with optional variables
 type Pattern struct {
-	Subject   interface{} // rdf.Term or Variable
-	Predicate interface{} // rdf.Term or Variable
-	Object    interface{} // rdf.Term or Variable
-	Graph     interface{} // rdf.Term or Variable (nil means any graph)
+	Subject   any // rdf.Term or Variable
+	Predicate any // rdf.Term or Variable
+	Object    any // rdf.Term or Variable
+	Graph     any // rdf.Term or Variable (nil means any graph)
 }
 
 // Variable represents a SPARQL variable
@@ -33,14 +31,14 @@ func (v *Variable) String() string {
 // Binding represents a variable binding
 type Binding struct {
 	Vars   map[string]rdf.Term
-	values map[string]encoding.EncodedTerm // internal encoded values
+	values map[string]EncodedTerm // internal encoded values
 }
 
 // NewBinding creates a new empty binding
 func NewBinding() *Binding {
 	return &Binding{
 		Vars:   make(map[string]rdf.Term),
-		values: make(map[string]encoding.EncodedTerm),
+		values: make(map[string]EncodedTerm),
 	}
 }
 
@@ -104,7 +102,7 @@ func (s *TripleStore) Query(pattern *Pattern) (QuadIterator, error) {
 }
 
 // selectIndex chooses the best index based on which positions are bound
-func (s *TripleStore) selectIndex(pattern *Pattern) (storage.Table, []int) {
+func (s *TripleStore) selectIndex(pattern *Pattern) (Table, []int) {
 	sBound := !isVariable(pattern.Subject)
 	pBound := !isVariable(pattern.Predicate)
 	oBound := !isVariable(pattern.Object)
@@ -115,59 +113,59 @@ func (s *TripleStore) selectIndex(pattern *Pattern) (storage.Table, []int) {
 		// Default graph indexes (SPO, POS, OSP)
 		// KeyPattern maps: key_position -> SPOG_position (S=0, P=1, O=2, G=3)
 		if sBound && pBound {
-			return storage.TableSPO, []int{0, 1, 2} // Key order: S, P, O
+			return TableSPO, []int{0, 1, 2} // Key order: S, P, O
 		}
 		if pBound && oBound {
-			return storage.TablePOS, []int{1, 2, 0} // Key order: P, O, S
+			return TablePOS, []int{1, 2, 0} // Key order: P, O, S
 		}
 		if oBound && sBound {
-			return storage.TableOSP, []int{2, 0, 1} // Key order: O, S, P
+			return TableOSP, []int{2, 0, 1} // Key order: O, S, P
 		}
 		if sBound {
-			return storage.TableSPO, []int{0, 1, 2} // Key order: S, P, O
+			return TableSPO, []int{0, 1, 2} // Key order: S, P, O
 		}
 		if pBound {
-			return storage.TablePOS, []int{1, 2, 0} // Key order: P, O, S
+			return TablePOS, []int{1, 2, 0} // Key order: P, O, S
 		}
 		if oBound {
-			return storage.TableOSP, []int{2, 0, 1} // Key order: O, S, P
+			return TableOSP, []int{2, 0, 1} // Key order: O, S, P
 		}
 		// No variables bound, use SPO
-		return storage.TableSPO, []int{0, 1, 2}
+		return TableSPO, []int{0, 1, 2}
 	}
 
 	// Named graph indexes (SPOG, POSG, OSPG, GSPO, GPOS, GOSP)
 	// KeyPattern maps: key_position -> SPOG_position (S=0, P=1, O=2, G=3)
 	if gBound && sBound && pBound {
-		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
+		return TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 	if gBound && pBound && oBound {
-		return storage.TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
+		return TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
 	}
 	if gBound && oBound && sBound {
-		return storage.TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
+		return TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
 	}
 	if gBound && sBound {
-		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
+		return TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 	if gBound && pBound {
-		return storage.TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
+		return TableGPOS, []int{3, 1, 2, 0} // Key order: G, P, O, S
 	}
 	if gBound && oBound {
-		return storage.TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
+		return TableGOSP, []int{3, 2, 0, 1} // Key order: G, O, S, P
 	}
 	if gBound {
-		return storage.TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
+		return TableGSPO, []int{3, 0, 1, 2} // Key order: G, S, P, O
 	}
 
 	// Fallback to SPOG for mixed queries
-	return storage.TableSPOG, []int{0, 1, 2, 3}
+	return TableSPOG, []int{0, 1, 2, 3}
 }
 
 // buildScanPrefix builds a key prefix for scanning based on bound positions
 func (s *TripleStore) buildScanPrefix(pattern *Pattern, keyPattern []int) ([]byte, error) {
 	// Map pattern positions: 0=S, 1=P, 2=O, 3=G
-	positions := make([]interface{}, 4)
+	positions := make([]any, 4)
 	positions[0] = pattern.Subject
 	positions[1] = pattern.Predicate
 	positions[2] = pattern.Object
@@ -203,7 +201,7 @@ func (s *TripleStore) buildScanPrefix(pattern *Pattern, keyPattern []int) ([]byt
 }
 
 // isVariable checks if a value is a variable
-func isVariable(v interface{}) bool {
+func isVariable(v any) bool {
 	_, ok := v.(*Variable)
 	return ok
 }
@@ -211,8 +209,8 @@ func isVariable(v interface{}) bool {
 // quadIterator implements QuadIterator
 type quadIterator struct {
 	store      *TripleStore
-	txn        storage.Transaction
-	it         storage.Iterator
+	txn        Transaction
+	it         Iterator
 	pattern    *Pattern
 	keyPattern []int
 	closed     bool
@@ -237,19 +235,20 @@ func (qi *quadIterator) Quad() (*rdf.Quad, error) {
 
 	// Decode key based on key pattern
 	// Each encoded term is 17 bytes
-	if len(key) < len(qi.keyPattern)*encoding.EncodedTermSize {
+	const encodedTermSize = 17
+	if len(key) < len(qi.keyPattern)*encodedTermSize {
 		return nil, fmt.Errorf("invalid key length: %d", len(key))
 	}
 
 	// Extract encoded terms
-	terms := make([]encoding.EncodedTerm, len(qi.keyPattern))
+	terms := make([]EncodedTerm, len(qi.keyPattern))
 	for i := 0; i < len(qi.keyPattern); i++ {
-		offset := i * encoding.EncodedTermSize
-		copy(terms[i][:], key[offset:offset+encoding.EncodedTermSize])
+		offset := i * encodedTermSize
+		copy(terms[i][:], key[offset:offset+encodedTermSize])
 	}
 
 	// Map back to S, P, O, G positions
-	positions := make([]encoding.EncodedTerm, 4)
+	positions := make([]EncodedTerm, 4)
 	for i, idx := range qi.keyPattern {
 		positions[idx] = terms[i]
 	}
@@ -298,21 +297,20 @@ func (qi *quadIterator) Close() error {
 }
 
 // decodeTerm decodes an encoded term back to an rdf.Term
-func (s *TripleStore) decodeTerm(txn storage.Transaction, encoded encoding.EncodedTerm) (rdf.Term, error) {
-	termType := encoding.GetTermType(encoded)
-	decoder := encoding.NewTermDecoder()
+func (s *TripleStore) decodeTerm(txn Transaction, encoded EncodedTerm) (rdf.Term, error) {
+	termType := rdf.TermType(encoded[0])
 
 	// For terms that need string lookup
 	var stringValue *string
 	if termType == rdf.TermTypeNamedNode || termType == rdf.TermTypeBlankNode ||
 		termType == rdf.TermTypeStringLiteral || termType == rdf.TermTypeLangStringLiteral {
 
-		str, err := txn.Get(storage.TableID2Str, encoded[1:])
+		str, err := txn.Get(TableID2Str, encoded[1:])
 		if err == nil {
 			strVal := string(str)
 			stringValue = &strVal
 		}
 	}
 
-	return decoder.DecodeTerm(encoded, stringValue)
+	return s.decoder.DecodeTerm(encoded, stringValue)
 }

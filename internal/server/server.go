@@ -13,7 +13,7 @@ import (
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
-	"github.com/aleksaelezovic/trigo/internal/store"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 // Server represents the HTTP SPARQL server
@@ -387,9 +387,9 @@ func (s *Server) handleDataUpload(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(startTime)
 
 	// Return success response with statistics
-	response := map[string]interface{}{
+	response := map[string]any{
 		"success": true,
-		"statistics": map[string]interface{}{
+		"statistics": map[string]any{
 			"quadsInserted":     len(quads),
 			"durationMs":        duration.Milliseconds(),
 			"quadsPerSecond":    float64(len(quads)) / duration.Seconds(),

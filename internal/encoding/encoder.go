@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 	"github.com/zeebo/xxh3"
 )
 
@@ -19,9 +20,6 @@ const (
 	// Encoded term size (type byte + 16 bytes for 128-bit hash or inline data)
 	EncodedTermSize = 17
 )
-
-// EncodedTerm represents a term encoded as a type byte followed by up to 16 bytes of data
-type EncodedTerm [EncodedTermSize]byte
 
 // TermEncoder handles encoding and decoding of RDF terms
 type TermEncoder struct {
@@ -44,8 +42,8 @@ func (e *TermEncoder) Hash128(s string) [16]byte {
 
 // EncodeTerm encodes an RDF term into a fixed-size byte array
 // Returns the encoded term and optionally a string to store in id2str table
-func (e *TermEncoder) EncodeTerm(term rdf.Term) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) EncodeTerm(term rdf.Term) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 
 	switch t := term.(type) {
 	case *rdf.NamedNode:
@@ -61,8 +59,8 @@ func (e *TermEncoder) EncodeTerm(term rdf.Term) (EncodedTerm, *string, error) {
 	}
 }
 
-func (e *TermEncoder) encodeNamedNode(node *rdf.NamedNode) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeNamedNode(node *rdf.NamedNode) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeNamedNode)
 
 	// Always hash IRIs (using 128-bit xxhash3)
@@ -72,8 +70,8 @@ func (e *TermEncoder) encodeNamedNode(node *rdf.NamedNode) (EncodedTerm, *string
 	return encoded, &node.IRI, nil
 }
 
-func (e *TermEncoder) encodeBlankNode(node *rdf.BlankNode) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeBlankNode(node *rdf.BlankNode) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeBlankNode)
 
 	// Try to parse as numeric ID
@@ -94,7 +92,7 @@ func (e *TermEncoder) encodeBlankNode(node *rdf.BlankNode) (EncodedTerm, *string
 	return encoded, &node.ID, nil
 }
 
-func (e *TermEncoder) encodeLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
+func (e *TermEncoder) encodeLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
 	// Check for typed literals with special encoding
 	if lit.Datatype != nil {
 		switch lit.Datatype.IRI {
@@ -122,8 +120,8 @@ func (e *TermEncoder) encodeLiteral(lit *rdf.Literal) (EncodedTerm, *string, err
 	return e.encodeStringLiteral(lit)
 }
 
-func (e *TermEncoder) encodeStringLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeStringLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeStringLiteral)
 
 	if len(lit.Value) <= MaxInlineStringSize {
@@ -143,8 +141,8 @@ func (e *TermEncoder) encodeStringLiteral(lit *rdf.Literal) (EncodedTerm, *strin
 	return encoded, &lit.Value, nil
 }
 
-func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeLangStringLiteral)
 
 	// Combine value and language tag for hashing
@@ -155,8 +153,8 @@ func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (EncodedTerm, *s
 	return encoded, &combined, nil
 }
 
-func (e *TermEncoder) encodeIntegerLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeIntegerLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeIntegerLiteral)
 
 	value, err := strconv.ParseInt(lit.Value, 10, 64)
@@ -174,8 +172,8 @@ func (e *TermEncoder) encodeIntegerLiteral(lit *rdf.Literal) (EncodedTerm, *stri
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeDecimalLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeDecimalLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDecimalLiteral)
 
 	// Parse as float and store
@@ -193,8 +191,8 @@ func (e *TermEncoder) encodeDecimalLiteral(lit *rdf.Literal) (EncodedTerm, *stri
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeDoubleLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeDoubleLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDoubleLiteral)
 
 	value, err := strconv.ParseFloat(lit.Value, 64)
@@ -211,8 +209,8 @@ func (e *TermEncoder) encodeDoubleLiteral(lit *rdf.Literal) (EncodedTerm, *strin
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeBooleanLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeBooleanLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeBooleanLiteral)
 
 	value, err := strconv.ParseBool(lit.Value)
@@ -234,8 +232,8 @@ func (e *TermEncoder) encodeBooleanLiteral(lit *rdf.Literal) (EncodedTerm, *stri
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDateTimeLiteral)
 
 	// Parse RFC3339 datetime
@@ -256,8 +254,8 @@ func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (EncodedTerm, *str
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDateLiteral)
 
 	// Parse date (assuming YYYY-MM-DD format)
@@ -278,8 +276,8 @@ func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (EncodedTerm, *string,
 	return encoded, nil, nil
 }
 
-func (e *TermEncoder) encodeDefaultGraph() (EncodedTerm, *string, error) {
-	var encoded EncodedTerm
+func (e *TermEncoder) encodeDefaultGraph() (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDefaultGraph)
 
 	// Zero out remaining bytes
@@ -292,7 +290,7 @@ func (e *TermEncoder) encodeDefaultGraph() (EncodedTerm, *string, error) {
 
 // EncodeQuadKey encodes a quad key for one of the 11 indexes
 // Returns a big-endian byte array for lexicographic sorting
-func (e *TermEncoder) EncodeQuadKey(terms ...EncodedTerm) []byte {
+func (e *TermEncoder) EncodeQuadKey(terms ...store.EncodedTerm) []byte {
 	result := make([]byte, 0, len(terms)*EncodedTermSize)
 	for _, term := range terms {
 		result = append(result, term[:]...)
@@ -301,6 +299,6 @@ func (e *TermEncoder) EncodeQuadKey(terms ...EncodedTerm) []byte {
 }
 
 // GetTermType extracts the type from an encoded term
-func GetTermType(encoded EncodedTerm) rdf.TermType {
+func GetTermType(encoded store.EncodedTerm) rdf.TermType {
 	return rdf.TermType(encoded[0])
 }

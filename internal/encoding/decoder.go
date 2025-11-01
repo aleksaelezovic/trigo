@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 // TermDecoder handles decoding of RDF terms
@@ -20,7 +21,7 @@ func NewTermDecoder() *TermDecoder {
 
 // DecodeTerm decodes an encoded term back to an rdf.Term
 // For terms that require string lookup, stringValue should be provided
-func (d *TermDecoder) DecodeTerm(encoded EncodedTerm, stringValue *string) (rdf.Term, error) {
+func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string) (rdf.Term, error) {
 	termType := GetTermType(encoded)
 
 	switch termType {

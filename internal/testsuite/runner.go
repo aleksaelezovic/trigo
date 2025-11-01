@@ -5,14 +5,15 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aleksaelezovic/trigo/internal/encoding"
 	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
 	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/sparqlxml"
 	"github.com/aleksaelezovic/trigo/internal/storage"
-	"github.com/aleksaelezovic/trigo/internal/store"
 	"github.com/aleksaelezovic/trigo/internal/turtle"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 // TestRunner runs W3C SPARQL test suite tests
@@ -45,7 +46,7 @@ func NewTestRunner(dbPath string) (*TestRunner, error) {
 	}
 
 	return &TestRunner{
-		store: store.NewTripleStore(storage),
+		store: store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder()),
 		stats: &TestStats{},
 	}, nil
 }

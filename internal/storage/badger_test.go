@@ -1,22 +1,23 @@
-package store
+package storage
 
 import (
 	"testing"
 
-	"github.com/aleksaelezovic/trigo/internal/storage"
+	"github.com/aleksaelezovic/trigo/internal/encoding"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 func TestBatchInsertAndQuery(t *testing.T) {
 	// Create temporary storage
 	tmpDir := t.TempDir()
-	storage, err := storage.NewBadgerStorage(tmpDir)
+	storage, err := NewBadgerStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
 	defer storage.Close()
 
-	store := NewTripleStore(storage)
+	tripleStore := store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 
 	// Create test quads
 	quads := []*rdf.Quad{
@@ -41,13 +42,13 @@ func TestBatchInsertAndQuery(t *testing.T) {
 	}
 
 	// Batch insert
-	err = store.InsertQuadsBatch(quads)
+	err = tripleStore.InsertQuadsBatch(quads)
 	if err != nil {
 		t.Fatalf("failed to batch insert: %v", err)
 	}
 
 	// Query: Check count
-	count, err := store.Count()
+	count, err := tripleStore.Count()
 	if err != nil {
 		t.Fatalf("failed to count: %v", err)
 	}
@@ -56,14 +57,14 @@ func TestBatchInsertAndQuery(t *testing.T) {
 	}
 
 	// Query: Get all triples from default graph
-	pattern := &Pattern{
-		Subject:   &Variable{Name: "s"},
-		Predicate: &Variable{Name: "p"},
-		Object:    &Variable{Name: "o"},
+	pattern := &store.Pattern{
+		Subject:   &store.Variable{Name: "s"},
+		Predicate: &store.Variable{Name: "p"},
+		Object:    &store.Variable{Name: "o"},
 		Graph:     rdf.NewDefaultGraph(),
 	}
 
-	iter, err := store.Query(pattern)
+	iter, err := tripleStore.Query(pattern)
 	if err != nil {
 		t.Fatalf("failed to query: %v", err)
 	}
@@ -91,14 +92,14 @@ func TestBatchInsertAndQuery(t *testing.T) {
 	}
 
 	// Query: Get triples from named graph
-	namedGraphPattern := &Pattern{
-		Subject:   &Variable{Name: "s"},
-		Predicate: &Variable{Name: "p"},
-		Object:    &Variable{Name: "o"},
+	namedGraphPattern := &store.Pattern{
+		Subject:   &store.Variable{Name: "s"},
+		Predicate: &store.Variable{Name: "p"},
+		Object:    &store.Variable{Name: "o"},
 		Graph:     rdf.NewNamedNode("http://example.org/graph1"),
 	}
 
-	iter2, err := store.Query(namedGraphPattern)
+	iter2, err := tripleStore.Query(namedGraphPattern)
 	if err != nil {
 		t.Fatalf("failed to query named graph: %v", err)
 	}
@@ -135,13 +136,13 @@ func TestBatchInsertAndQuery(t *testing.T) {
 func TestBatchInsertAndQuerySpecificValues(t *testing.T) {
 	// Create temporary storage
 	tmpDir := t.TempDir()
-	storage, err := storage.NewBadgerStorage(tmpDir)
+	storage, err := NewBadgerStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
 	defer storage.Close()
 
-	store := NewTripleStore(storage)
+	tripleStore := store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 
 	// Create test data with specific values we'll query
 	aliceNode := rdf.NewNamedNode("http://example.org/alice")
@@ -164,20 +165,20 @@ func TestBatchInsertAndQuerySpecificValues(t *testing.T) {
 	}
 
 	// Batch insert
-	err = store.InsertQuadsBatch(quads)
+	err = tripleStore.InsertQuadsBatch(quads)
 	if err != nil {
 		t.Fatalf("failed to batch insert: %v", err)
 	}
 
 	// Query: Find alice's name (subject and predicate bound)
-	pattern := &Pattern{
+	pattern := &store.Pattern{
 		Subject:   aliceNode,
 		Predicate: nameProperty,
-		Object:    &Variable{Name: "o"},
+		Object:    &store.Variable{Name: "o"},
 		Graph:     rdf.NewDefaultGraph(),
 	}
 
-	iter, err := store.Query(pattern)
+	iter, err := tripleStore.Query(pattern)
 	if err != nil {
 		t.Fatalf("failed to query: %v", err)
 	}
@@ -212,13 +213,13 @@ func TestBatchInsertAndQuerySpecificValues(t *testing.T) {
 func TestBatchDeleteAndQuery(t *testing.T) {
 	// Create temporary storage
 	tmpDir := t.TempDir()
-	storage, err := storage.NewBadgerStorage(tmpDir)
+	storage, err := NewBadgerStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
 	defer storage.Close()
 
-	store := NewTripleStore(storage)
+	tripleStore := store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder())
 
 	// Create and insert test quads
 	quads := []*rdf.Quad{
@@ -236,13 +237,13 @@ func TestBatchDeleteAndQuery(t *testing.T) {
 		),
 	}
 
-	err = store.InsertQuadsBatch(quads)
+	err = tripleStore.InsertQuadsBatch(quads)
 	if err != nil {
 		t.Fatalf("failed to batch insert: %v", err)
 	}
 
 	// Verify count before delete
-	count, err := store.Count()
+	count, err := tripleStore.Count()
 	if err != nil {
 		t.Fatalf("failed to count: %v", err)
 	}
@@ -251,13 +252,13 @@ func TestBatchDeleteAndQuery(t *testing.T) {
 	}
 
 	// Batch delete one quad
-	err = store.DeleteQuadsBatch([]*rdf.Quad{quads[0]})
+	err = tripleStore.DeleteQuadsBatch([]*rdf.Quad{quads[0]})
 	if err != nil {
 		t.Fatalf("failed to batch delete: %v", err)
 	}
 
 	// Verify count after delete
-	count, err = store.Count()
+	count, err = tripleStore.Count()
 	if err != nil {
 		t.Fatalf("failed to count after delete: %v", err)
 	}
@@ -266,14 +267,14 @@ func TestBatchDeleteAndQuery(t *testing.T) {
 	}
 
 	// Query to verify only Bob remains
-	pattern := &Pattern{
-		Subject:   &Variable{Name: "s"},
-		Predicate: &Variable{Name: "p"},
-		Object:    &Variable{Name: "o"},
+	pattern := &store.Pattern{
+		Subject:   &store.Variable{Name: "s"},
+		Predicate: &store.Variable{Name: "p"},
+		Object:    &store.Variable{Name: "o"},
 		Graph:     rdf.NewDefaultGraph(),
 	}
 
-	iter, err := store.Query(pattern)
+	iter, err := tripleStore.Query(pattern)
 	if err != nil {
 		t.Fatalf("failed to query after delete: %v", err)
 	}

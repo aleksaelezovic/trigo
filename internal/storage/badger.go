@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/aleksaelezovic/trigo/pkg/store"
 	badger "github.com/dgraph-io/badger/v4"
 )
 
@@ -26,7 +27,7 @@ func NewBadgerStorage(path string) (*BadgerStorage, error) {
 }
 
 // Begin starts a new transaction
-func (s *BadgerStorage) Begin(writable bool) (Transaction, error) {
+func (s *BadgerStorage) Begin(writable bool) (store.Transaction, error) {
 	txn := s.db.NewTransaction(writable)
 	return &BadgerTransaction{
 		txn:      txn,
@@ -51,12 +52,12 @@ type BadgerTransaction struct {
 }
 
 // Get retrieves a value by key
-func (t *BadgerTransaction) Get(table Table, key []byte) ([]byte, error) {
-	prefixedKey := PrefixKey(table, key)
+func (t *BadgerTransaction) Get(table store.Table, key []byte) ([]byte, error) {
+	prefixedKey := store.PrefixKey(table, key)
 	item, err := t.txn.Get(prefixedKey)
 	if err != nil {
 		if err == badger.ErrKeyNotFound {
-			return nil, ErrNotFound
+			return nil, store.ErrNotFound
 		}
 		return nil, err
 	}
@@ -74,36 +75,36 @@ func (t *BadgerTransaction) Get(table Table, key []byte) ([]byte, error) {
 }
 
 // Set stores a key-value pair
-func (t *BadgerTransaction) Set(table Table, key, value []byte) error {
+func (t *BadgerTransaction) Set(table store.Table, key, value []byte) error {
 	if !t.writable {
-		return ErrTransactionRO
+		return store.ErrTransactionRO
 	}
 
-	prefixedKey := PrefixKey(table, key)
+	prefixedKey := store.PrefixKey(table, key)
 	return t.txn.Set(prefixedKey, value)
 }
 
 // Delete removes a key
-func (t *BadgerTransaction) Delete(table Table, key []byte) error {
+func (t *BadgerTransaction) Delete(table store.Table, key []byte) error {
 	if !t.writable {
-		return ErrTransactionRO
+		return store.ErrTransactionRO
 	}
 
-	prefixedKey := PrefixKey(table, key)
+	prefixedKey := store.PrefixKey(table, key)
 	return t.txn.Delete(prefixedKey)
 }
 
 // Scan iterates over a key range [start, end)
-func (t *BadgerTransaction) Scan(table Table, start, end []byte) (Iterator, error) {
+func (t *BadgerTransaction) Scan(table store.Table, start, end []byte) (store.Iterator, error) {
 	opts := badger.DefaultIteratorOptions
 
 	// Seek to start position
 	var seekKey []byte
 	var scanPrefix []byte
-	tablePrefix := TablePrefix(table)
+	tablePrefix := store.TablePrefix(table)
 
 	if start != nil {
-		seekKey = PrefixKey(table, start)
+		seekKey = store.PrefixKey(table, start)
 		// Use the start key as prefix to narrow down the scan
 		scanPrefix = seekKey
 	} else {
@@ -118,7 +119,7 @@ func (t *BadgerTransaction) Scan(table Table, start, end []byte) (Iterator, erro
 	// Calculate end key with prefix
 	var endKey []byte
 	if end != nil {
-		endKey = PrefixKey(table, end)
+		endKey = store.PrefixKey(table, end)
 	}
 
 	return &BadgerIterator{
@@ -198,7 +199,7 @@ func (i *BadgerIterator) Key() []byte {
 // Value returns the current value
 func (i *BadgerIterator) Value() ([]byte, error) {
 	if !i.hasValue {
-		return nil, ErrNotFound
+		return nil, store.ErrNotFound
 	}
 
 	var value []byte
