@@ -215,7 +215,7 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 **RDF Data (Input via POST /data):**
 - ✅ **N-Triples** - application/n-triples (triples only)
 - ✅ **N-Quads** - application/n-quads (quads with named graphs)
-- ✅ **Turtle** - text/turtle (basic support)
+- ✅ **Turtle** - text/turtle (property lists, `a` keyword, prefixed names)
 - ❌ **TriG** - application/trig (Turtle + named graphs) - TODO
 - ❌ **RDF/XML** - application/rdf+xml - TODO
 - ❌ **JSON-LD** - application/ld+json - TODO
