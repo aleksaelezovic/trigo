@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
-	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
-	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )

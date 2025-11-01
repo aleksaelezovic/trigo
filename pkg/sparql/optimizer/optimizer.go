@@ -1,7 +1,7 @@
 package optimizer
 
 import (
-	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 )
 
 // Optimizer optimizes SPARQL queries

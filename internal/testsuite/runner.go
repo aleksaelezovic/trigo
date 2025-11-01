@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/internal/encoding"
-	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
-	"github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
-	"github.com/aleksaelezovic/trigo/internal/sparql/parser"
 	"github.com/aleksaelezovic/trigo/internal/sparqlxml"
 	"github.com/aleksaelezovic/trigo/internal/storage"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )

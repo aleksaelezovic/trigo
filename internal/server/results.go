@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aleksaelezovic/trigo/internal/sparql/executor"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
