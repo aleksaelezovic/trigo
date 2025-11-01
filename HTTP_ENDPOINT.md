@@ -144,6 +144,46 @@ curl -X POST http://localhost:8080/sparql \
 </sparql>
 ```
 
+### SPARQL CSV Results
+
+**Spec:** https://www.w3.org/TR/sparql11-results-csv-tsv/
+
+```bash
+curl -X POST http://localhost:8080/sparql \
+  -H 'Content-Type: application/sparql-query' \
+  -H 'Accept: text/csv' \
+  -d 'SELECT ?person ?name WHERE {
+        ?person <http://xmlns.com/foaf/0.1/name> ?name
+      } LIMIT 2'
+```
+
+**Response:**
+```csv
+person,name
+http://example.org/alice,Alice
+http://example.org/bob,Bob
+```
+
+### SPARQL TSV Results
+
+**Spec:** https://www.w3.org/TR/sparql11-results-csv-tsv/
+
+```bash
+curl -X POST http://localhost:8080/sparql \
+  -H 'Content-Type: application/sparql-query' \
+  -H 'Accept: text/tab-separated-values' \
+  -d 'SELECT ?person ?name WHERE {
+        ?person <http://xmlns.com/foaf/0.1/name> ?name
+      } LIMIT 2'
+```
+
+**Response:**
+```tsv
+?person	?name
+<http://example.org/alice>	"Alice"
+<http://example.org/bob>	"Bob"
+```
+
 ## Query Types
 
 ### SELECT Queries

@@ -32,6 +32,12 @@ func (s *Server) negotiateFormat(acceptHeader string) string {
 	if strings.Contains(accept, "application/sparql-results+json") {
 		return "json"
 	}
+	if strings.Contains(accept, "text/csv") {
+		return "csv"
+	}
+	if strings.Contains(accept, "text/tab-separated-values") {
+		return "tsv"
+	}
 	if strings.Contains(accept, "application/json") {
 		return "json"
 	}
@@ -73,6 +79,24 @@ func (s *Server) writeResult(w http.ResponseWriter, result executor.QueryResult,
 			data, err = results.FormatSelectResultsXML(selectResult)
 		} else if askResult, ok := result.(*executor.AskResult); ok {
 			data, err = results.FormatAskResultXML(askResult)
+		}
+
+	case "csv":
+		contentType = "text/csv; charset=utf-8"
+
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			data, err = results.FormatSelectResultsCSV(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			data, err = results.FormatAskResultCSV(askResult)
+		}
+
+	case "tsv":
+		contentType = "text/tab-separated-values; charset=utf-8"
+
+		if selectResult, ok := result.(*executor.SelectResult); ok {
+			data, err = results.FormatSelectResultsTSV(selectResult)
+		} else if askResult, ok := result.(*executor.AskResult); ok {
+			data, err = results.FormatAskResultTSV(askResult)
 		}
 
 	default: // json
