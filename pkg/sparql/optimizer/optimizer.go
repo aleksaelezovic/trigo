@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 )
 
@@ -44,6 +45,12 @@ func (o *Optimizer) Optimize(query *parser.Query) (*OptimizedQuery, error) {
 		optimized.Plan = plan
 	case parser.QueryTypeConstruct:
 		plan, err := o.optimizeConstruct(query.Construct)
+		if err != nil {
+			return nil, err
+		}
+		optimized.Plan = plan
+	case parser.QueryTypeDescribe:
+		plan, err := o.optimizeDescribe(query.Describe)
 		if err != nil {
 			return nil, err
 		}
@@ -143,6 +150,14 @@ type ConstructPlan struct {
 }
 
 func (p *ConstructPlan) planNode() {}
+
+// DescribePlan represents a DESCRIBE operation
+type DescribePlan struct {
+	Input     QueryPlan        // WHERE clause pattern (may be nil)
+	Resources []*rdf.NamedNode // Resources to describe (if no WHERE clause)
+}
+
+func (p *DescribePlan) planNode() {}
 
 // GraphPlan represents a GRAPH pattern operation
 type GraphPlan struct {
@@ -263,6 +278,24 @@ func (o *Optimizer) optimizeConstruct(query *parser.ConstructQuery) (QueryPlan, 
 		Input:    plan,
 		Template: query.Template,
 	}, nil
+}
+
+// optimizeDescribe optimizes a DESCRIBE query
+func (o *Optimizer) optimizeDescribe(query *parser.DescribeQuery) (QueryPlan, error) {
+	describePlan := &DescribePlan{
+		Resources: query.Resources,
+	}
+
+	// If there's a WHERE clause, optimize it to find resources dynamically
+	if query.Where != nil {
+		plan, err := o.optimizeGraphPattern(query.Where)
+		if err != nil {
+			return nil, err
+		}
+		describePlan.Input = plan
+	}
+
+	return describePlan, nil
 }
 
 // optimizeGraphPattern optimizes a graph pattern

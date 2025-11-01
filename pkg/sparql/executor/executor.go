@@ -31,6 +31,8 @@ func (e *Executor) Execute(query *optimizer.OptimizedQuery) (QueryResult, error)
 		return e.executeAsk(query)
 	case parser.QueryTypeConstruct:
 		return e.executeConstruct(query)
+	case parser.QueryTypeDescribe:
+		return e.executeDescribe(query)
 	default:
 		return nil, fmt.Errorf("unsupported query type")
 	}
@@ -163,6 +165,110 @@ func (e *Executor) executeConstruct(query *optimizer.OptimizedQuery) (*Construct
 	return &ConstructResult{Triples: triples}, nil
 }
 
+// executeDescribe executes a DESCRIBE query
+func (e *Executor) executeDescribe(query *optimizer.OptimizedQuery) (*ConstructResult, error) {
+	// Get the describe plan
+	describePlan, ok := query.Plan.(*optimizer.DescribePlan)
+	if !ok {
+		return nil, fmt.Errorf("expected DescribePlan")
+	}
+
+	// Collect resources to describe
+	var resourcesToDescribe []rdf.Term
+
+	if describePlan.Input != nil {
+		// Execute WHERE clause to find resources dynamically
+		iter, err := e.createIterator(describePlan.Input)
+		if err != nil {
+			return nil, err
+		}
+		defer iter.Close()
+
+		// Collect all IRIs from bindings
+		seen := make(map[string]bool)
+		for iter.Next() {
+			binding := iter.Binding()
+			// Add all bound IRIs (named nodes) to resources
+			for _, term := range binding.Vars {
+				if namedNode, ok := term.(*rdf.NamedNode); ok {
+					key := namedNode.IRI
+					if !seen[key] {
+						seen[key] = true
+						resourcesToDescribe = append(resourcesToDescribe, namedNode)
+					}
+				}
+			}
+		}
+	} else {
+		// Use resources directly from DESCRIBE clause
+		for _, resource := range describePlan.Resources {
+			resourcesToDescribe = append(resourcesToDescribe, resource)
+		}
+	}
+
+	// For each resource, get all triples where it's the subject (CBD - Concise Bounded Description)
+	var triples []*Triple
+	seenTriples := make(map[string]bool)
+
+	for _, resource := range resourcesToDescribe {
+		// Query pattern: <resource> ?p ?o
+		pattern := &store.Pattern{
+			Subject:   resource,
+			Predicate: &store.Variable{Name: "p"},
+			Object:    &store.Variable{Name: "o"},
+			Graph:     &store.Variable{Name: "g"},
+		}
+
+		iter, err := e.store.Query(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query store for resource %s: %w", resource.String(), err)
+		}
+
+		for iter.Next() {
+			quad, err := iter.Quad()
+			if err != nil {
+				if closeErr := iter.Close(); closeErr != nil {
+					return nil, fmt.Errorf("error closing iterator: %w (after quad error: %v)", closeErr, err)
+				}
+				return nil, err
+			}
+
+			// Convert to executor.Triple
+			triple := &Triple{
+				Subject:   Term{Type: "iri", Value: quad.Subject.String()},
+				Predicate: Term{Type: "iri", Value: quad.Predicate.String()},
+				Object:    e.rdfTermToExecutorTerm(quad.Object),
+			}
+
+			// Deduplicate triples
+			key := fmt.Sprintf("%s|%s|%s", triple.Subject.Value, triple.Predicate.Value, triple.Object.Value)
+			if !seenTriples[key] {
+				seenTriples[key] = true
+				triples = append(triples, triple)
+			}
+		}
+		if err := iter.Close(); err != nil {
+			return nil, fmt.Errorf("error closing iterator: %w", err)
+		}
+	}
+
+	return &ConstructResult{Triples: triples}, nil
+}
+
+// rdfTermToExecutorTerm converts an rdf.Term to executor.Term
+func (e *Executor) rdfTermToExecutorTerm(term rdf.Term) Term {
+	switch t := term.(type) {
+	case *rdf.NamedNode:
+		return Term{Type: "iri", Value: t.IRI}
+	case *rdf.BlankNode:
+		return Term{Type: "blank", Value: t.ID}
+	case *rdf.Literal:
+		return Term{Type: "literal", Value: t.Value}
+	default:
+		return Term{Type: "literal", Value: term.String()}
+	}
+}
+
 // instantiateTriplePattern creates a triple from a pattern and binding
 func (e *Executor) instantiateTriplePattern(pattern *parser.TriplePattern, binding *store.Binding) (*Triple, error) {
 	subject, err := e.instantiateTerm(pattern.Subject, binding)
@@ -200,27 +306,6 @@ func (e *Executor) instantiateTerm(termOrVar parser.TermOrVariable, binding *sto
 
 	// It's a constant term
 	return e.rdfTermToExecutorTerm(termOrVar.Term), nil
-}
-
-// rdfTermToExecutorTerm converts an rdf.Term to an executor.Term
-func (e *Executor) rdfTermToExecutorTerm(rdfTerm rdf.Term) Term {
-	switch t := rdfTerm.(type) {
-	case *rdf.NamedNode:
-		return Term{Type: "iri", Value: t.IRI}
-	case *rdf.BlankNode:
-		return Term{Type: "blank", Value: t.ID}
-	case *rdf.Literal:
-		// For literals, include datatype/language if present
-		value := t.Value
-		if t.Language != "" {
-			value = fmt.Sprintf("%s@%s", value, t.Language)
-		} else if t.Datatype != nil && t.Datatype.IRI != "http://www.w3.org/2001/XMLSchema#string" {
-			value = fmt.Sprintf("%s^^<%s>", value, t.Datatype.IRI)
-		}
-		return Term{Type: "literal", Value: value}
-	default:
-		return Term{Type: "unknown", Value: fmt.Sprintf("%v", rdfTerm)}
-	}
 }
 
 // createIterator creates an iterator from a query plan
