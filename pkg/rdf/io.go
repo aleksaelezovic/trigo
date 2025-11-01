@@ -34,6 +34,8 @@ func NewParser(contentType string) (RDFParser, error) {
 		return &TriGIOParser{}, nil
 	case "application/rdf+xml", "application/xml", "text/xml":
 		return &RDFXMLIOParser{}, nil
+	case "application/ld+json", "application/json":
+		return &JSONLDIOParser{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported content type: %s", contentType)
 	}
@@ -175,6 +177,24 @@ func (p *RDFXMLIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	return quads, nil
 }
 
+// JSONLDIOParser parses JSON-LD format (triples, default graph)
+type JSONLDIOParser struct{}
+
+func (p *JSONLDIOParser) ContentType() string {
+	return "application/ld+json"
+}
+
+func (p *JSONLDIOParser) Parse(reader io.Reader) ([]*Quad, error) {
+	// Use JSON-LD parser
+	jsonldParser := NewJSONLDParser()
+	quads, err := jsonldParser.Parse(reader)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing JSON-LD: %w", err)
+	}
+
+	return quads, nil
+}
+
 // GetSupportedContentTypes returns a list of all supported content types
 func GetSupportedContentTypes() []string {
 	return []string{
@@ -187,6 +207,8 @@ func GetSupportedContentTypes() []string {
 		"application/rdf+xml",
 		"application/xml",
 		"text/xml",
+		"application/ld+json",
+		"application/json",
 		"text/plain", // Alias for N-Triples
 	}
 }
