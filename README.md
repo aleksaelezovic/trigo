@@ -60,7 +60,7 @@ package main
 
 import (
     "github.com/aleksaelezovic/trigo/internal/storage"
-    "github.com/aleksaelezovic/trigo/internal/store"
+    "github.com/aleksaelezovic/trigo/pkg/store"
     "github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
@@ -104,18 +104,22 @@ go build -o trigo ./cmd/trigo
 ```
 trigo/
 ├── cmd/
-│   └── trigo/           # CLI application
+│   ├── trigo/           # CLI application
+│   └── test-runner/     # W3C SPARQL test suite runner
 ├── internal/
 │   ├── encoding/        # Term encoding with xxhash3
 │   ├── storage/         # Storage abstraction and BadgerDB implementation
-│   ├── store/           # Triplestore with 11 indexes
-│   ├── server/          # HTTP SPARQL endpoint
-│   └── sparql/
-│       ├── parser/      # SPARQL parser
-│       ├── optimizer/   # Query optimizer
-│       └── executor/    # Query executor (Volcano model)
+│   └── testsuite/       # W3C test suite infrastructure
 └── pkg/
-    └── rdf/             # RDF data model (terms, triples, quads)
+    ├── rdf/             # RDF data model (terms, triples, quads, turtle parser)
+    ├── store/           # Triplestore with 11 indexes
+    ├── server/          # HTTP SPARQL endpoint
+    │   └── results/     # Result formatters (JSON, XML, CSV, TSV)
+    └── sparql/
+        ├── parser/      # SPARQL parser
+        ├── optimizer/   # Query optimizer
+        ├── executor/    # Query executor (Volcano model)
+        └── evaluator/   # Expression evaluator
 ```
 
 ## SPARQL Support

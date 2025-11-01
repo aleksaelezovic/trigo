@@ -84,7 +84,7 @@ type Storage interface {
 **Graph Metadata:**
 - `graphs`: Named graph tracking
 
-### 4. Store Layer (`internal/store`)
+### 4. Store Layer (`pkg/store`)
 
 Manages the triplestore with automatic index maintenance.
 
@@ -108,7 +108,7 @@ Priority:
 2. Subject/Predicate bindings preferred over Object
 3. Graph-specific indexes when graph is bound
 
-### 5. SPARQL Parser (`internal/sparql/parser`)
+### 5. SPARQL Parser (`pkg/sparql/parser`)
 
 Converts SPARQL query text to an Abstract Syntax Tree (AST).
 
@@ -129,7 +129,7 @@ Converts SPARQL query text to an Abstract Syntax Tree (AST).
 - Case-insensitive keyword matching
 - Support for IRIs, literals, blank nodes, variables
 
-### 6. Query Optimizer (`internal/sparql/optimizer`)
+### 6. Query Optimizer (`pkg/sparql/optimizer`)
 
 Optimizes query execution plans using heuristic-based optimization.
 
@@ -167,7 +167,7 @@ Operators (following Volcano model):
 - `DistinctPlan`: Remove duplicates
 - `OrderByPlan`: Sort results
 
-### 7. Query Executor (`internal/sparql/executor`)
+### 7. Query Executor (`pkg/sparql/executor`)
 
 Executes optimized query plans using the Volcano iterator model.
 

@@ -40,7 +40,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~220
 
 ### 4. Triplestore with 11 Indexes ✅
-**Files:** `internal/store/store.go`, `internal/store/query.go`
+**Files:** `pkg/store/store.go`, `pkg/store/query.go`
 
 **Indexes:**
 - `id2str` - Hash to string lookup
@@ -57,7 +57,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~430
 
 ### 5. SPARQL Parser ✅
-**Files:** `internal/sparql/parser/ast.go`, `internal/sparql/parser/parser.go`
+**Files:** `pkg/sparql/parser/ast.go`, `pkg/sparql/parser/parser.go`
 
 - Hand-written recursive descent parser
 - Abstract Syntax Tree (AST) representation
@@ -71,7 +71,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~1,100
 
 ### 6. Query Optimizer ✅
-**Files:** `internal/sparql/optimizer/optimizer.go`
+**Files:** `pkg/sparql/optimizer/optimizer.go`
 
 **Optimizations:**
 - **Order-preserving execution** for BIND semantics
@@ -83,7 +83,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~440
 
 ### 7. Query Executor (Volcano Model) ✅
-**Files:** `internal/sparql/executor/executor.go`
+**Files:** `pkg/sparql/executor/executor.go`
 
 **Operators:**
 - ScanIterator - Triple pattern scanning with index selection
@@ -104,7 +104,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~1,300
 
 ### 8. Expression Evaluator ✅
-**Files:** `internal/sparql/evaluator/evaluator.go`, `functions.go`, `operators.go`
+**Files:** `pkg/sparql/evaluator/evaluator.go`, `functions.go`, `operators.go`
 
 **Operators:**
 - Logical: &&, ||, !
@@ -120,7 +120,7 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 **Lines of Code:** ~650
 
 ### 9. HTTP SPARQL Endpoint ✅
-**Files:** `internal/server/server.go`, `internal/server/results.go`
+**Files:** `pkg/server/server.go`, `pkg/server/handlers.go`, `pkg/server/utils.go`
 
 **Features:**
 - W3C SPARQL 1.1 Protocol compliant
@@ -135,8 +135,15 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 
 **Lines of Code:** ~530
 
+**Result Formatters:** `pkg/server/results/`
+- `json.go` - SPARQL JSON Results format
+- `xml.go` - SPARQL XML Results format
+- `csv.go` - SPARQL CSV Results format
+- `tsv.go` - SPARQL TSV Results format
+- `formatter.go` - Common formatting utilities
+
 ### 10. Turtle/N-Triples Parser ✅
-**Files:** `internal/turtle/parser.go`
+**Files:** `pkg/rdf/turtle.go`
 
 **Features:**
 - PREFIX/BASE declarations
@@ -147,16 +154,17 @@ Trigo is a complete RDF Triplestore implementation in Go, inspired by Oxigraph's
 
 **Lines of Code:** ~460
 
-### 11. SPARQL XML Results Parser ✅
-**Files:** `internal/sparqlxml/parser.go`
+### 11. Result Parsers ✅
+**Files:** `pkg/server/results/xml.go` (includes XML parser functionality)
 
 **Features:**
-- Parses `.srx` result files
-- Converts to RDF term bindings
+- SPARQL JSON Results generation
+- SPARQL XML Results generation and parsing
+- CSV/TSV Results generation
 - Order-independent comparison
 - Supports all RDF term types
 
-**Lines of Code:** ~144
+**Lines of Code:** ~200 (combined parsers)
 
 ### 12. W3C Test Suite Runner ✅
 **Files:** `internal/testsuite/runner.go`, `manifest.go`
@@ -330,8 +338,13 @@ curl -X POST http://localhost:8080/sparql \
 
 ### Use as Library
 ```go
+import (
+    "github.com/aleksaelezovic/trigo/internal/storage"
+    "github.com/aleksaelezovic/trigo/pkg/store"
+)
+
 storage, _ := storage.NewBadgerStorage("./data")
-store := store.NewTripleStore(storage)
+triplestore := store.NewTripleStore(storage)
 
 triple := rdf.NewTriple(
     rdf.NewNamedNode("http://example.org/alice"),
@@ -436,34 +449,38 @@ trigo/
 │   ├── storage/
 │   │   ├── storage.go           # Storage interface
 │   │   └── badger.go            # BadgerDB implementation
-│   ├── store/
-│   │   ├── store.go             # 11-index triplestore
-│   │   └── query.go             # Pattern matching
-│   ├── server/
-│   │   ├── server.go            # HTTP SPARQL endpoint
-│   │   └── results.go           # Result formatting
-│   ├── turtle/
-│   │   └── parser.go            # Turtle/N-Triples parser
-│   ├── sparqlxml/
-│   │   └── parser.go            # SPARQL XML results parser
-│   ├── testsuite/
-│   │   ├── manifest.go          # Test manifest parser
-│   │   └── runner.go            # Test execution engine
-│   └── sparql/
-│       ├── parser/
-│       │   ├── ast.go           # Abstract Syntax Tree
-│       │   └── parser.go        # SPARQL parser
-│       ├── optimizer/
-│       │   └── optimizer.go     # Query optimizer
-│       ├── executor/
-│       │   └── executor.go      # Volcano executor
-│       └── evaluator/
-│           ├── evaluator.go     # Expression evaluator
-│           ├── functions.go     # Built-in functions
-│           └── operators.go     # Operators
+│   └── testsuite/
+│       ├── manifest.go          # Test manifest parser
+│       └── runner.go            # Test execution engine
 └── pkg/
-    └── rdf/
-        └── term.go              # RDF data model
+    ├── rdf/
+    │   ├── term.go              # RDF data model
+    │   └── turtle.go            # Turtle/N-Triples parser
+    ├── store/
+    │   ├── store.go             # 11-index triplestore
+    │   └── query.go             # Pattern matching
+    ├── server/
+    │   ├── server.go            # HTTP SPARQL endpoint
+    │   ├── handlers.go          # HTTP request handlers
+    │   ├── utils.go             # Server utilities
+    │   └── results/
+    │       ├── formatter.go     # Common formatting utilities
+    │       ├── json.go          # SPARQL JSON Results
+    │       ├── xml.go           # SPARQL XML Results
+    │       ├── csv.go           # SPARQL CSV Results
+    │       └── tsv.go           # SPARQL TSV Results
+    └── sparql/
+        ├── parser/
+        │   ├── ast.go           # Abstract Syntax Tree
+        │   └── parser.go        # SPARQL parser
+        ├── optimizer/
+        │   └── optimizer.go     # Query optimizer
+        ├── executor/
+        │   └── executor.go      # Volcano executor
+        └── evaluator/
+            ├── evaluator.go     # Expression evaluator
+            ├── functions.go     # Built-in functions
+            └── operators.go     # Operators
 ```
 
 ## Conclusion

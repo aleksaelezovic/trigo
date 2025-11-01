@@ -32,8 +32,10 @@ This will:
 ```
 trigo/
 ├── cmd/
-│   └── trigo/
-│       └── main.go              # CLI application entry point
+│   ├── trigo/
+│   │   └── main.go              # CLI application entry point
+│   └── test-runner/
+│       └── main.go              # W3C SPARQL test suite runner
 ├── internal/
 │   ├── encoding/
 │   │   ├── encoder.go           # xxHash3 term encoding
@@ -41,23 +43,34 @@ trigo/
 │   ├── storage/
 │   │   ├── storage.go           # Storage interface
 │   │   └── badger.go            # BadgerDB implementation
-│   ├── store/
-│   │   ├── store.go             # Triplestore with 11 indexes
-│   │   └── query.go             # Pattern matching queries
-│   └── sparql/
-│       ├── parser/
-│       │   ├── ast.go           # Abstract Syntax Tree
-│       │   └── parser.go        # SPARQL parser
-│       ├── optimizer/
-│       │   └── optimizer.go     # Query optimizer
-│       └── executor/
-│           └── executor.go      # Volcano iterator execution
-├── pkg/
-│   └── rdf/
-│       └── term.go              # RDF data model
-├── README.md                    # Main documentation
-├── ARCHITECTURE.md              # Detailed architecture
-└── QUICKSTART.md               # This file
+│   └── testsuite/
+│       ├── manifest.go          # Test manifest parser
+│       └── runner.go            # Test execution engine
+└── pkg/
+    ├── rdf/
+    │   ├── term.go              # RDF data model
+    │   └── turtle.go            # Turtle/N-Triples parser
+    ├── store/
+    │   ├── store.go             # Triplestore with 11 indexes
+    │   └── query.go             # Pattern matching queries
+    ├── server/
+    │   ├── server.go            # HTTP SPARQL endpoint
+    │   ├── handlers.go          # HTTP request handlers
+    │   └── results/             # Result formatters
+    │       ├── json.go          # SPARQL JSON results
+    │       ├── xml.go           # SPARQL XML results
+    │       ├── csv.go           # SPARQL CSV results
+    │       └── tsv.go           # SPARQL TSV results
+    └── sparql/
+        ├── parser/
+        │   ├── ast.go           # Abstract Syntax Tree
+        │   └── parser.go        # SPARQL parser
+        ├── optimizer/
+        │   └── optimizer.go     # Query optimizer
+        ├── executor/
+        │   └── executor.go      # Volcano iterator execution
+        └── evaluator/
+            └── evaluator.go     # Expression evaluator
 ```
 
 ## Using Trigo as a Library
@@ -72,7 +85,7 @@ import (
     "log"
 
     "github.com/aleksaelezovic/trigo/internal/storage"
-    "github.com/aleksaelezovic/trigo/internal/store"
+    "github.com/aleksaelezovic/trigo/pkg/store"
     "github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
@@ -130,11 +143,11 @@ import (
     "fmt"
     "log"
 
-    "github.com/aleksaelezovic/trigo/internal/sparql/executor"
-    "github.com/aleksaelezovic/trigo/internal/sparql/optimizer"
-    "github.com/aleksaelezovic/trigo/internal/sparql/parser"
+    "github.com/aleksaelezovic/trigo/pkg/sparql/executor"
+    "github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
+    "github.com/aleksaelezovic/trigo/pkg/sparql/parser"
     "github.com/aleksaelezovic/trigo/internal/storage"
-    "github.com/aleksaelezovic/trigo/internal/store"
+    "github.com/aleksaelezovic/trigo/pkg/store"
 )
 
 func main() {

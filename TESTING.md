@@ -203,14 +203,14 @@ Test Evaluator
 
 ### Key Components
 
-**Turtle Parser** (`internal/turtle/parser.go`):
+**Turtle Parser** (`pkg/rdf/turtle.go`):
 - Loads RDF test data from `.ttl` files
 - Supports PREFIX/BASE declarations
 - Handles IRIs, blank nodes, literals
 - Supports datatypes and language tags
 - Sufficient for W3C test data files
 
-**SPARQL XML Parser** (`internal/sparqlxml/parser.go`):
+**SPARQL XML Parser** (`pkg/server/results/xml.go`):
 - Parses expected results from `.srx` files
 - Converts to RDF term bindings
 - Supports all RDF term types
