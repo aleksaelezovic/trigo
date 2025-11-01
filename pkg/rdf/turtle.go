@@ -50,14 +50,12 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 			continue
 		}
 
-		// Parse triple
-		triple, err := p.parseTriple()
+		// Parse triple block (may return multiple triples due to property list syntax)
+		blockTriples, err := p.parseTripleBlock()
 		if err != nil {
 			return nil, err
 		}
-		if triple != nil {
-			triples = append(triples, triple)
-		}
+		triples = append(triples, blockTriples...)
 	}
 
 	return triples, nil
@@ -160,12 +158,9 @@ func (p *TurtleParser) parseBase() error {
 	return nil
 }
 
-// parseTriple parses a triple
-func (p *TurtleParser) parseTriple() (*Triple, error) {
-	p.skipWhitespaceAndComments()
-	if p.pos >= p.length {
-		return nil, nil
-	}
+// parseTripleBlock parses a block of triples with property list syntax
+func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
+	var triples []*Triple
 
 	// Parse subject
 	subject, err := p.parseTerm()
@@ -173,20 +168,51 @@ func (p *TurtleParser) parseTriple() (*Triple, error) {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
 
-	p.skipWhitespaceAndComments()
+	// Parse predicate-object pairs
+	for {
+		p.skipWhitespaceAndComments()
 
-	// Parse predicate
-	predicate, err := p.parseTerm()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse predicate: %w", err)
-	}
+		// Parse predicate
+		predicate, err := p.parseTerm()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse predicate: %w", err)
+		}
 
-	p.skipWhitespaceAndComments()
+		// Parse objects (can be multiple with comma separator)
+		for {
+			p.skipWhitespaceAndComments()
 
-	// Parse object
-	object, err := p.parseTerm()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse object: %w", err)
+			// Parse object
+			object, err := p.parseTerm()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse object: %w", err)
+			}
+
+			triples = append(triples, NewTriple(subject, predicate, object))
+
+			p.skipWhitespaceAndComments()
+
+			// Check for comma (more objects with same predicate)
+			if p.pos < p.length && p.input[p.pos] == ',' {
+				p.pos++ // skip ','
+				continue
+			}
+			break
+		}
+
+		p.skipWhitespaceAndComments()
+
+		// Check for semicolon (more predicates with same subject)
+		if p.pos < p.length && p.input[p.pos] == ';' {
+			p.pos++ // skip ';'
+			p.skipWhitespaceAndComments()
+			// Check if there's actually a predicate following (not just a trailing semicolon)
+			if p.pos < p.length && p.input[p.pos] != '.' {
+				continue
+			}
+		}
+
+		break
 	}
 
 	p.skipWhitespaceAndComments()
@@ -197,7 +223,7 @@ func (p *TurtleParser) parseTriple() (*Triple, error) {
 	}
 	p.pos++ // skip '.'
 
-	return NewTriple(subject, predicate, object), nil
+	return triples, nil
 }
 
 // parseTerm parses an RDF term (IRI, blank node, or literal)
@@ -234,12 +260,23 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 		return p.parseNumber()
 	}
 
+	// Check for 'a' keyword (shorthand for rdf:type)
+	if ch == 'a' && (p.pos+1 >= p.length || !isNameChar(p.input[p.pos+1])) {
+		p.pos++ // skip 'a'
+		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+	}
+
 	// Prefixed name
 	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == ':' {
 		return p.parsePrefixedName()
 	}
 
 	return nil, fmt.Errorf("unexpected character: %c at position %d", ch, p.pos)
+}
+
+// isNameChar checks if a character can be part of a name
+func isNameChar(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'
 }
 
 // parseIRI parses an IRI in angle brackets
@@ -340,13 +377,17 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	}
 
 	if p.pos+1 < p.length && p.input[p.pos] == '^' && p.input[p.pos+1] == '^' {
-		// Datatype
+		// Datatype - can be either an IRI or a prefixed name
 		p.pos += 2 // skip '^^'
-		datatypeIRI, err := p.parseIRI()
+		datatypeTerm, err := p.parseTerm()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse datatype: %w", err)
 		}
-		return NewLiteralWithDatatype(value.String(), NewNamedNode(datatypeIRI)), nil
+		// datatypeTerm should be a NamedNode
+		if namedNode, ok := datatypeTerm.(*NamedNode); ok {
+			return NewLiteralWithDatatype(value.String(), namedNode), nil
+		}
+		return nil, fmt.Errorf("datatype must be an IRI or prefixed name")
 	}
 
 	return NewLiteral(value.String()), nil
@@ -405,7 +446,7 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	// Read prefix (until ':')
 	for p.pos < p.length && p.input[p.pos] != ':' {
 		ch := p.input[p.pos]
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+		if !isNameChar(ch) {
 			break
 		}
 		p.pos++
@@ -418,11 +459,15 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	prefix := p.input[start:p.pos]
 	p.pos++ // skip ':'
 
-	// Read local part
+	// Read local part - can contain colons and many other characters per Turtle spec
 	localStart := p.pos
 	for p.pos < p.length {
 		ch := p.input[p.pos]
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+		// Local names can contain alphanumeric, underscore, hyphen, colon, and many other chars
+		// Break on whitespace, punctuation that ends a triple, or special Turtle syntax
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
+		   ch == '.' || ch == ';' || ch == ',' || ch == '>' || ch == '<' ||
+		   ch == '"' || ch == '#' {
 			break
 		}
 		p.pos++
@@ -433,7 +478,7 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	// Expand prefix
 	baseIRI, ok := p.prefixes[prefix]
 	if !ok {
-		return nil, fmt.Errorf("undefined prefix: %s", prefix)
+		return nil, fmt.Errorf("undefined prefix: '%s'", prefix)
 	}
 
 	fullIRI := baseIRI + localPart
