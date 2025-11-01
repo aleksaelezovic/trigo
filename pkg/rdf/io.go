@@ -32,6 +32,8 @@ func NewParser(contentType string) (RDFParser, error) {
 		return &TurtleIOParser{}, nil
 	case "application/trig", "application/x-trig":
 		return &TriGIOParser{}, nil
+	case "application/rdf+xml", "application/xml", "text/xml":
+		return &RDFXMLIOParser{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported content type: %s", contentType)
 	}
@@ -155,6 +157,24 @@ func (p *TriGIOParser) Parse(reader io.Reader) ([]*Quad, error) {
 	return quads, nil
 }
 
+// RDFXMLIOParser parses RDF/XML format (triples, default graph)
+type RDFXMLIOParser struct{}
+
+func (p *RDFXMLIOParser) ContentType() string {
+	return "application/rdf+xml"
+}
+
+func (p *RDFXMLIOParser) Parse(reader io.Reader) ([]*Quad, error) {
+	// Use RDF/XML parser
+	rdfxmlParser := NewRDFXMLParser()
+	quads, err := rdfxmlParser.Parse(reader)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing RDF/XML: %w", err)
+	}
+
+	return quads, nil
+}
+
 // GetSupportedContentTypes returns a list of all supported content types
 func GetSupportedContentTypes() []string {
 	return []string{
@@ -164,6 +184,9 @@ func GetSupportedContentTypes() []string {
 		"application/x-turtle",
 		"application/trig",
 		"application/x-trig",
+		"application/rdf+xml",
+		"application/xml",
+		"text/xml",
 		"text/plain", // Alias for N-Triples
 	}
 }
