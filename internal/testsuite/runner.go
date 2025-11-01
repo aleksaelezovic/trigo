@@ -227,38 +227,90 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 		return TestResultFail
 	}
 
-	// Convert results to bindings (only handle SELECT queries for now)
-	selectResult, ok := result.(*executor.SelectResult)
-	if !ok {
-		r.recordError(test, fmt.Sprintf("Only SELECT queries supported for now, got: %T", result))
+	// Handle different query types
+	switch res := result.(type) {
+	case *executor.SelectResult, *executor.AskResult:
+		// Handle SELECT/ASK queries
+		selectResult, ok := result.(*executor.SelectResult)
+		if !ok {
+			// ASK queries return boolean, not implemented yet for comparison
+			r.recordError(test, "ASK query comparison not implemented yet")
+			return TestResultSkip
+		}
+
+		actualBindings, err := r.resultsToBindings(selectResult)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to convert results: %v", err))
+			return TestResultFail
+		}
+
+		// Load expected results
+		if test.Result == "" {
+			r.recordError(test, "No result file specified")
+			return TestResultError
+		}
+
+		expectedBindings, err := r.loadExpectedResults(manifest, test)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to load expected results: %v", err))
+			return TestResultFail
+		}
+
+		// Compare results
+		if !results.CompareResults(expectedBindings, actualBindings) {
+			r.recordError(test, fmt.Sprintf("Results mismatch: expected %d bindings, got %d bindings", len(expectedBindings), len(actualBindings)))
+			return TestResultFail
+		}
+
+		return TestResultPass
+
+	case *executor.ConstructResult:
+		// Handle CONSTRUCT queries
+		// Convert executor.Triple to rdf.Triple
+		actualTriples := make([]*rdf.Triple, len(res.Triples))
+		for i, t := range res.Triples {
+			subj, err := r.executorTermToRDFTerm(t.Subject)
+			if err != nil {
+				r.recordError(test, fmt.Sprintf("Failed to convert subject: %v", err))
+				return TestResultFail
+			}
+			pred, err := r.executorTermToRDFTerm(t.Predicate)
+			if err != nil {
+				r.recordError(test, fmt.Sprintf("Failed to convert predicate: %v", err))
+				return TestResultFail
+			}
+			obj, err := r.executorTermToRDFTerm(t.Object)
+			if err != nil {
+				r.recordError(test, fmt.Sprintf("Failed to convert object: %v", err))
+				return TestResultFail
+			}
+			actualTriples[i] = rdf.NewTriple(subj, pred, obj)
+		}
+
+		// Load expected N-Triples results
+		if test.Result == "" {
+			r.recordError(test, "No result file specified")
+			return TestResultError
+		}
+
+		expectedTriples, err := r.loadExpectedTriples(manifest, test)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to load expected triples: %v", err))
+			return TestResultFail
+		}
+
+		// Compare triples (order-independent)
+		if !r.compareTriples(expectedTriples, actualTriples) {
+			r.recordError(test, fmt.Sprintf("Triples mismatch: expected %d triples, got %d triples", len(expectedTriples), len(actualTriples)))
+			return TestResultFail
+		}
+
+		return TestResultPass
+
+	default:
+		r.recordError(test, fmt.Sprintf("Unsupported query result type: %T", result))
 		return TestResultFail
 	}
-
-	actualBindings, err := r.resultsToBindings(selectResult)
-	if err != nil {
-		r.recordError(test, fmt.Sprintf("Failed to convert results: %v", err))
-		return TestResultFail
-	}
-
-	// Load expected results
-	if test.Result == "" {
-		r.recordError(test, "No result file specified")
-		return TestResultError
-	}
-
-	expectedBindings, err := r.loadExpectedResults(manifest, test)
-	if err != nil {
-		r.recordError(test, fmt.Sprintf("Failed to load expected results: %v", err))
-		return TestResultFail
-	}
-
-	// Compare results
-	if !results.CompareResults(expectedBindings, actualBindings) {
-		r.recordError(test, fmt.Sprintf("Results mismatch: expected %d bindings, got %d bindings", len(expectedBindings), len(actualBindings)))
-		return TestResultFail
-	}
-
-	return TestResultPass
 }
 
 // clearStore removes all triples from the store
@@ -355,6 +407,67 @@ func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase)
 	}
 
 	return xmlResults.ToBindings()
+}
+
+// loadExpectedTriples loads expected N-Triples from result file
+func (r *TestRunner) loadExpectedTriples(manifest *TestManifest, test *TestCase) ([]*rdf.Triple, error) {
+	resultPath := manifest.ResolveFile(test.Result)
+	resultBytes, err := os.ReadFile(resultPath) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		return nil, fmt.Errorf("failed to read result file: %w", err)
+	}
+
+	// Parse N-Triples/Turtle data
+	turtleParser := rdf.NewTurtleParser(string(resultBytes))
+	triples, err := turtleParser.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse expected triples: %w", err)
+	}
+
+	return triples, nil
+}
+
+// compareTriples compares two sets of triples for equality (order-independent)
+func (r *TestRunner) compareTriples(expected, actual []*rdf.Triple) bool {
+	if len(expected) != len(actual) {
+		return false
+	}
+
+	// Create a map of expected triples for quick lookup
+	expectedMap := make(map[string]bool)
+	for _, triple := range expected {
+		key := r.tripleKey(triple)
+		expectedMap[key] = true
+	}
+
+	// Check if all actual triples are in expected
+	for _, triple := range actual {
+		key := r.tripleKey(triple)
+		if !expectedMap[key] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// tripleKey creates a unique string key for a triple
+func (r *TestRunner) tripleKey(triple *rdf.Triple) string {
+	return fmt.Sprintf("%s|%s|%s", triple.Subject.String(), triple.Predicate.String(), triple.Object.String())
+}
+
+// executorTermToRDFTerm converts an executor.Term to rdf.Term
+func (r *TestRunner) executorTermToRDFTerm(t executor.Term) (rdf.Term, error) {
+	switch t.Type {
+	case "iri":
+		return rdf.NewNamedNode(t.Value), nil
+	case "blank":
+		return rdf.NewBlankNode(t.Value), nil
+	case "literal":
+		return rdf.NewLiteral(t.Value), nil
+	default:
+		return nil, fmt.Errorf("unknown term type: %s", t.Type)
+	}
 }
 
 // recordError records a test error
