@@ -18,7 +18,7 @@ Go is an excellent choice for building open-source, maintainable software due to
 - **Volcano Iterator Model**: Efficient query execution using the iterator model
 - **RDF Data Types**: Support for IRIs, blank nodes, literals (strings, integers, doubles, booleans, dates)
 - **Named Graphs**: Full support for quads and named graphs
-- **Multiple Result Formats**: SPARQL JSON and XML results
+- **Multiple Result Formats**: SPARQL JSON, XML, CSV, and TSV results
 
 ## Architecture
 
@@ -210,6 +210,8 @@ Trigo implements a subset of SPARQL 1.1 Query, inspired by [Oxigraph](https://gi
 **Query Results:**
 - ✅ **SPARQL JSON** - application/sparql-results+json (SELECT, ASK)
 - ✅ **SPARQL XML** - application/sparql-results+xml (SELECT, ASK)
+- ✅ **SPARQL CSV** - text/csv (SELECT, ASK)
+- ✅ **SPARQL TSV** - text/tab-separated-values (SELECT, ASK)
 - ✅ **N-Triples** - application/n-triples (CONSTRUCT)
 
 **RDF Data (Input via POST /data):**
@@ -255,6 +257,8 @@ curl -X POST http://localhost:8080/sparql \
 - GET and POST methods for SPARQL queries
 - SPARQL JSON Results format
 - SPARQL XML Results format
+- SPARQL CSV Results format
+- SPARQL TSV Results format
 - Content negotiation
 - CORS support
 - **Interactive Web UI** powered by [YASGUI](https://github.com/zazuko/Yasgui)
