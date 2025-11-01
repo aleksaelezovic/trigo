@@ -1,12 +1,12 @@
-package server
+package results
 
 import (
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
 )
 
 // SPARQL JSON Results Format
@@ -14,7 +14,7 @@ import (
 
 // SPARQLResultsJSON represents the JSON format for SPARQL query results
 type SPARQLResultsJSON struct {
-	Head    ResultHead     `json:"head"`
+	Head    ResultHead      `json:"head"`
 	Results *ResultBindings `json:"results,omitempty"`
 	Boolean *bool           `json:"boolean,omitempty"`
 }

@@ -1,4 +1,4 @@
-package sparqlxml
+package results
 
 import (
 	"encoding/xml"
@@ -11,9 +11,9 @@ import (
 
 // Results represents SPARQL XML query results
 type Results struct {
-	Head    Head     `xml:"head"`
-	Results ResultsElement `xml:"results"`
-	Boolean *bool    `xml:"boolean"` // For ASK queries
+	Head    Head            `xml:"head"`
+	Results ResultsElement  `xml:"results"`
+	Boolean *bool           `xml:"boolean"` // For ASK queries
 }
 
 // Head represents the head element with variable names
@@ -46,9 +46,9 @@ type Binding struct {
 
 // Literal represents a literal value
 type Literal struct {
-	Value    string  `xml:",chardata"`
-	Lang     string  `xml:"lang,attr,omitempty"`
-	Datatype string  `xml:"datatype,attr,omitempty"`
+	Value    string `xml:",chardata"`
+	Lang     string `xml:"lang,attr,omitempty"`
+	Datatype string `xml:"datatype,attr,omitempty"`
 }
 
 // ParseXMLResults parses SPARQL XML results

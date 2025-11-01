@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/internal/encoding"
-	"github.com/aleksaelezovic/trigo/internal/sparqlxml"
 	"github.com/aleksaelezovic/trigo/internal/storage"
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/server/results"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
@@ -247,7 +247,7 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 	}
 
 	// Compare results
-	if !sparqlxml.CompareResults(expectedBindings, actualBindings) {
+	if !results.CompareResults(expectedBindings, actualBindings) {
 		r.recordError(test, fmt.Sprintf("Results mismatch: expected %d bindings, got %d bindings", len(expectedBindings), len(actualBindings)))
 		return TestResultFail
 	}
@@ -343,12 +343,12 @@ func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase)
 	defer resultFile.Close()
 
 	// Parse SPARQL XML results
-	results, err := sparqlxml.ParseXMLResults(resultFile)
+	xmlResults, err := results.ParseXMLResults(resultFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse XML results: %w", err)
 	}
 
-	return results.ToBindings()
+	return xmlResults.ToBindings()
 }
 
 // recordError records a test error

@@ -6,12 +6,12 @@ import (
 	"os"
 
 	"github.com/aleksaelezovic/trigo/internal/encoding"
-	"github.com/aleksaelezovic/trigo/internal/server"
+	"github.com/aleksaelezovic/trigo/internal/storage"
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/server"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
-	"github.com/aleksaelezovic/trigo/internal/storage"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
