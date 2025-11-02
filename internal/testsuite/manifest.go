@@ -36,24 +36,50 @@ type GraphData struct {
 type TestType string
 
 const (
-	// Syntax tests
+	// SPARQL Syntax tests
 	TestTypePositiveSyntax       TestType = "PositiveSyntaxTest"
 	TestTypePositiveSyntax11     TestType = "PositiveSyntaxTest11"
 	TestTypeNegativeSyntax       TestType = "NegativeSyntaxTest"
 	TestTypeNegativeSyntax11     TestType = "NegativeSyntaxTest11"
 
-	// Evaluation tests
+	// SPARQL Evaluation tests
 	TestTypeQueryEvaluation      TestType = "QueryEvaluationTest"
 
-	// Result format tests
+	// SPARQL Result format tests
 	TestTypeCSVResultFormat      TestType = "CSVResultFormatTest"
 	TestTypeTSVResultFormat      TestType = "TSVResultFormatTest"
 	TestTypeJSONResultFormat     TestType = "JSONResultFormatTest"
 
-	// Update tests
+	// SPARQL Update tests
 	TestTypePositiveUpdateSyntax TestType = "PositiveUpdateSyntaxTest11"
 	TestTypeNegativeUpdateSyntax TestType = "NegativeUpdateSyntaxTest11"
 	TestTypeUpdateEvaluation     TestType = "UpdateEvaluationTest"
+
+	// RDF Turtle tests
+	TestTypeTurtleEval           TestType = "TestTurtleEval"
+	TestTypeTurtlePositiveSyntax TestType = "TestTurtlePositiveSyntax"
+	TestTypeTurtleNegativeSyntax TestType = "TestTurtleNegativeSyntax"
+
+	// RDF N-Triples tests
+	TestTypeNTriplesPositiveSyntax TestType = "TestNTriplesPositiveSyntax"
+	TestTypeNTriplesNegativeSyntax TestType = "TestNTriplesNegativeSyntax"
+
+	// RDF N-Quads tests
+	TestTypeNQuadsPositiveSyntax TestType = "TestNQuadsPositiveSyntax"
+	TestTypeNQuadsNegativeSyntax TestType = "TestNQuadsNegativeSyntax"
+
+	// RDF TriG tests
+	TestTypeTrigEval             TestType = "TestTrigEval"
+	TestTypeTrigPositiveSyntax   TestType = "TestTrigPositiveSyntax"
+	TestTypeTrigNegativeSyntax   TestType = "TestTrigNegativeSyntax"
+
+	// RDF/XML tests
+	TestTypeXMLEval              TestType = "TestXMLEval"
+	TestTypeXMLNegativeSyntax    TestType = "TestXMLNegativeSyntax"
+
+	// JSON-LD tests (if needed in future)
+	TestTypeJSONLDEval           TestType = "TestJSONLDEval"
+	TestTypeJSONLDNegativeSyntax TestType = "TestJSONLDNegativeSyntax"
 )
 
 // ParseManifest parses a Turtle manifest file (simplified parser)
@@ -100,7 +126,8 @@ func ParseManifest(path string) (*TestManifest, error) {
 		}
 
 		// Parse test type
-		if strings.Contains(line, "rdf:type") && strings.Contains(line, "mf:") {
+		if strings.Contains(line, "rdf:type") || strings.Contains(line, "a rdft:") {
+			// SPARQL tests
 			if strings.Contains(line, "PositiveSyntaxTest11") {
 				currentTest.Type = TestTypePositiveSyntax11
 			} else if strings.Contains(line, "PositiveSyntaxTest") {
@@ -115,6 +142,40 @@ func ParseManifest(path string) (*TestManifest, error) {
 				currentTest.Type = TestTypeJSONResultFormat
 			} else if strings.Contains(line, "QueryEvaluationTest") {
 				currentTest.Type = TestTypeQueryEvaluation
+			// RDF Turtle tests
+			} else if strings.Contains(line, "TestTurtleEval") {
+				currentTest.Type = TestTypeTurtleEval
+			} else if strings.Contains(line, "TestTurtlePositiveSyntax") {
+				currentTest.Type = TestTypeTurtlePositiveSyntax
+			} else if strings.Contains(line, "TestTurtleNegativeSyntax") {
+				currentTest.Type = TestTypeTurtleNegativeSyntax
+			// RDF N-Triples tests
+			} else if strings.Contains(line, "TestNTriplesPositiveSyntax") {
+				currentTest.Type = TestTypeNTriplesPositiveSyntax
+			} else if strings.Contains(line, "TestNTriplesNegativeSyntax") {
+				currentTest.Type = TestTypeNTriplesNegativeSyntax
+			// RDF N-Quads tests
+			} else if strings.Contains(line, "TestNQuadsPositiveSyntax") {
+				currentTest.Type = TestTypeNQuadsPositiveSyntax
+			} else if strings.Contains(line, "TestNQuadsNegativeSyntax") {
+				currentTest.Type = TestTypeNQuadsNegativeSyntax
+			// RDF TriG tests
+			} else if strings.Contains(line, "TestTrigEval") {
+				currentTest.Type = TestTypeTrigEval
+			} else if strings.Contains(line, "TestTrigPositiveSyntax") {
+				currentTest.Type = TestTypeTrigPositiveSyntax
+			} else if strings.Contains(line, "TestTrigNegativeSyntax") {
+				currentTest.Type = TestTypeTrigNegativeSyntax
+			// RDF/XML tests
+			} else if strings.Contains(line, "TestXMLEval") {
+				currentTest.Type = TestTypeXMLEval
+			} else if strings.Contains(line, "TestXMLNegativeSyntax") {
+				currentTest.Type = TestTypeXMLNegativeSyntax
+			// JSON-LD tests
+			} else if strings.Contains(line, "TestJSONLDEval") {
+				currentTest.Type = TestTypeJSONLDEval
+			} else if strings.Contains(line, "TestJSONLDNegativeSyntax") {
+				currentTest.Type = TestTypeJSONLDNegativeSyntax
 			}
 		}
 

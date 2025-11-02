@@ -103,6 +103,7 @@ const (
 // runTest runs a single test case
 func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult {
 	switch test.Type {
+	// SPARQL tests
 	case TestTypePositiveSyntax, TestTypePositiveSyntax11:
 		return r.runPositiveSyntaxTest(manifest, test)
 	case TestTypeNegativeSyntax, TestTypeNegativeSyntax11:
@@ -115,6 +116,40 @@ func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult 
 		return r.runTSVFormatTest(manifest, test)
 	case TestTypeJSONResultFormat:
 		return r.runJSONFormatTest(manifest, test)
+	// RDF Turtle tests
+	case TestTypeTurtleEval:
+		return r.runRDFEvalTest(manifest, test, "turtle")
+	case TestTypeTurtlePositiveSyntax:
+		return r.runRDFPositiveSyntaxTest(manifest, test, "turtle")
+	case TestTypeTurtleNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "turtle")
+	// RDF N-Triples tests
+	case TestTypeNTriplesPositiveSyntax:
+		return r.runRDFPositiveSyntaxTest(manifest, test, "ntriples")
+	case TestTypeNTriplesNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "ntriples")
+	// RDF N-Quads tests
+	case TestTypeNQuadsPositiveSyntax:
+		return r.runRDFPositiveSyntaxTest(manifest, test, "nquads")
+	case TestTypeNQuadsNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "nquads")
+	// RDF TriG tests
+	case TestTypeTrigEval:
+		return r.runRDFEvalTest(manifest, test, "trig")
+	case TestTypeTrigPositiveSyntax:
+		return r.runRDFPositiveSyntaxTest(manifest, test, "trig")
+	case TestTypeTrigNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "trig")
+	// RDF/XML tests
+	case TestTypeXMLEval:
+		return r.runRDFEvalTest(manifest, test, "rdfxml")
+	case TestTypeXMLNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "rdfxml")
+	// JSON-LD tests
+	case TestTypeJSONLDEval:
+		return r.runRDFEvalTest(manifest, test, "jsonld")
+	case TestTypeJSONLDNegativeSyntax:
+		return r.runRDFNegativeSyntaxTest(manifest, test, "jsonld")
 	default:
 		// Skip unsupported test types for now
 		return TestResultSkip
@@ -667,4 +702,171 @@ func compareOutputs(actual, expected string) bool {
 	}
 
 	return true
+}
+
+// runRDFPositiveSyntaxTest verifies an RDF document parses successfully
+func (r *TestRunner) runRDFPositiveSyntaxTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	dataFile := manifest.ResolveFile(test.Action)
+	dataBytes, err := os.ReadFile(dataFile) // #nosec G304 - test suite legitimately reads test data files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read data file: %v", err))
+		return TestResultError
+	}
+
+	// Try to parse the RDF data
+	_, err = r.parseRDFData(string(dataBytes), format)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+		return TestResultFail
+	}
+
+	return TestResultPass
+}
+
+// runRDFNegativeSyntaxTest verifies an RDF document fails to parse
+func (r *TestRunner) runRDFNegativeSyntaxTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	dataFile := manifest.ResolveFile(test.Action)
+	dataBytes, err := os.ReadFile(dataFile) // #nosec G304 - test suite legitimately reads test data files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read data file: %v", err))
+		return TestResultError
+	}
+
+	// Try to parse the RDF data - it should fail
+	_, err = r.parseRDFData(string(dataBytes), format)
+	if err == nil {
+		r.recordError(test, "Data parsed successfully but should have failed")
+		return TestResultFail
+	}
+
+	// Expected to fail, so this is a pass
+	return TestResultPass
+}
+
+// runRDFEvalTest parses RDF data and compares with expected triples
+func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	// Read and parse input RDF data
+	dataFile := manifest.ResolveFile(test.Action)
+	dataBytes, err := os.ReadFile(dataFile) // #nosec G304 - test suite legitimately reads test data files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read data file: %v", err))
+		return TestResultError
+	}
+
+	actualTriples, err := r.parseRDFData(string(dataBytes), format)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+		return TestResultFail
+	}
+
+	// Load expected triples from result file
+	if test.Result == "" {
+		r.recordError(test, "No result file specified")
+		return TestResultError
+	}
+
+	resultFile := manifest.ResolveFile(test.Result)
+	resultBytes, err := os.ReadFile(resultFile) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read result file: %v", err))
+		return TestResultError
+	}
+
+	// Expected results are in N-Triples or N-Quads format
+	expectedTriples, err := r.parseRDFData(string(resultBytes), "ntriples")
+	if err != nil {
+		// Try N-Quads format if N-Triples fails
+		expectedTriples, err = r.parseRDFData(string(resultBytes), "nquads")
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to parse expected results: %v", err))
+			return TestResultError
+		}
+	}
+
+	// Compare triples (order-independent, blank node isomorphism)
+	if !r.compareTriples(expectedTriples, actualTriples) {
+		r.recordError(test, fmt.Sprintf("Triples mismatch: expected %d triples, got %d triples", len(expectedTriples), len(actualTriples)))
+		return TestResultFail
+	}
+
+	return TestResultPass
+}
+
+// parseRDFData parses RDF data in the specified format
+func (r *TestRunner) parseRDFData(data string, format string) ([]*rdf.Triple, error) {
+	switch format {
+	case "turtle":
+		parser := rdf.NewTurtleParser(data)
+		return parser.Parse()
+	case "ntriples":
+		parser := rdf.NewTurtleParser(data) // N-Triples is a subset of Turtle
+		return parser.Parse()
+	case "nquads":
+		parser := rdf.NewNQuadsParser(data)
+		quads, err := parser.Parse()
+		if err != nil {
+			return nil, err
+		}
+		// Convert quads to triples (ignore graph)
+		triples := make([]*rdf.Triple, len(quads))
+		for i, quad := range quads {
+			triples[i] = rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
+		}
+		return triples, nil
+	case "trig":
+		parser := rdf.NewTriGParser(data)
+		quads, err := parser.Parse()
+		if err != nil {
+			return nil, err
+		}
+		// Convert quads to triples (ignore graph)
+		triples := make([]*rdf.Triple, len(quads))
+		for i, quad := range quads {
+			triples[i] = rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
+		}
+		return triples, nil
+	case "rdfxml":
+		parser := rdf.NewRDFXMLParser()
+		reader := strings.NewReader(data)
+		quads, err := parser.Parse(reader)
+		if err != nil {
+			return nil, err
+		}
+		// Convert quads to triples (ignore graph)
+		triples := make([]*rdf.Triple, len(quads))
+		for i, quad := range quads {
+			triples[i] = rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
+		}
+		return triples, nil
+	case "jsonld":
+		parser := rdf.NewJSONLDParser()
+		reader := strings.NewReader(data)
+		quads, err := parser.Parse(reader)
+		if err != nil {
+			return nil, err
+		}
+		// Convert quads to triples (ignore graph)
+		triples := make([]*rdf.Triple, len(quads))
+		for i, quad := range quads {
+			triples[i] = rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
+		}
+		return triples, nil
+	default:
+		return nil, fmt.Errorf("unsupported format: %s", format)
+	}
 }

@@ -318,9 +318,9 @@ curl -X POST http://localhost:8080/data \
 
 📖 **See [HTTP_ENDPOINT.md](HTTP_ENDPOINT.md) for complete documentation**
 
-## Testing with W3C SPARQL Test Suite
+## Testing with W3C Test Suites
 
-Trigo includes the official W3C SPARQL 1.1 test suite with both syntax and execution validation:
+Trigo includes both the official W3C SPARQL 1.1 test suite and W3C RDF 1.1/1.2 test suites with comprehensive validation:
 
 ```bash
 # Clone with test suite (submodule)
@@ -329,19 +329,31 @@ git clone --recursive https://github.com/aleksaelezovic/trigo.git
 # Build and run test runner
 go build -o test-runner ./cmd/test-runner
 
-# Run syntax tests (parser validation)
+# Run SPARQL syntax tests (parser validation)
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
 
-# Run execution tests (end-to-end validation)
+# Run SPARQL execution tests (end-to-end validation)
 ./test-runner testdata/rdf-tests/sparql/sparql11/bind
 
-# Run result format tests
+# Run SPARQL result format tests
 ./test-runner testdata/rdf-tests/sparql/sparql11/csv-tsv-res
 ./test-runner testdata/rdf-tests/sparql/sparql11/json-res
 
+# Run RDF 1.1 parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle      # Turtle parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-triples   # N-Triples parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-quads     # N-Quads parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-trig        # TriG parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml         # RDF/XML parser tests
+
+# Run RDF 1.2 parser tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-turtle      # RDF 1.2 Turtle tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-n-triples   # RDF 1.2 N-Triples tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-trig        # RDF 1.2 TriG tests
+
 # Current test results:
 #
-# SYNTAX TESTS (Parser Validation):
+# SPARQL SYNTAX TESTS (Parser Validation):
 # - syntax-query: 69.1% pass rate (65/94 tests)
 # - All SELECT expression tests passing (5/5)
 # - All aggregate syntax tests passing (15/15)
@@ -350,19 +362,30 @@ go build -o test-runner ./cmd/test-runner
 # - Property list shorthand (semicolon/comma) working
 # - Boolean literals (true/false) in expressions working
 #
-# EXECUTION TESTS (End-to-End Validation):
+# SPARQL EXECUTION TESTS (End-to-End Validation):
 # - bind/ (BIND expressions): 70.0% (7/10 tests) ✅ IMPROVED!
 # - construct/ (CONSTRUCT queries): 28.6% (2/7 tests)
 # - exists/ (EXISTS/NOT EXISTS): 0% (evaluation not implemented)
 # - negation/ (MINUS): 0% (complex query patterns)
 #
-# RESULT FORMAT TESTS:
+# SPARQL RESULT FORMAT TESTS:
 # - csv-tsv-res/ (CSV/TSV formats): Variable ordering ✅, format compliance ✅
 #   Note: Blank node labels differ (implementation-specific, spec-compliant)
 # - json-res/ (JSON format): Variable ordering ✅, format compliance ✅
 #
-# Passing execution tests validate:
-# ✅ Full query pipeline (parse → optimize → execute)
+# RDF PARSER TESTS (RDF 1.1):
+# - rdf-turtle/: Validates Turtle parser against W3C test suite
+# - rdf-n-triples/: 70.0% pass rate (49/70 tests)
+# - rdf-n-quads/: Validates N-Quads parser with named graph support
+# - rdf-trig/: Validates TriG parser (Turtle + named graphs)
+# - rdf-xml/: Validates RDF/XML parser
+#
+# RDF PARSER TESTS (RDF 1.2):
+# - Validates compliance with latest RDF 1.2 specifications
+# - Includes RDF-star and directional language tags tests
+#
+# Passing tests validate:
+# ✅ Full SPARQL query pipeline (parse → optimize → execute)
 # ✅ BIND with arithmetic expressions (?o+10)
 # ✅ BIND variables usable in subsequent patterns
 # ✅ FILTER on BIND-defined variables
@@ -370,6 +393,8 @@ go build -o test-runner ./cmd/test-runner
 # ✅ Expression evaluation in execution context
 # ✅ Variable scoping rules
 # ✅ Result correctness vs W3C expected outputs
+# ✅ RDF parser conformance with W3C specifications
+# ✅ Multiple RDF serialization formats (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD)
 ```
 
 📖 **See [TESTING.md](TESTING.md) for complete testing documentation**

@@ -1,6 +1,6 @@
-## W3C SPARQL Test Suite
+## W3C Test Suites
 
-Trigo includes infrastructure for running the official W3C SPARQL 1.1 test suite to validate compliance with SPARQL standards.
+Trigo includes infrastructure for running both the official W3C SPARQL 1.1 test suite and W3C RDF 1.1/1.2 test suites to validate compliance with SPARQL and RDF standards.
 
 ## Setup
 
@@ -21,6 +21,8 @@ The test suite is located in `testdata/rdf-tests/` and includes:
 - **sparql10/** - SPARQL 1.0 tests
 - **sparql11/** - SPARQL 1.1 Query and Update tests
 - **sparql12/** - SPARQL 1.2 tests
+- **rdf/rdf11/** - RDF 1.1 parser tests (Turtle, N-Triples, N-Quads, TriG, RDF/XML)
+- **rdf/rdf12/** - RDF 1.2 parser tests (with RDF-star support)
 
 ### Test Categories
 
@@ -54,11 +56,23 @@ go build -o test-runner ./cmd/test-runner
 ### Run Specific Test Suite
 
 ```bash
-# Run syntax tests
+# Run SPARQL syntax tests
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
 
-# Run a specific manifest
+# Run a specific SPARQL manifest
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query/manifest.ttl
+
+# Run RDF parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle      # Turtle parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-triples   # N-Triples parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-quads     # N-Quads parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-trig        # TriG parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml         # RDF/XML parser tests
+
+# Run RDF 1.2 parser tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-turtle      # RDF 1.2 Turtle tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-n-triples   # RDF 1.2 N-Triples tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-trig        # RDF 1.2 TriG tests
 ```
 
 ### Example Output
@@ -83,7 +97,9 @@ Skipped: 1
 
 ## Test Types
 
-### Positive Syntax Tests
+### SPARQL Test Types
+
+#### Positive Syntax Tests
 
 Verify that valid SPARQL queries parse successfully:
 
@@ -117,7 +133,69 @@ Execute queries against data and compare results:
     mf:result <result.srx> .
 ```
 
+### RDF Test Types
+
+#### Positive Syntax Tests
+
+Verify that RDF documents parse successfully:
+
+```turtle
+:test1 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "Basic Turtle" ;
+    mf:action <data.ttl> .
+```
+
+#### Negative Syntax Tests
+
+Verify that invalid RDF documents are rejected:
+
+```turtle
+:test2 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "Invalid Turtle" ;
+    mf:action <bad-data.ttl> .
+```
+
+#### Evaluation Tests
+
+Parse RDF documents and compare with expected triples:
+
+```turtle
+:test3 rdf:type rdft:TestTurtleEval ;
+    mf:name "Complex Turtle" ;
+    mf:action <input.ttl> ;
+    mf:result <expected.nt> .
+```
+
 ## Current Test Support
+
+### RDF Parser Tests (RDF 1.1 & 1.2)
+
+#### ✅ Implemented Formats
+- **Turtle**: Full parser with PREFIX/BASE, property lists, collections
+  - Pass rate varies by test suite
+  - Some advanced features may not be fully compliant
+- **N-Triples**: 70.0% pass rate (49/70 tests)
+  - ✅ Basic triple parsing
+  - ⚠️ Some strict validation rules not enforced
+- **N-Quads**: Supports named graphs with quad parsing
+  - Extends N-Triples with graph names
+- **TriG**: Turtle + named graph blocks
+  - GRAPH blocks and default graph support
+  - Some edge cases may not be handled
+- **RDF/XML**: rdf:Description, properties, datatypes, nested blank nodes
+  - Common patterns supported
+  - Advanced features like parseType may be limited
+- **JSON-LD**: @context, @id, @value, @type, @language
+  - Basic JSON-LD patterns supported
+  - Full context processing not yet implemented
+
+#### Test Results
+- **rdf11/rdf-turtle**: Comprehensive Turtle syntax validation
+- **rdf11/rdf-n-triples**: 70.0% pass rate (validates strict N-Triples compliance)
+- **rdf11/rdf-n-quads**: Named graph support validation
+- **rdf11/rdf-trig**: TriG format with named graphs
+- **rdf11/rdf-xml**: RDF/XML parser validation
+- **rdf12/**: Latest RDF 1.2 specifications including RDF-star features
 
 ### Syntax Tests (Parser Validation)
 - **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)
@@ -128,7 +206,7 @@ Execute queries against data and compare results:
 - ✅ Property list shorthand (semicolon/comma)
 - ✅ Boolean literals (true/false)
 
-### Execution Tests (End-to-End Validation)
+### SPARQL Execution Tests (End-to-End Validation)
 
 #### ✅ Implemented and Validated
 - **BIND expressions**: 70.0% pass rate (7/10 tests)
@@ -190,15 +268,21 @@ Manifest Parser (.ttl files)
     ↓
 Test Evaluator
     ↓
-├─ Syntax Tests → SPARQL Parser
-├─ Evaluation Tests → Full Pipeline:
+├─ SPARQL Syntax Tests → SPARQL Parser
+├─ SPARQL Evaluation Tests → Full Pipeline:
 │   ├─ Turtle Parser (load test data)
 │   ├─ SPARQL Parser (parse query)
 │   ├─ Optimizer (build execution plan)
 │   ├─ Executor (run query)
 │   ├─ SPARQL XML Parser (parse expected results)
 │   └─ Result Comparator (validate correctness)
-└─ Update Tests → (TODO)
+├─ RDF Positive Syntax Tests → RDF Parser (validate parse success)
+├─ RDF Negative Syntax Tests → RDF Parser (validate parse failure)
+├─ RDF Evaluation Tests → RDF Parser + Triple Comparator
+│   ├─ Parse input RDF (Turtle/TriG/RDF-XML/JSON-LD)
+│   ├─ Parse expected N-Triples output
+│   └─ Compare triples (order-independent, blank node handling)
+└─ SPARQL Update Tests → (TODO)
 ```
 
 ### Key Components
