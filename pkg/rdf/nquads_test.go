@@ -35,12 +35,12 @@ func TestParseNQuads(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "with PREFIX",
+			name: "PREFIX not allowed in strict N-Quads",
 			input: `PREFIX ex: <http://example.org/>
 ex:s ex:p ex:o .
 `,
-			expected: 1,
-			wantErr:  false,
+			expected: 0,
+			wantErr:  true, // Changed: PREFIX not allowed in strict N-Quads
 		},
 		{
 			name: "blank nodes",
@@ -51,12 +51,12 @@ ex:s ex:p ex:o .
 			wantErr:  false,
 		},
 		{
-			name: "numeric literals",
+			name: "bare numeric literals not allowed in strict N-Quads",
 			input: `<http://example.org/s> <http://example.org/p> 42 .
 <http://example.org/s2> <http://example.org/p2> 3.14 .
 `,
-			expected: 2,
-			wantErr:  false,
+			expected: 0,
+			wantErr:  true, // Changed: bare numeric literals not allowed in strict N-Quads
 		},
 	}
 

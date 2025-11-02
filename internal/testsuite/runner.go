@@ -814,7 +814,7 @@ func (r *TestRunner) parseRDFData(data string, format string) ([]*rdf.Triple, er
 		parser := rdf.NewTurtleParser(data)
 		return parser.Parse()
 	case "ntriples":
-		parser := rdf.NewTurtleParser(data) // N-Triples is a subset of Turtle
+		parser := rdf.NewNTriplesParser(data) // Use strict N-Triples parser
 		return parser.Parse()
 	case "nquads":
 		parser := rdf.NewNQuadsParser(data)

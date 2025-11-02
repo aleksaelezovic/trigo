@@ -9,20 +9,22 @@ import (
 // N-Quads format: <subject> <predicate> <object> [<graph>] .
 // Compatible with N-Triples (3 positions) - defaults to default graph
 type NQuadsParser struct {
-	input    string
-	pos      int
-	length   int
-	prefixes map[string]string
-	baseIRI  string
+	input      string
+	pos        int
+	length     int
+	prefixes   map[string]string
+	baseIRI    string
+	strictMode bool // When true, enforce strict N-Quads/N-Triples syntax
 }
 
-// NewNQuadsParser creates a new N-Quads parser
+// NewNQuadsParser creates a new N-Quads parser with strict validation
 func NewNQuadsParser(input string) *NQuadsParser {
 	return &NQuadsParser{
-		input:    input,
-		pos:      0,
-		length:   len(input),
-		prefixes: make(map[string]string),
+		input:      input,
+		pos:        0,
+		length:     len(input),
+		prefixes:   make(map[string]string),
+		strictMode: true, // N-Quads uses strict N-Triples syntax
 	}
 }
 
@@ -38,6 +40,9 @@ func (p *NQuadsParser) Parse() ([]*Quad, error) {
 
 		// Check for PREFIX directive (optional Turtle extension)
 		if p.matchKeyword("@prefix") || p.matchKeyword("PREFIX") {
+			if p.strictMode {
+				return nil, fmt.Errorf("PREFIX directive not allowed in N-Quads")
+			}
 			if err := p.parsePrefix(); err != nil {
 				return nil, err
 			}
@@ -46,6 +51,9 @@ func (p *NQuadsParser) Parse() ([]*Quad, error) {
 
 		// Check for BASE directive (optional Turtle extension)
 		if p.matchKeyword("@base") || p.matchKeyword("BASE") {
+			if p.strictMode {
+				return nil, fmt.Errorf("BASE directive not allowed in N-Quads")
+			}
 			if err := p.parseBase(); err != nil {
 				return nil, err
 			}
@@ -254,6 +262,9 @@ func (p *NQuadsParser) parseTerm() (Term, error) {
 
 	case '-', '+', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		// Numeric literal
+		if p.strictMode {
+			return nil, fmt.Errorf("bare numeric literals not allowed in N-Quads at position %d", p.pos)
+		}
 		return p.parseNumber()
 
 	default:
@@ -272,8 +283,37 @@ func (p *NQuadsParser) parseIRI() (string, error) {
 	}
 	p.pos++ // skip '<'
 
-	start := p.pos
+	var result strings.Builder
 	for p.pos < p.length && p.input[p.pos] != '>' {
+		ch := p.input[p.pos]
+
+		// Handle Unicode escape sequences
+		if ch == '\\' {
+			if p.pos+1 < p.length {
+				nextCh := p.input[p.pos+1]
+				if nextCh == 'u' || nextCh == 'U' {
+					// Process Unicode escape
+					escaped, err := p.processUnicodeEscape()
+					if err != nil {
+						return "", err
+					}
+					result.WriteString(escaped)
+					continue
+				}
+			}
+			// Backslash not followed by u/U is invalid in IRIs
+			return "", fmt.Errorf("invalid escape sequence in IRI at position %d", p.pos)
+		}
+
+		// N-Quads/N-Triples IRI validation
+		// IRIs cannot contain: space, <, >, ", {, }, |, ^, `
+		// and must not contain control characters (0x00-0x1F)
+		if ch == ' ' || ch == '<' || ch == '>' || ch == '"' || ch == '{' || ch == '}' ||
+			ch == '|' || ch == '^' || ch == '`' || ch <= 0x1F {
+			return "", fmt.Errorf("invalid character in IRI: %q at position %d", ch, p.pos)
+		}
+
+		result.WriteByte(ch)
 		p.pos++
 	}
 
@@ -281,8 +321,13 @@ func (p *NQuadsParser) parseIRI() (string, error) {
 		return "", fmt.Errorf("unclosed IRI")
 	}
 
-	iri := p.input[start:p.pos]
+	iri := result.String()
 	p.pos++ // skip '>'
+
+	// Validate that IRI has a scheme (contains ':')
+	if !strings.Contains(iri, ":") {
+		return "", fmt.Errorf("relative IRI not allowed in N-Quads: %s", iri)
+	}
 
 	return iri, nil
 }
@@ -339,12 +384,25 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 				value.WriteByte('\t')
 			case 'r':
 				value.WriteByte('\r')
+			case 'b':
+				value.WriteByte('\b')
+			case 'f':
+				value.WriteByte('\f')
 			case '"':
 				value.WriteByte('"')
 			case '\\':
 				value.WriteByte('\\')
+			case 'u', 'U':
+				// Unicode escape - go back and let processUnicodeEscape handle it
+				p.pos--
+				escaped, err := p.processUnicodeEscape()
+				if err != nil {
+					return nil, err
+				}
+				value.WriteString(escaped)
+				continue
 			default:
-				value.WriteByte(escCh)
+				return nil, fmt.Errorf("invalid escape sequence \\%c at position %d", escCh, p.pos)
 			}
 			p.pos++
 		} else {
@@ -365,6 +423,14 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 			// Language tag
 			p.pos++ // skip '@'
 			start := p.pos
+			if p.pos >= p.length {
+				return nil, fmt.Errorf("empty language tag")
+			}
+			// Language tags must start with a letter (BCP 47)
+			firstChar := p.input[p.pos]
+			if !((firstChar >= 'a' && firstChar <= 'z') || (firstChar >= 'A' && firstChar <= 'Z')) {
+				return nil, fmt.Errorf("invalid language tag: must start with a letter, got %q", firstChar)
+			}
 			for p.pos < p.length {
 				ch := p.input[p.pos]
 				if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '.' || ch == '<' {
@@ -388,6 +454,65 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 
 	// Plain literal
 	return NewLiteral(value.String()), nil
+}
+
+// processUnicodeEscape processes \uXXXX or \UXXXXXXXX escape sequences
+func (p *NQuadsParser) processUnicodeEscape() (string, error) {
+	if p.pos >= p.length || p.input[p.pos] != '\\' {
+		return "", fmt.Errorf("expected '\\' at start of escape sequence")
+	}
+	p.pos++ // skip '\'
+
+	if p.pos >= p.length {
+		return "", fmt.Errorf("unexpected end of input in Unicode escape")
+	}
+
+	escapeType := p.input[p.pos]
+	p.pos++ // skip 'u' or 'U'
+
+	var hexDigits int
+	if escapeType == 'u' {
+		hexDigits = 4
+	} else if escapeType == 'U' {
+		hexDigits = 8
+	} else {
+		return "", fmt.Errorf("invalid Unicode escape type: %c", escapeType)
+	}
+
+	if p.pos+hexDigits > p.length {
+		return "", fmt.Errorf("incomplete Unicode escape sequence")
+	}
+
+	hexStr := p.input[p.pos : p.pos+hexDigits]
+	p.pos += hexDigits
+
+	var codePoint int64
+	var err error
+	codePoint, err = func(s string, base, bitSize int) (int64, error) {
+		var result int64
+		for i := 0; i < len(s); i++ {
+			var digit int64
+			ch := s[i]
+			switch {
+			case ch >= '0' && ch <= '9':
+				digit = int64(ch - '0')
+			case ch >= 'a' && ch <= 'f':
+				digit = int64(ch-'a') + 10
+			case ch >= 'A' && ch <= 'F':
+				digit = int64(ch-'A') + 10
+			default:
+				return 0, fmt.Errorf("invalid hex character: %c", ch)
+			}
+			result = result*16 + digit
+		}
+		return result, nil
+	}(hexStr, 16, 32)
+
+	if err != nil {
+		return "", fmt.Errorf("invalid hex digits in Unicode escape: %s", hexStr)
+	}
+
+	return string(rune(codePoint)), nil
 }
 
 // parseNumber parses a numeric literal

@@ -14,15 +14,28 @@ type TurtleParser struct {
 	prefixes         map[string]string
 	base             string
 	blankNodeCounter int
+	strictNTriples   bool // When true, enforce strict N-Triples syntax
 }
 
 // NewTurtleParser creates a new Turtle parser
 func NewTurtleParser(input string) *TurtleParser {
 	return &TurtleParser{
-		input:    input,
-		pos:      0,
-		length:   len(input),
-		prefixes: make(map[string]string),
+		input:          input,
+		pos:            0,
+		length:         len(input),
+		prefixes:       make(map[string]string),
+		strictNTriples: false,
+	}
+}
+
+// NewNTriplesParser creates a new N-Triples parser with strict validation
+func NewNTriplesParser(input string) *TurtleParser {
+	return &TurtleParser{
+		input:          input,
+		pos:            0,
+		length:         len(input),
+		prefixes:       make(map[string]string),
+		strictNTriples: true,
 	}
 }
 
@@ -38,6 +51,9 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 
 		// Check for PREFIX directive
 		if p.matchKeyword("@prefix") || p.matchKeyword("PREFIX") {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("PREFIX directive not allowed in N-Triples")
+			}
 			if err := p.parsePrefix(); err != nil {
 				return nil, err
 			}
@@ -46,6 +62,9 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 
 		// Check for BASE directive
 		if p.matchKeyword("@base") || p.matchKeyword("BASE") {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("BASE directive not allowed in N-Triples")
+			}
 			if err := p.parseBase(); err != nil {
 				return nil, err
 			}
@@ -199,6 +218,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 			// Check for comma (more objects with same predicate)
 			if p.pos < p.length && p.input[p.pos] == ',' {
+				if p.strictNTriples {
+					return nil, fmt.Errorf("comma abbreviation not allowed in N-Triples at position %d", p.pos)
+				}
 				p.pos++ // skip ','
 				continue
 			}
@@ -209,6 +231,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 		// Check for semicolon (more predicates with same subject)
 		if p.pos < p.length && p.input[p.pos] == ';' {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("semicolon abbreviation not allowed in N-Triples at position %d", p.pos)
+			}
 			p.pos++ // skip ';'
 			p.skipWhitespaceAndComments()
 			// Check if there's actually a predicate following (not just a trailing semicolon)
@@ -272,21 +297,33 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 
 	// Number literal
 	if (ch >= '0' && ch <= '9') || ch == '-' || ch == '+' {
+		if p.strictNTriples {
+			return nil, fmt.Errorf("bare numeric literals not allowed in N-Triples at position %d", p.pos)
+		}
 		return p.parseNumber()
 	}
 
 	// Check for 'a' keyword (shorthand for rdf:type)
 	if ch == 'a' && (p.pos+1 >= p.length || !isNameChar(p.input[p.pos+1])) {
+		if p.strictNTriples {
+			return nil, fmt.Errorf("'a' abbreviation not allowed in N-Triples at position %d", p.pos)
+		}
 		p.pos++ // skip 'a'
 		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
 	}
 
 	// Check for boolean literals
 	if p.matchKeyword("true") {
+		if p.strictNTriples {
+			return nil, fmt.Errorf("bare boolean literals not allowed in N-Triples at position %d", p.pos)
+		}
 		p.pos += 4 // skip "true"
 		return NewBooleanLiteral(true), nil
 	}
 	if p.matchKeyword("false") {
+		if p.strictNTriples {
+			return nil, fmt.Errorf("bare boolean literals not allowed in N-Triples at position %d", p.pos)
+		}
 		p.pos += 5 // skip "false"
 		return NewBooleanLiteral(false), nil
 	}
@@ -570,8 +607,14 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	// Check if it's a long literal (""" or ''')
 	if p.pos+2 < p.length {
 		if p.input[p.pos:p.pos+3] == `"""` {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("triple-quoted literals not allowed in N-Triples")
+			}
 			return p.parseLongLiteral(`"""`)
 		} else if p.input[p.pos:p.pos+3] == `'''` {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("triple-quoted literals not allowed in N-Triples")
+			}
 			return p.parseLongLiteral(`'''`)
 		}
 	}
@@ -580,6 +623,9 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	quoteChar := p.input[p.pos]
 	if quoteChar != '"' && quoteChar != '\'' {
 		return nil, fmt.Errorf("expected quote at start of literal")
+	}
+	if quoteChar == '\'' && p.strictNTriples {
+		return nil, fmt.Errorf("single-quoted literals not allowed in N-Triples")
 	}
 	p.pos++ // skip opening quote
 
@@ -609,6 +655,10 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 					value.WriteByte('\t')
 				case 'r':
 					value.WriteByte('\r')
+				case 'b':
+					value.WriteByte('\b')
+				case 'f':
+					value.WriteByte('\f')
 				case '"':
 					value.WriteByte('"')
 				case '\'':
@@ -616,7 +666,7 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 				case '\\':
 					value.WriteByte('\\')
 				default:
-					value.WriteByte(p.input[p.pos])
+					return nil, fmt.Errorf("invalid escape sequence \\%c at position %d", p.input[p.pos], p.pos)
 				}
 				p.pos++
 			}
@@ -697,6 +747,10 @@ func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 					value.WriteByte('\t')
 				case 'r':
 					value.WriteByte('\r')
+				case 'b':
+					value.WriteByte('\b')
+				case 'f':
+					value.WriteByte('\f')
 				case '"':
 					value.WriteByte('"')
 				case '\'':
@@ -704,7 +758,7 @@ func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 				case '\\':
 					value.WriteByte('\\')
 				default:
-					value.WriteByte(p.input[p.pos])
+					return nil, fmt.Errorf("invalid escape sequence \\%c at position %d", p.input[p.pos], p.pos)
 				}
 				p.pos++
 			}

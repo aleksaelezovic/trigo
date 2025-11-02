@@ -375,8 +375,8 @@ go build -o test-runner ./cmd/test-runner
 #
 # RDF PARSER TESTS (RDF 1.1):
 # - rdf-turtle/: 62.2% pass rate (184/296 tests) ✅ MAJOR IMPROVEMENT! (+17.8pp)
-# - rdf-n-triples/: 84.3% pass rate (59/70 tests) ✅ MAINTAINED
-# - rdf-n-quads/: 75.9% pass rate (66/87 tests) ✅ MAINTAINED
+# - rdf-n-triples/: 100.0% pass rate (70/70 tests) ✅ PERFECT! (+15.7pp)
+# - rdf-n-quads/: 100.0% pass rate (87/87 tests) ✅ PERFECT! (+24.1pp)
 # - rdf-trig/: 32.2% pass rate (108/335 tests) - TriG with named graphs
 # - rdf-xml/: 18.7% pass rate (31/166 tests) - RDF/XML baseline support
 #

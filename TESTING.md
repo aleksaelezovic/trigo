@@ -196,12 +196,16 @@ Parse RDF documents and compare with expected triples:
   - ✅ Anonymous blank nodes [], empty collections ()
   - ✅ @base directive and relative IRI resolution
   - ⚠️ Blank node property lists (partial), collections with items, some PName escapes
-- **rdf11/rdf-n-triples**: 84.3% pass rate (59/70 tests) ✅ **MAINTAINED**
-  - ✅ Basic triples, IRI validation, literals, Unicode escapes
-  - ⚠️ Some strict negative syntax validations
-- **rdf11/rdf-n-quads**: 75.9% pass rate (66/87 tests) ✅ **MAINTAINED**
-  - ✅ Quads with named graphs, basic syntax
-  - ⚠️ Some strict validations
+- **rdf11/rdf-n-triples**: 100.0% pass rate (70/70 tests) ✅ **PERFECT! Improved from 84.3%**
+  - ✅ Strict N-Triples validation (no PREFIX/BASE, no abbreviations, no bare literals)
+  - ✅ Complete IRI validation with Unicode escape support
+  - ✅ Proper escape sequence validation (only \t, \b, \n, \r, \f, \\, \", \uXXXX, \UXXXXXXXX)
+  - ✅ All negative syntax tests passing
+- **rdf11/rdf-n-quads**: 100.0% pass rate (87/87 tests) ✅ **PERFECT! Improved from 75.9%**
+  - ✅ Strict N-Quads validation (same as N-Triples + optional graph component)
+  - ✅ Complete IRI validation in all positions including graph names
+  - ✅ Language tag validation (must start with letter)
+  - ✅ All negative syntax tests passing
 - **rdf11/rdf-trig**: 32.2% pass rate (108/335 tests)
   - ✅ Some GRAPH blocks, basic TriG syntax
   - ⚠️ Complex graph patterns, blank nodes in graphs
