@@ -107,10 +107,12 @@ func ParseManifest(path string) (*TestManifest, error) {
 			continue
 		}
 
-		// Start of new test (test definition starts with <#testname>)
+		// Start of new test (test definition can be <#testname> or :testname)
 		// Handles both "rdf:type" and shorthand "a rdft:" or "a mf:"
-		if strings.HasPrefix(line, "<#") && (strings.Contains(line, "> rdf:type") ||
-			strings.Contains(line, "> a rdft:") || strings.Contains(line, "> a mf:")) {
+		isTestStart := (strings.HasPrefix(line, "<#") || strings.HasPrefix(line, ":")) &&
+			(strings.Contains(line, "rdf:type") || strings.Contains(line, " a "))
+
+		if isTestStart {
 			if currentTest != nil {
 				manifest.Tests = append(manifest.Tests, *currentTest)
 			}
@@ -131,7 +133,7 @@ func ParseManifest(path string) (*TestManifest, error) {
 		}
 
 		// Parse test type
-		if strings.Contains(line, "rdf:type") || strings.Contains(line, "a rdft:") {
+		if strings.Contains(line, "rdf:type") || strings.Contains(line, " a mf:") || strings.Contains(line, "a rdft:") {
 			// SPARQL tests
 			if strings.Contains(line, "PositiveSyntaxTest11") {
 				currentTest.Type = TestTypePositiveSyntax11
