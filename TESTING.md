@@ -206,12 +206,20 @@ Parse RDF documents and compare with expected triples:
   - ✅ Complete IRI validation in all positions including graph names
   - ✅ Language tag validation (must start with letter)
   - ✅ All negative syntax tests passing
-- **rdf11/rdf-trig**: 32.2% pass rate (108/335 tests)
-  - ✅ Some GRAPH blocks, basic TriG syntax
-  - ⚠️ Complex graph patterns, blank nodes in graphs
-- **rdf11/rdf-xml**: 18.7% pass rate (31/166 tests)
+- **rdf11/rdf-trig**: 46.0% pass rate (154/335 tests) ✅ **IMPROVED from 32.2%**
+  - ✅ Anonymous graph blocks `{ triples }`
+  - ✅ Named graph blocks `<iri> { triples }` and `_:bnode { triples }`
+  - ✅ GRAPH keyword syntax `GRAPH <iri> { triples }`
+  - ⚠️ Complex blank node patterns, collections (inherited from Turtle parser)
+- **rdf11/rdf-xml**: 34.5% pass rate (57/165 tests) ✅ **IMPROVED from 20.6%**
   - ✅ Basic rdf:Description, simple properties
-  - ⚠️ RDF containers (rdf:Bag, rdf:Seq), advanced patterns
+  - ✅ RDF containers (rdf:Bag, rdf:Seq, rdf:Alt) with blank node subjects
+  - ✅ Auto-numbered rdf:li elements (rdf:_1, rdf:_2, ...)
+  - ✅ Explicit rdf:_N properties
+  - ✅ xml:base for base URI resolution
+  - ✅ rdf:ID attribute handling (base + "#" + ID)
+  - ✅ Property attributes on rdf:Description elements
+  - ⚠️ Blank node isomorphism (affects container tests), complex xml:base scenarios
 - **rdf12/**: Latest RDF 1.2 specifications including RDF-star features
   - Test support infrastructure in place
 
@@ -224,6 +232,22 @@ Parse RDF documents and compare with expected triples:
 - Implemented numeric literals (integers, decimals with proper xsd:decimal type, doubles with scientific notation)
 - Added boolean literal support (true/false with xsd:boolean type)
 - **Turtle compliance improved: 44.4% → 62.2%** (+17.8 percentage points, +45 tests)
+
+**Recent Improvements (Phase 2 - TriG & RDF/XML):**
+- **TriG Parser Enhancements:**
+  - Implemented anonymous graph blocks `{ triples }`
+  - Implemented named graph blocks `<iri> { triples }` and `_:bnode { triples }`
+  - Added lookahead parsing to distinguish graph blocks from regular triples
+  - **TriG compliance improved: 32.2% → 46.0%** (+13.8 percentage points, +46 tests)
+- **RDF/XML Parser Enhancements:**
+  - Implemented RDF containers (rdf:Bag, rdf:Seq, rdf:Alt)
+  - Added auto-numbered rdf:li element support (rdf:_1, rdf:_2, etc.)
+  - Implemented explicit rdf:_N property handling
+  - Added xml:base tracking for base URI resolution
+  - Implemented rdf:ID attribute handling with base URI concatenation
+  - Added property attribute support on rdf:Description elements
+  - Implemented typed node parsing (elements with implicit rdf:type)
+  - **RDF/XML compliance improved: 20.6% → 34.5%** (+13.9 percentage points, +23 tests)
 
 ### Syntax Tests (Parser Validation)
 - **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)

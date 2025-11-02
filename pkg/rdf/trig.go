@@ -61,8 +61,36 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 			continue
 		}
 
+		// Check for anonymous graph block: { triples }
+		if p.input[p.pos] == '{' {
+			graphQuads, err := p.parseAnonymousGraphBlock()
+			if err != nil {
+				return nil, err
+			}
+			quads = append(quads, graphQuads...)
+			continue
+		}
+
+		// Check for named graph block: <iri> { triples } or _:bnode { triples }
+		// Look ahead to see if there's a { after the first term
+		savedPos := p.pos
+		term, err := p.parseTerm()
+		if err == nil && term != nil {
+			p.skipWhitespaceAndComments()
+			if p.pos < p.length && p.input[p.pos] == '{' {
+				// It's a named graph block
+				graphQuads, err := p.parseNamedGraphBlock(term)
+				if err != nil {
+					return nil, err
+				}
+				quads = append(quads, graphQuads...)
+				continue
+			}
+		}
+		// Not a graph block, restore position and parse as triple
+		p.pos = savedPos
+
 		// Parse triple in default graph
-		// Use turtle parser for the triple, then convert to quad
 		triple, err := p.parseTriple()
 		if err != nil {
 			return nil, err
@@ -127,6 +155,95 @@ func (p *TriGParser) parseGraphBlock() ([]*Quad, error) {
 		}
 		if triple != nil {
 			quad := NewQuad(triple.Subject, triple.Predicate, triple.Object, graphNode)
+			quads = append(quads, quad)
+		}
+
+		// Skip optional '.'
+		p.skipWhitespaceAndComments()
+		if p.pos < p.length && p.input[p.pos] == '.' {
+			p.pos++
+		}
+	}
+
+	return quads, nil
+}
+
+// parseAnonymousGraphBlock parses an anonymous graph block: { triples }
+func (p *TriGParser) parseAnonymousGraphBlock() ([]*Quad, error) {
+	// Expect '{'
+	if p.pos >= p.length || p.input[p.pos] != '{' {
+		return nil, fmt.Errorf("expected '{' at start of anonymous graph block")
+	}
+	p.pos++ // skip '{'
+
+	// Use a blank node as the graph name
+	graphNode := NewBlankNode(fmt.Sprintf("g%d", p.pos))
+
+	// Parse triples until '}'
+	var quads []*Quad
+	for {
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			return nil, fmt.Errorf("unexpected end of input, expected '}'")
+		}
+
+		// Check for closing '}'
+		if p.input[p.pos] == '}' {
+			p.pos++ // skip '}'
+			break
+		}
+
+		// Parse triple
+		triple, err := p.parseTriple()
+		if err != nil {
+			return nil, err
+		}
+		if triple != nil {
+			quad := NewQuad(triple.Subject, triple.Predicate, triple.Object, graphNode)
+			quads = append(quads, quad)
+		}
+
+		// Skip optional '.'
+		p.skipWhitespaceAndComments()
+		if p.pos < p.length && p.input[p.pos] == '.' {
+			p.pos++
+		}
+	}
+
+	return quads, nil
+}
+
+// parseNamedGraphBlock parses a named graph block: <iri> { triples } or _:bnode { triples }
+func (p *TriGParser) parseNamedGraphBlock(graphTerm Term) ([]*Quad, error) {
+	// graphTerm was already parsed by caller
+
+	// Expect '{'
+	if p.pos >= p.length || p.input[p.pos] != '{' {
+		return nil, fmt.Errorf("expected '{' after graph name")
+	}
+	p.pos++ // skip '{'
+
+	// Parse triples until '}'
+	var quads []*Quad
+	for {
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			return nil, fmt.Errorf("unexpected end of input, expected '}'")
+		}
+
+		// Check for closing '}'
+		if p.input[p.pos] == '}' {
+			p.pos++ // skip '}'
+			break
+		}
+
+		// Parse triple
+		triple, err := p.parseTriple()
+		if err != nil {
+			return nil, err
+		}
+		if triple != nil {
+			quad := NewQuad(triple.Subject, triple.Predicate, triple.Object, graphTerm)
 			quads = append(quads, quad)
 		}
 
