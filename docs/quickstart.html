@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Start - Trigo Documentation</title>
+    <meta name="description" content="Quick start guide for Trigo SPARQL query engine - building, running demos, and using as a library">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo-section">
+                <img src="assets/trigo_transparent.webp" alt="Trigo Logo">
+                <h1>Trigo Documentation</h1>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="quickstart.html" class="active">Quick Start</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="http-endpoint.html">HTTP API</a></li>
+                    <li><a href="testing.html">Testing</a></li>
+                    <li><a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <h1>Quick Start Guide</h1>
+
+        <h2>Building Trigo</h2>
+
+        <pre><code># Clone or navigate to the repository
+cd /path/to/trigo
+
+# Build the CLI application
+go build -o trigo ./cmd/trigo
+
+# Verify the build
+./trigo</code></pre>
+
+        <h2>Running the Demo</h2>
+
+        <p>The demo creates a simple knowledge graph about people and their relationships:</p>
+
+        <pre><code>./trigo demo</code></pre>
+
+        <p>This will:</p>
+        <ol>
+            <li>Create a BadgerDB database in <code>./trigo_data</code></li>
+            <li>Insert sample triples about Alice, Bob, and Carol</li>
+            <li>Execute a SPARQL SELECT query</li>
+            <li>Display the results</li>
+        </ol>
+
+        <h2>Project Structure</h2>
+
+        <pre><code>trigo/
+├── cmd/
+│   ├── trigo/
+│   │   └── main.go              # CLI application entry point
+│   └── test-runner/
+│       └── main.go              # W3C SPARQL test suite runner
+├── internal/
+│   ├── encoding/
+│   │   ├── encoder.go           # xxHash3 term encoding
+│   │   └── decoder.go           # Term decoding
+│   ├── storage/
+│   │   ├── storage.go           # Storage interface
+│   │   └── badger.go            # BadgerDB implementation
+│   └── testsuite/
+│       ├── manifest.go          # Test manifest parser
+│       └── runner.go            # Test execution engine
+└── pkg/
+    ├── rdf/
+    │   ├── term.go              # RDF data model
+    │   └── turtle.go            # Turtle/N-Triples parser
+    ├── store/
+    │   ├── store.go             # Triplestore with 11 indexes
+    │   └── query.go             # Pattern matching queries
+    ├── server/
+    │   ├── server.go            # HTTP SPARQL endpoint
+    │   ├── handlers.go          # HTTP request handlers
+    │   └── results/             # Result formatters
+    │       ├── json.go          # SPARQL JSON results
+    │       ├── xml.go           # SPARQL XML results
+    │       ├── csv.go           # SPARQL CSV results
+    │       └── tsv.go           # SPARQL TSV results
+    └── sparql/
+        ├── parser/
+        │   ├── ast.go           # Abstract Syntax Tree
+        │   └── parser.go        # SPARQL parser
+        ├── optimizer/
+        │   └── optimizer.go     # Query optimizer
+        ├── executor/
+        │   └── executor.go      # Volcano iterator execution
+        └── evaluator/
+            └── evaluator.go     # Expression evaluator</code></pre>
+
+        <h2>Using Trigo as a Library</h2>
+
+        <h3>Basic Example</h3>
+
+        <pre><code>package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/aleksaelezovic/trigo/internal/storage"
+    "github.com/aleksaelezovic/trigo/pkg/store"
+    "github.com/aleksaelezovic/trigo/pkg/rdf"
+)
+
+func main() {
+    // Create storage
+    storage, err := storage.NewBadgerStorage("./my_data")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer storage.Close()
+
+    // Create triplestore
+    ts := store.NewTripleStore(storage)
+
+    // Insert some triples
+    alice := rdf.NewNamedNode("http://example.org/alice")
+    name := rdf.NewNamedNode("http://xmlns.com/foaf/0.1/name")
+
+    triple := rdf.NewTriple(alice, name, rdf.NewLiteral("Alice"))
+
+    if err := ts.InsertTriple(triple); err != nil {
+        log.Fatal(err)
+    }
+
+    // Query data
+    pattern := &store.Pattern{
+        Subject:   store.NewVariable("s"),
+        Predicate: store.NewVariable("p"),
+        Object:    store.NewVariable("o"),
+    }
+
+    iter, err := ts.Query(pattern)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer iter.Close()
+
+    // Iterate results
+    for iter.Next() {
+        quad, err := iter.Quad()
+        if err != nil {
+            log.Fatal(err)
+        }
+        fmt.Println(quad)
+    }
+}</code></pre>
+
+        <h3>SPARQL Query Example</h3>
+
+        <pre><code>package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/aleksaelezovic/trigo/pkg/sparql/executor"
+    "github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
+    "github.com/aleksaelezovic/trigo/pkg/sparql/parser"
+    "github.com/aleksaelezovic/trigo/internal/storage"
+    "github.com/aleksaelezovic/trigo/pkg/store"
+)
+
+func main() {
+    // Setup (storage, store)
+    storage, _ := storage.NewBadgerStorage("./my_data")
+    defer storage.Close()
+    ts := store.NewTripleStore(storage)
+
+    // Parse SPARQL query
+    query := `
+        SELECT ?person ?name
+        WHERE {
+            ?person &lt;http://xmlns.com/foaf/0.1/name&gt; ?name .
+        }
+    `
+
+    p := parser.NewParser(query)
+    ast, err := p.Parse()
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Optimize
+    count, _ := ts.Count()
+    stats := &optimizer.Statistics{TotalTriples: count}
+    opt := optimizer.NewOptimizer(stats)
+    optimized, err := opt.Optimize(ast)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Execute
+    exec := executor.NewExecutor(ts)
+    result, err := exec.Execute(optimized)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Process results
+    if selectResult, ok := result.(*executor.SelectResult); ok {
+        for _, binding := range selectResult.Bindings {
+            for varName, term := range binding.Vars {
+                fmt.Printf("%s = %s\n", varName, term)
+            }
+        }
+    }
+}</code></pre>
+
+        <h2>Sample SPARQL Queries</h2>
+
+        <h3>Select All Triples</h3>
+
+        <pre><code>SELECT ?s ?p ?o
+WHERE {
+    ?s ?p ?o .
+}</code></pre>
+
+        <h3>Find People and Their Names</h3>
+
+        <pre><code>SELECT ?person ?name
+WHERE {
+    ?person &lt;http://xmlns.com/foaf/0.1/name&gt; ?name .
+}</code></pre>
+
+        <h3>Find People Alice Knows</h3>
+
+        <pre><code>SELECT ?friend ?friendName
+WHERE {
+    &lt;http://example.org/alice&gt; &lt;http://xmlns.com/foaf/0.1/knows&gt; ?friend .
+    ?friend &lt;http://xmlns.com/foaf/0.1/name&gt; ?friendName .
+}</code></pre>
+
+        <h3>Ask if Bob Knows Anyone</h3>
+
+        <pre><code>ASK {
+    &lt;http://example.org/bob&gt; &lt;http://xmlns.com/foaf/0.1/knows&gt; ?someone .
+}</code></pre>
+
+        <h3>Select with LIMIT and DISTINCT</h3>
+
+        <pre><code>SELECT DISTINCT ?person
+WHERE {
+    ?person &lt;http://xmlns.com/foaf/0.1/name&gt; ?name .
+}
+LIMIT 5</code></pre>
+
+        <h2>Working with Different RDF Terms</h2>
+
+        <h3>Named Nodes (IRIs)</h3>
+
+        <pre><code>node := rdf.NewNamedNode("http://example.org/resource")</code></pre>
+
+        <h3>Blank Nodes</h3>
+
+        <pre><code>blank := rdf.NewBlankNode("b1")</code></pre>
+
+        <h3>Literals</h3>
+
+        <pre><code>// Simple literal
+lit1 := rdf.NewLiteral("Hello World")
+
+// Language-tagged literal
+lit2 := rdf.NewLiteralWithLanguage("Bonjour", "fr")
+
+// Typed literal
+lit3 := rdf.NewIntegerLiteral(42)
+lit4 := rdf.NewDoubleLiteral(3.14)
+lit5 := rdf.NewBooleanLiteral(true)
+lit6 := rdf.NewDateTimeLiteral(time.Now())</code></pre>
+
+        <h3>Triples and Quads</h3>
+
+        <pre><code>// Triple (stored in default graph)
+triple := rdf.NewTriple(subject, predicate, object)
+ts.InsertTriple(triple)
+
+// Quad (with explicit graph)
+graph := rdf.NewNamedNode("http://example.org/graph1")
+quad := rdf.NewQuad(subject, predicate, object, graph)
+ts.InsertQuad(quad)</code></pre>
+
+        <h2>Performance Tips</h2>
+
+        <ol>
+            <li><strong>Batch Inserts</strong>: Use write transactions to insert multiple triples at once</li>
+            <li><strong>Index Selection</strong>: Bind as many terms as possible in patterns for efficient index usage</li>
+            <li><strong>Query Ordering</strong>: More selective patterns should appear first in WHERE clauses</li>
+            <li><strong>Memory</strong>: BadgerDB caches data in memory; adjust cache size based on dataset</li>
+        </ol>
+
+        <h2>Troubleshooting</h2>
+
+        <h3>Database Already Exists</h3>
+
+        <p>If you get "database already exists" error:</p>
+
+        <pre><code>rm -rf ./trigo_data
+./trigo demo</code></pre>
+
+        <h3>Build Errors</h3>
+
+        <p>Ensure you have Go 1.21+ installed:</p>
+
+        <pre><code>go version</code></pre>
+
+        <p>Update dependencies:</p>
+
+        <pre><code>go mod tidy</code></pre>
+
+        <h3>Query Not Returning Expected Results</h3>
+
+        <ul>
+            <li>Check that data was inserted correctly</li>
+            <li>Verify IRI spelling (case-sensitive)</li>
+            <li>Use <code>SELECT * WHERE { ?s ?p ?o }</code> to see all triples</li>
+            <li>Check that the graph context matches (default vs named graphs)</li>
+        </ul>
+
+        <h2>Next Steps</h2>
+
+        <ol>
+            <li>Read <a href="architecture.html">ARCHITECTURE</a> for detailed design documentation</li>
+            <li>Read <a href="index.html">README</a> for feature overview and roadmap</li>
+            <li>Explore the source code in <code>internal/</code> and <code>pkg/</code></li>
+            <li>Try implementing support for additional SPARQL features</li>
+            <li>Run the W3C SPARQL test suite (coming soon)</li>
+        </ol>
+
+        <h2>Using the Web UI</h2>
+
+        <p>Trigo includes an interactive web interface powered by YASGUI:</p>
+
+        <pre><code># Start the server
+./trigo serve
+
+# Open your browser to:
+# http://localhost:8080/</code></pre>
+
+        <p>The web UI provides:</p>
+        <ul>
+            <li>Interactive SPARQL query editor with syntax highlighting</li>
+            <li>Multiple result visualization formats (table, charts, raw)</li>
+            <li>Query history and saved queries</li>
+            <li>Real-time database statistics</li>
+        </ul>
+
+        <p>Try this query in the web UI:</p>
+        <pre><code>SELECT ?person ?name ?age
+WHERE {
+    ?person &lt;http://xmlns.com/foaf/0.1/name&gt; ?name .
+    ?person &lt;http://xmlns.com/foaf/0.1/age&gt; ?age .
+}
+ORDER BY ?age</code></pre>
+
+        <h2>Getting Help</h2>
+
+        <ul>
+            <li>Check existing documentation in this repository</li>
+            <li>Review the source code (it's heavily commented)</li>
+            <li>Compare with Oxigraph architecture: <a href="https://github.com/oxigraph/oxigraph/wiki/Architecture" target="_blank">https://github.com/oxigraph/oxigraph/wiki/Architecture</a></li>
+            <li>Refer to SPARQL 1.1 specification: <a href="https://www.w3.org/TR/sparql11-query/" target="_blank">https://www.w3.org/TR/sparql11-query/</a></li>
+        </ul>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Trigo Project. Licensed under MIT License.</p>
+        <p>
+            <a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/issues" target="_blank">Issues</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/blob/main/CLAUDE.md" target="_blank">AI Assistant Context</a>
+        </p>
+    </footer>
+</body>
+</html>

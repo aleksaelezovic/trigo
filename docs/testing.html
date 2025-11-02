@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Testing - Trigo Documentation</title>
+    <meta name="description" content="W3C test suite validation for Trigo - RDF parser tests, SPARQL compliance, and test results">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo-section">
+                <img src="assets/trigo_transparent.webp" alt="Trigo Logo">
+                <h1>Trigo Documentation</h1>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="quickstart.html">Quick Start</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="http-endpoint.html">HTTP API</a></li>
+                    <li><a href="testing.html" class="active">Testing</a></li>
+                    <li><a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <h1>W3C Test Suites</h1>
+
+        <p>Trigo includes infrastructure for running both the official W3C SPARQL 1.1 test suite and W3C RDF 1.1/1.2 test suites to validate compliance with SPARQL and RDF standards.</p>
+
+        <h2>Setup</h2>
+
+        <p>The W3C test suite is included as a git submodule:</p>
+
+        <pre><code># Clone with submodules
+git clone --recursive https://github.com/aleksaelezovic/trigo.git
+
+# Or initialize submodules after cloning
+git submodule update --init --recursive</code></pre>
+
+        <h2>Test Suite Structure</h2>
+
+        <p>The test suite is located in <code>testdata/rdf-tests/</code> and includes:</p>
+
+        <ul>
+            <li><strong>sparql10/</strong> - SPARQL 1.0 tests</li>
+            <li><strong>sparql11/</strong> - SPARQL 1.1 Query and Update tests</li>
+            <li><strong>sparql12/</strong> - SPARQL 1.2 tests</li>
+            <li><strong>rdf/rdf11/</strong> - RDF 1.1 parser tests (Turtle, N-Triples, N-Quads, TriG, RDF/XML)</li>
+            <li><strong>rdf/rdf12/</strong> - RDF 1.2 parser tests (with RDF-star support)</li>
+        </ul>
+
+        <h3>Test Categories</h3>
+
+        <p>Tests are organized by feature:</p>
+
+        <pre><code>sparql11/
+├── syntax-query/        # Query syntax (positive/negative)
+├── syntax-update/       # Update syntax tests
+├── aggregates/          # COUNT, SUM, AVG, etc.
+├── bind/                # BIND clause
+├── bindings/            # VALUES clause
+├── construct/           # CONSTRUCT queries
+├── exists/              # EXISTS and NOT EXISTS
+├── functions/           # Built-in functions
+├── grouping/            # GROUP BY
+├── negation/            # MINUS, FILTER NOT EXISTS
+├── property-path/       # Property paths
+├── subquery/            # Subqueries
+└── ...</code></pre>
+
+        <h2>Running Tests</h2>
+
+        <h3>Build the Test Runner</h3>
+
+        <pre><code>go build -o test-runner ./cmd/test-runner</code></pre>
+
+        <h3>Run Specific Test Suite</h3>
+
+        <pre><code># Run SPARQL syntax tests
+./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query
+
+# Run a specific SPARQL manifest
+./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query/manifest.ttl
+
+# Run RDF parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle      # Turtle parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-triples   # N-Triples parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-quads     # N-Quads parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-trig        # TriG parser tests
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml         # RDF/XML parser tests
+
+# Run RDF 1.2 parser tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-turtle      # RDF 1.2 Turtle tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-n-triples   # RDF 1.2 N-Triples tests
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-trig        # RDF 1.2 TriG tests</code></pre>
+
+        <h3>Example Output</h3>
+
+        <pre><code>📋 Running manifest: testdata/rdf-tests/sparql/sparql11/syntax-query/manifest.ttl
+   Found 94 tests
+
+  ✅ PASS: syntax-construct-where-02.rq
+  ❌ FAIL: syntax-aggregate-01.rq
+  ⏭️  SKIP: syntax-update-01.ru
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 TEST SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total:   94
+Passed:  29 (30.9%)
+Failed:  64
+Skipped: 1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</code></pre>
+
+        <h2>Test Types</h2>
+
+        <h3>SPARQL Test Types</h3>
+
+        <h4>Positive Syntax Tests</h4>
+
+        <p>Verify that valid SPARQL queries parse successfully:</p>
+
+        <pre><code>:test1 rdf:type mf:PositiveSyntaxTest11 ;
+    mf:name "Basic SELECT" ;
+    mf:action &lt;query.rq&gt; .</code></pre>
+
+        <h4>Negative Syntax Tests</h4>
+
+        <p>Verify that invalid queries are rejected:</p>
+
+        <pre><code>:test2 rdf:type mf:NegativeSyntaxTest11 ;
+    mf:name "Invalid WHERE" ;
+    mf:action &lt;bad-query.rq&gt; .</code></pre>
+
+        <h4>Query Evaluation Tests</h4>
+
+        <p>Execute queries against data and compare results:</p>
+
+        <pre><code>:test3 rdf:type mf:QueryEvaluationTest ;
+    mf:name "Basic BGP" ;
+    mf:action [
+        qt:query &lt;query.rq&gt; ;
+        qt:data &lt;data.ttl&gt;
+    ] ;
+    mf:result &lt;result.srx&gt; .</code></pre>
+
+        <h3>RDF Test Types</h3>
+
+        <h4>Positive Syntax Tests</h4>
+
+        <p>Verify that RDF documents parse successfully:</p>
+
+        <pre><code>:test1 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "Basic Turtle" ;
+    mf:action &lt;data.ttl&gt; .</code></pre>
+
+        <h4>Negative Syntax Tests</h4>
+
+        <p>Verify that invalid RDF documents are rejected:</p>
+
+        <pre><code>:test2 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "Invalid Turtle" ;
+    mf:action &lt;bad-data.ttl&gt; .</code></pre>
+
+        <h4>Evaluation Tests</h4>
+
+        <p>Parse RDF documents and compare with expected triples:</p>
+
+        <pre><code>:test3 rdf:type rdft:TestTurtleEval ;
+    mf:name "Complex Turtle" ;
+    mf:action &lt;input.ttl&gt; ;
+    mf:result &lt;expected.nt&gt; .</code></pre>
+
+        <h2>Current Test Support</h2>
+
+        <h3>RDF Parser Tests (RDF 1.1 & 1.2)</h3>
+
+        <h4>Implemented Formats</h4>
+        <ul>
+            <li><strong>Turtle</strong>: Full parser with PREFIX/BASE, property lists, collections
+                <ul>
+                    <li>Pass rate varies by test suite</li>
+                    <li>Some advanced features may not be fully compliant</li>
+                </ul>
+            </li>
+            <li><strong>N-Triples</strong>: 70.0% pass rate (49/70 tests)
+                <ul>
+                    <li>Basic triple parsing</li>
+                    <li>Some strict validation rules not enforced</li>
+                </ul>
+            </li>
+            <li><strong>N-Quads</strong>: Supports named graphs with quad parsing
+                <ul>
+                    <li>Extends N-Triples with graph names</li>
+                </ul>
+            </li>
+            <li><strong>TriG</strong>: Turtle + named graph blocks
+                <ul>
+                    <li>GRAPH blocks and default graph support</li>
+                    <li>Some edge cases may not be handled</li>
+                </ul>
+            </li>
+            <li><strong>RDF/XML</strong>: rdf:Description, properties, datatypes, nested blank nodes
+                <ul>
+                    <li>Common patterns supported</li>
+                    <li>Advanced features like parseType may be limited</li>
+                </ul>
+            </li>
+            <li><strong>JSON-LD</strong>: @context, @id, @value, @type, @language
+                <ul>
+                    <li>Basic JSON-LD patterns supported</li>
+                    <li>Full context processing not yet implemented</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h4>Test Results</h4>
+        <ul>
+            <li><strong>rdf11/rdf-turtle</strong>: 62.2% pass rate (184/296 tests) - <strong>IMPROVED from 44.4%</strong>
+                <ul>
+                    <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
+                    <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
+                    <li>Anonymous blank nodes [], empty collections ()</li>
+                    <li>@base directive and relative IRI resolution</li>
+                    <li>Blank node property lists (partial), collections with items, some PName escapes</li>
+                </ul>
+            </li>
+            <li><strong>rdf11/rdf-n-triples</strong>: 100.0% pass rate (70/70 tests) - <strong>PERFECT! Improved from 84.3%</strong>
+                <ul>
+                    <li>Strict N-Triples validation (no PREFIX/BASE, no abbreviations, no bare literals)</li>
+                    <li>Complete IRI validation with Unicode escape support</li>
+                    <li>Proper escape sequence validation (only \t, \b, \n, \r, \f, \\, \", \uXXXX, \UXXXXXXXX)</li>
+                    <li>All negative syntax tests passing</li>
+                </ul>
+            </li>
+            <li><strong>rdf11/rdf-n-quads</strong>: 100.0% pass rate (87/87 tests) - <strong>PERFECT! Improved from 75.9%</strong>
+                <ul>
+                    <li>Strict N-Quads validation (same as N-Triples + optional graph component)</li>
+                    <li>Complete IRI validation in all positions including graph names</li>
+                    <li>Language tag validation (must start with letter)</li>
+                    <li>All negative syntax tests passing</li>
+                </ul>
+            </li>
+            <li><strong>rdf11/rdf-trig</strong>: 46.0% pass rate (154/335 tests) - <strong>IMPROVED from 32.2%</strong>
+                <ul>
+                    <li>Anonymous graph blocks <code>{ triples }</code></li>
+                    <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
+                    <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
+                    <li>Complex blank node patterns, collections (inherited from Turtle parser)</li>
+                </ul>
+            </li>
+            <li><strong>rdf11/rdf-xml</strong>: 38.8% pass rate (64/165 tests) - <strong>IMPROVED from 20.6%</strong>
+                <ul>
+                    <li>Basic rdf:Description, simple properties</li>
+                    <li>RDF containers (rdf:Bag, rdf:Seq, rdf:Alt) with blank node subjects</li>
+                    <li>Auto-numbered rdf:li elements (rdf:_1, rdf:_2, ...)</li>
+                    <li>Explicit rdf:_N properties</li>
+                    <li>xml:base for base URI resolution</li>
+                    <li>rdf:ID attribute handling with document base URI</li>
+                    <li>Property attributes on rdf:Description elements</li>
+                    <li>rdf:parseType="Resource" for blank node objects</li>
+                    <li>Property attributes on property elements (creates blank nodes)</li>
+                    <li>Document base URI support (W3C canonical URIs for test files)</li>
+                    <li>Blank node isomorphism (affects many tests), reification, negative test validation</li>
+                </ul>
+            </li>
+            <li><strong>rdf12/</strong>: Latest RDF 1.2 specifications including RDF-star features
+                <ul>
+                    <li>Test support infrastructure in place</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p><strong>Recent Improvements (Phase 1):</strong></p>
+        <ul>
+            <li>Fixed manifest parser to correctly identify test types (improved N-Quads detection)</li>
+            <li>Added comprehensive Unicode escape sequence support (\uXXXX, \UXXXXXXXX)</li>
+            <li>Added single-quote and triple-quote literal support (''', """)</li>
+            <li>Implemented anonymous blank nodes [] and empty collections ()</li>
+            <li>Added @base directive with relative IRI resolution (RFC 3986)</li>
+            <li>Implemented numeric literals (integers, decimals with proper xsd:decimal type, doubles with scientific notation)</li>
+            <li>Added boolean literal support (true/false with xsd:boolean type)</li>
+            <li><strong>Turtle compliance improved: 44.4% → 62.2%</strong> (+17.8 percentage points, +45 tests)</li>
+        </ul>
+
+        <p><strong>Recent Improvements (Phase 2 - TriG & RDF/XML):</strong></p>
+        <ul>
+            <li><strong>TriG Parser Enhancements:</strong>
+                <ul>
+                    <li>Implemented anonymous graph blocks <code>{ triples }</code></li>
+                    <li>Implemented named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
+                    <li>Added lookahead parsing to distinguish graph blocks from regular triples</li>
+                    <li><strong>TriG compliance improved: 32.2% → 46.0%</strong> (+13.8 percentage points, +46 tests)</li>
+                </ul>
+            </li>
+            <li><strong>RDF/XML Parser Enhancements (Phase 2a):</strong>
+                <ul>
+                    <li>Implemented RDF containers (rdf:Bag, rdf:Seq, rdf:Alt)</li>
+                    <li>Added auto-numbered rdf:li element support (rdf:_1, rdf:_2, etc.)</li>
+                    <li>Implemented explicit rdf:_N property handling</li>
+                    <li>Added xml:base tracking for base URI resolution</li>
+                    <li>Implemented rdf:ID attribute handling with base URI concatenation</li>
+                    <li>Added property attribute support on rdf:Description elements</li>
+                    <li>Implemented typed node parsing (elements with implicit rdf:type)</li>
+                </ul>
+            </li>
+            <li><strong>RDF/XML Parser Enhancements (Phase 2b):</strong>
+                <ul>
+                    <li>Added rdf:parseType="Resource" support for blank node objects</li>
+                    <li>Implemented document base URI with SetBaseURI() method</li>
+                    <li>Test runner now provides W3C canonical URIs for test files</li>
+                    <li>Added property attributes on property elements (structured values)</li>
+                    <li>Proper xml: namespace attribute filtering (xml:lang, xml:space, etc.)</li>
+                    <li><strong>RDF/XML compliance improved: 20.6% → 38.8%</strong> (+18.2 percentage points, +26 tests)</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3>Syntax Tests (Parser Validation)</h3>
+        <ul>
+            <li><strong>Pass Rate: 69.1%</strong> (65/94 tests in syntax-query suite)</li>
+            <li>All SELECT expression tests (5/5)</li>
+            <li>All aggregate syntax tests (15/15)</li>
+            <li>All IN/NOT IN tests (3/3)</li>
+            <li>EXISTS/NOT EXISTS parsing</li>
+            <li>Property list shorthand (semicolon/comma)</li>
+            <li>Boolean literals (true/false)</li>
+        </ul>
+
+        <h3>SPARQL Execution Tests (End-to-End Validation)</h3>
+
+        <h4>Implemented and Validated</h4>
+        <ul>
+            <li><strong>BIND expressions</strong>: 70.0% pass rate (7/10 tests)
+                <ul>
+                    <li>Basic BIND with expressions</li>
+                    <li>BIND variables in subsequent patterns</li>
+                    <li>FILTER on BIND variables</li>
+                    <li>Known limitations: UNION scoping, forward references</li>
+                </ul>
+            </li>
+            <li><strong>CONSTRUCT queries</strong>: 28.6% pass rate (2/7 tests)
+                <ul>
+                    <li>Template instantiation</li>
+                    <li>CONSTRUCT WHERE shorthand</li>
+                    <li>N-Triples output</li>
+                </ul>
+            </li>
+            <li><strong>Basic graph patterns</strong>: Full support
+                <ul>
+                    <li>Triple patterns with variables</li>
+                    <li>Nested loop joins</li>
+                    <li>Join ordering optimization</li>
+                </ul>
+            </li>
+            <li><strong>Query modifiers</strong>: Full support
+                <ul>
+                    <li>DISTINCT (hash-based deduplication)</li>
+                    <li>LIMIT and OFFSET</li>
+                    <li>ORDER BY (ASC/DESC)</li>
+                </ul>
+            </li>
+            <li><strong>Complex patterns</strong>: Full support
+                <ul>
+                    <li>OPTIONAL (left outer join)</li>
+                    <li>UNION (pattern alternation)</li>
+                    <li>MINUS (set difference)</li>
+                    <li>GRAPH (named graph queries)</li>
+                </ul>
+            </li>
+            <li><strong>FILTER expressions</strong>: 20+ operators and functions
+                <ul>
+                    <li>Logical operators (&amp;&amp;, ||, !)</li>
+                    <li>Comparison operators (=, !=, &lt;, &gt;, &lt;=, &gt;=)</li>
+                    <li>Arithmetic operators (+, -, *, /)</li>
+                    <li>IN/NOT IN operators</li>
+                    <li>String functions (STRLEN, SUBSTR, UCASE, LCASE, CONCAT, CONTAINS, STRSTARTS, STRENDS)</li>
+                    <li>Type checking (BOUND, isIRI, isBlank, isLiteral, isNumeric)</li>
+                    <li>Numeric functions (ABS, CEIL, FLOOR, ROUND)</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h4>Parsed But Not Executed</h4>
+        <ul>
+            <li><strong>EXISTS/NOT EXISTS</strong>: Parser complete, evaluation TODO</li>
+            <li><strong>Aggregates</strong>: Syntax supported (COUNT, SUM, AVG, MIN, MAX, GROUP_CONCAT, SAMPLE)</li>
+            <li><strong>GROUP BY</strong>: Parsed with variables and expressions</li>
+            <li><strong>HAVING</strong>: Parsed with filter conditions</li>
+            <li><strong>DESCRIBE</strong>: Parser complete, execution TODO</li>
+        </ul>
+
+        <h4>Not Yet Implemented</h4>
+        <ul>
+            <li>VALUES clause</li>
+            <li>Subqueries (detected but not parsed)</li>
+            <li>Property paths</li>
+            <li>REGEX function</li>
+            <li>Date/time functions</li>
+            <li>Hash functions (MD5, SHA1, etc.)</li>
+            <li>UPDATE operations</li>
+            <li>Service federation</li>
+        </ul>
+
+        <h2>Implementation Details</h2>
+
+        <h3>Test Runner Architecture</h3>
+
+        <pre><code>Test Runner
+    ↓
+Manifest Parser (.ttl files)
+    ↓
+Test Evaluator
+    ↓
+├─ SPARQL Syntax Tests → SPARQL Parser
+├─ SPARQL Evaluation Tests → Full Pipeline:
+│   ├─ Turtle Parser (load test data)
+│   ├─ SPARQL Parser (parse query)
+│   ├─ Optimizer (build execution plan)
+│   ├─ Executor (run query)
+│   ├─ SPARQL XML Parser (parse expected results)
+│   └─ Result Comparator (validate correctness)
+├─ RDF Positive Syntax Tests → RDF Parser (validate parse success)
+├─ RDF Negative Syntax Tests → RDF Parser (validate parse failure)
+├─ RDF Evaluation Tests → RDF Parser + Triple Comparator
+│   ├─ Parse input RDF (Turtle/TriG/RDF-XML/JSON-LD)
+│   ├─ Parse expected N-Triples output
+│   └─ Compare triples (order-independent, blank node handling)
+└─ SPARQL Update Tests → (TODO)</code></pre>
+
+        <h3>Key Components</h3>
+
+        <p><strong>Turtle Parser</strong> (<code>pkg/rdf/turtle.go</code>):</p>
+        <ul>
+            <li>Loads RDF test data from <code>.ttl</code> files</li>
+            <li>Supports PREFIX/BASE declarations</li>
+            <li>Handles IRIs, blank nodes, literals</li>
+            <li>Supports datatypes and language tags</li>
+            <li>Sufficient for W3C test data files</li>
+        </ul>
+
+        <p><strong>SPARQL XML Parser</strong> (<code>pkg/server/results/xml.go</code>):</p>
+        <ul>
+            <li>Parses expected results from <code>.srx</code> files</li>
+            <li>Converts to RDF term bindings</li>
+            <li>Supports all RDF term types</li>
+            <li>Enables order-independent result comparison</li>
+        </ul>
+
+        <p><strong>Query Evaluation</strong> (<code>internal/testsuite/runner.go</code>):</p>
+        <ol>
+            <li>Clear store between tests</li>
+            <li>Load test data using Turtle parser</li>
+            <li>Parse SPARQL query</li>
+            <li>Optimize query plan</li>
+            <li>Execute query with full pipeline</li>
+            <li>Parse expected results</li>
+            <li>Compare actual vs expected (order-independent)</li>
+        </ol>
+
+        <h3>Manifest Format</h3>
+
+        <p>Manifests are Turtle files describing tests:</p>
+
+        <pre><code>@prefix mf: &lt;http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#&gt; .
+@prefix qt: &lt;http://www.w3.org/2001/sw/DataAccess/tests/test-query#&gt; .
+
+&lt;&gt; rdf:type mf:Manifest ;
+    mf:entries (
+        :test1
+        :test2
+    ) .
+
+:test1 a mf:PositiveSyntaxTest11 ;
+    mf:name "Test Name" ;
+    mf:action &lt;query-file.rq&gt; .</code></pre>
+
+        <h2>Adding Test Support</h2>
+
+        <p>To add support for a new test type:</p>
+
+        <ol>
+            <li><strong>Update Manifest Parser</strong> (<code>internal/testsuite/manifest.go</code>)
+                <ul>
+                    <li>Add new <code>TestType</code> constant</li>
+                    <li>Update parser to recognize new test type</li>
+                </ul>
+            </li>
+            <li><strong>Implement Test Evaluator</strong> (<code>internal/testsuite/runner.go</code>)
+                <ul>
+                    <li>Add case in <code>runTest()</code> switch</li>
+                    <li>Implement evaluation function</li>
+                </ul>
+            </li>
+            <li><strong>Add Required Features</strong> (if needed)
+                <ul>
+                    <li>Extend parser for new syntax</li>
+                    <li>Add optimizer support</li>
+                    <li>Implement executor operators</li>
+                </ul>
+            </li>
+        </ol>
+
+        <h2>Testing Philosophy</h2>
+
+        <p>The W3C SPARQL test suite serves multiple purposes:</p>
+
+        <ol>
+            <li><strong>Compliance Validation</strong> - Ensure standard conformance</li>
+            <li><strong>Regression Testing</strong> - Catch breaking changes</li>
+            <li><strong>Feature Tracking</strong> - Identify gaps in implementation</li>
+            <li><strong>Documentation</strong> - Tests demonstrate expected behavior</li>
+        </ol>
+
+        <h2>Integration with CI/CD</h2>
+
+        <h3>GitHub Actions Example</h3>
+
+        <pre><code>name: SPARQL Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build Test Runner
+        run: go build -o test-runner ./cmd/test-runner
+
+      - name: Run Syntax Tests
+        run: ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query</code></pre>
+
+        <h2>References</h2>
+
+        <ul>
+            <li><a href="https://www.w3.org/2009/sparql/docs/tests/" target="_blank">W3C SPARQL 1.1 Test Cases</a></li>
+            <li><a href="https://github.com/w3c/rdf-tests" target="_blank">RDF Test Suite Repository</a></li>
+            <li><a href="https://www.w3.org/TR/sparql11-query/" target="_blank">SPARQL 1.1 Query Specification</a></li>
+            <li><a href="https://www.w3.org/2001/sw/DataAccess/tests/test-manifest" target="_blank">Test Manifest Vocabulary</a></li>
+        </ul>
+
+        <h2>Future Improvements</h2>
+
+        <ul>
+            <li>Complete evaluation test support</li>
+            <li>Add UPDATE test support</li>
+            <li>Implement result comparison (XML, JSON, CSV)</li>
+            <li>Add graph isomorphism checking</li>
+            <li>Support federated query tests</li>
+            <li>Generate HTML test reports</li>
+            <li>Track compliance percentage over time</li>
+            <li>Add benchmarking for performance tests</li>
+        </ul>
+
+        <h2>Contributing</h2>
+
+        <p>When adding new SPARQL features:</p>
+
+        <ol>
+            <li>Run relevant test suite section</li>
+            <li>Document pass rate in commit message</li>
+            <li>Create issues for failing tests</li>
+            <li>Update this document with current status</li>
+        </ol>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Trigo Project. Licensed under MIT License.</p>
+        <p>
+            <a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/issues" target="_blank">Issues</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/blob/main/CLAUDE.md" target="_blank">AI Assistant Context</a>
+        </p>
+    </footer>
+</body>
+</html>

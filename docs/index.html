@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trigo Documentation - RDF Triplestore & SPARQL Engine</title>
+    <meta name="description" content="Trigo is a high-performance RDF triplestore and SPARQL 1.1 query engine written in Go. Full documentation, guides, and API reference.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-touch-icon.png">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo-section">
+                <img src="assets/trigo_transparent.webp" alt="Trigo Logo">
+                <h1>Trigo Documentation</h1>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="index.html" class="active">Home</a></li>
+                    <li><a href="quickstart.html">Quick Start</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="http-endpoint.html">HTTP API</a></li>
+                    <li><a href="testing.html">Testing</a></li>
+                    <li><a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <img src="assets/trigo_transparent.webp" alt="Trigo">
+            <h2>Trigo</h2>
+            <p>A high-performance RDF triplestore and SPARQL 1.1 query engine written in Go</p>
+            <div class="cta-buttons">
+                <a href="quickstart.html" class="btn btn-primary">Get Started</a>
+                <a href="https://github.com/aleksaelezovic/trigo" class="btn btn-secondary" target="_blank">View on GitHub</a>
+            </div>
+        </section>
+
+        <section>
+            <h2>What is Trigo?</h2>
+            <p>
+                Trigo is a modern RDF triplestore inspired by Oxigraph's architecture, implementing:
+            </p>
+            <ul>
+                <li><strong>Full SPARQL 1.1 support</strong> - SELECT, CONSTRUCT, ASK, DESCRIBE queries with advanced patterns</li>
+                <li><strong>Multiple RDF formats</strong> - Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD parsers</li>
+                <li><strong>Efficient storage</strong> - 11-index architecture with BadgerDB backend</li>
+                <li><strong>HTTP SPARQL endpoint</strong> - W3C SPARQL 1.1 Protocol compliant</li>
+                <li><strong>Named graphs support</strong> - Full quad store with graph-level operations</li>
+                <li><strong>High performance</strong> - xxHash3 encoding, optimal index selection, query optimization</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Documentation</h2>
+            <div class="doc-grid">
+                <div class="doc-card">
+                    <h3>Quick Start</h3>
+                    <p>Get up and running with Trigo in minutes. Build the project, load data, and run your first SPARQL query.</p>
+                    <a href="quickstart.html">Read Guide →</a>
+                </div>
+
+                <div class="doc-card">
+                    <h3>Architecture</h3>
+                    <p>Deep dive into Trigo's design: 11-index storage, query optimization, Volcano iterator model, and encoding strategies.</p>
+                    <a href="architecture.html">Learn More →</a>
+                </div>
+
+                <div class="doc-card">
+                    <h3>HTTP Endpoint</h3>
+                    <p>Complete HTTP API reference. Query via REST, bulk data loading, result formats, and client examples.</p>
+                    <a href="http-endpoint.html">API Reference →</a>
+                </div>
+
+                <div class="doc-card">
+                    <h3>Testing & Compliance</h3>
+                    <p>W3C test suite integration, current compliance rates, RDF parser tests, and SPARQL execution validation.</p>
+                    <a href="testing.html">View Tests →</a>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Key Features</h2>
+            <div class="doc-grid">
+                <div class="doc-card">
+                    <h3>🚀 High Performance</h3>
+                    <p>Optimal index selection, query optimization, lazy evaluation, and efficient encoding with xxHash3.</p>
+                </div>
+
+                <div class="doc-card">
+                    <h3>📊 SPARQL 1.1</h3>
+                    <p>Full query support with OPTIONAL, UNION, MINUS, GRAPH, BIND, and 20+ functions and operators.</p>
+                </div>
+
+                <div class="doc-card">
+                    <h3>🔄 RDF Formats</h3>
+                    <p>Parse and serialize Turtle, N-Triples, N-Quads, TriG, RDF/XML, and JSON-LD with high compliance.</p>
+                </div>
+
+                <div class="doc-card">
+                    <h3>🌐 HTTP API</h3>
+                    <p>W3C SPARQL 1.1 Protocol compliant endpoint with JSON, XML, CSV, and TSV result formats.</p>
+                </div>
+
+                <div class="doc-card">
+                    <h3>✅ Standards Compliant</h3>
+                    <p>Validated against W3C test suites for RDF 1.1 and SPARQL 1.1 specifications.</p>
+                </div>
+
+                <div class="doc-card">
+                    <h3>📦 Easy Integration</h3>
+                    <p>Use as a library in your Go applications or run as a standalone SPARQL endpoint server.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Quick Example</h2>
+            <pre><code>// Start the SPARQL endpoint
+./trigo serve
+
+// Query via HTTP
+curl -X POST http://localhost:8080/sparql \
+  -H 'Content-Type: application/sparql-query' \
+  -H 'Accept: application/sparql-results+json' \
+  -d 'SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10'
+
+// Or use as a library
+import (
+    "github.com/aleksaelezovic/trigo/pkg/store"
+    "github.com/aleksaelezovic/trigo/pkg/rdf"
+)
+
+storage, _ := storage.NewBadgerStorage("./data")
+ts := store.NewTripleStore(storage)
+
+triple := rdf.NewTriple(
+    rdf.NewNamedNode("http://example.org/alice"),
+    rdf.NewNamedNode("http://xmlns.com/foaf/0.1/name"),
+    rdf.NewLiteral("Alice"),
+)
+ts.InsertTriple(triple)</code></pre>
+        </section>
+
+        <section>
+            <h2>Test Results</h2>
+            <p>Trigo is validated against the official W3C test suites:</p>
+            <ul>
+                <li><strong>RDF N-Triples:</strong> <span class="badge badge-success">100% (70/70 tests)</span></li>
+                <li><strong>RDF N-Quads:</strong> <span class="badge badge-success">100% (87/87 tests)</span></li>
+                <li><strong>RDF Turtle:</strong> <span class="badge badge-success">62.2% (184/296 tests)</span></li>
+                <li><strong>RDF TriG:</strong> <span class="badge badge-warning">46.0% (154/335 tests)</span></li>
+                <li><strong>RDF/XML:</strong> <span class="badge badge-warning">38.8% (64/165 tests)</span></li>
+                <li><strong>SPARQL Syntax:</strong> <span class="badge badge-success">69.1% (65/94 tests)</span></li>
+                <li><strong>SPARQL BIND:</strong> <span class="badge badge-success">70.0% (7/10 tests)</span></li>
+            </ul>
+            <p><a href="testing.html">View detailed test results →</a></p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Trigo Project. Licensed under MIT License.</p>
+        <p>
+            <a href="https://github.com/aleksaelezovic/trigo" target="_blank">GitHub</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/issues" target="_blank">Issues</a> |
+            <a href="https://github.com/aleksaelezovic/trigo/blob/main/CLAUDE.md" target="_blank">AI Assistant Context</a>
+        </p>
+    </footer>
+</body>
+</html>

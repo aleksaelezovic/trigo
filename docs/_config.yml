@@ -1,0 +1,23 @@
+# GitHub Pages Configuration for Trigo Documentation
+# This file is required for GitHub Pages to properly serve the site
+
+# Site settings
+title: Trigo Documentation
+description: RDF Triplestore and SPARQL 1.1 Query Engine in Go
+url: https://aleksaelezovic.github.io
+baseurl: /trigo
+
+# Build settings
+markdown: kramdown
+theme: null
+
+# Include/Exclude files
+include:
+  - _config.yml
+  - .nojekyll
+exclude:
+  - README.md
+  - CLAUDE.md
+  - "*.go"
+  - "*.mod"
+  - "*.sum"
