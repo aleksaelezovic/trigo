@@ -25,11 +25,17 @@ import (
 // - Property attributes on Description elements
 type RDFXMLParser struct {
 	baseURIStack []string // Stack of xml:base values
+	documentBase string   // Document base URI (file location)
 }
 
 // NewRDFXMLParser creates a new RDF/XML parser
 func NewRDFXMLParser() *RDFXMLParser {
 	return &RDFXMLParser{}
+}
+
+// SetBaseURI sets the document base URI (used for resolving relative URIs and rdf:ID)
+func (p *RDFXMLParser) SetBaseURI(base string) {
+	p.documentBase = base
 }
 
 const (
@@ -41,12 +47,12 @@ func (p *RDFXMLParser) pushBase(base string) {
 	p.baseURIStack = append(p.baseURIStack, base)
 }
 
-// getCurrentBase returns the current base URI (top of stack)
+// getCurrentBase returns the current base URI (xml:base takes precedence, then document base)
 func (p *RDFXMLParser) getCurrentBase() string {
 	if len(p.baseURIStack) > 0 {
 		return p.baseURIStack[len(p.baseURIStack)-1]
 	}
-	return ""
+	return p.documentBase
 }
 
 // resolveID resolves an rdf:ID value against the current base
@@ -414,6 +420,27 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 
 // parsePropertyContent parses the content of a property element and returns the object
 func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.StartElement, blankNodeCounter *int) (Term, error) {
+	// Check for rdf:parseType attribute
+	parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
+	if parseTypeAttr == "Resource" {
+		// Create a blank node for the resource
+		*blankNodeCounter++
+		blankNode := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+
+		// Consume tokens until end element
+		for {
+			token, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := token.(xml.EndElement); ok {
+				break
+			}
+		}
+
+		return blankNode, nil
+	}
+
 	// Check for rdf:resource attribute (object is IRI)
 	resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
 	if resourceAttr != "" {

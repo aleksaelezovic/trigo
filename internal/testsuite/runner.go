@@ -3,6 +3,7 @@ package testsuite
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/internal/encoding"
@@ -462,6 +463,28 @@ func (r *TestRunner) loadExpectedTriples(manifest *TestManifest, test *TestCase)
 	return triples, nil
 }
 
+// filePathToURI converts a file path to a URI for use as base URI
+func (r *TestRunner) filePathToURI(filePath string) string {
+	// W3C test files have a canonical online location
+	// Check if this is a W3C test file
+	if strings.Contains(filePath, "rdf-tests/") {
+		// Extract the path after "rdf-tests/"
+		idx := strings.Index(filePath, "rdf-tests/")
+		if idx != -1 {
+			relativePath := filePath[idx+len("rdf-tests/"):]
+			return "https://w3c.github.io/rdf-tests/" + relativePath
+		}
+	}
+
+	// For non-W3C files, use file:// URI
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		// Fall back to original path
+		absPath = filePath
+	}
+	return "file://" + absPath
+}
+
 // compareTriples compares two sets of triples for equality (order-independent)
 func (r *TestRunner) compareTriples(expected, actual []*rdf.Triple) bool {
 	if len(expected) != len(actual) {
@@ -719,7 +742,7 @@ func (r *TestRunner) runRDFPositiveSyntaxTest(manifest *TestManifest, test *Test
 	}
 
 	// Try to parse the RDF data
-	_, err = r.parseRDFData(string(dataBytes), format)
+	_, err = r.parseRDFData(string(dataBytes), format, dataFile)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
 		return TestResultFail
@@ -743,7 +766,7 @@ func (r *TestRunner) runRDFNegativeSyntaxTest(manifest *TestManifest, test *Test
 	}
 
 	// Try to parse the RDF data - it should fail
-	_, err = r.parseRDFData(string(dataBytes), format)
+	_, err = r.parseRDFData(string(dataBytes), format, dataFile)
 	if err == nil {
 		r.recordError(test, "Data parsed successfully but should have failed")
 		return TestResultFail
@@ -768,7 +791,7 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 		return TestResultError
 	}
 
-	actualTriples, err := r.parseRDFData(string(dataBytes), format)
+	actualTriples, err := r.parseRDFData(string(dataBytes), format, dataFile)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
 		return TestResultFail
@@ -788,10 +811,10 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 	}
 
 	// Expected results are in N-Triples or N-Quads format
-	expectedTriples, err := r.parseRDFData(string(resultBytes), "ntriples")
+	expectedTriples, err := r.parseRDFData(string(resultBytes), "ntriples", "")
 	if err != nil {
 		// Try N-Quads format if N-Triples fails
-		expectedTriples, err = r.parseRDFData(string(resultBytes), "nquads")
+		expectedTriples, err = r.parseRDFData(string(resultBytes), "nquads", "")
 		if err != nil {
 			r.recordError(test, fmt.Sprintf("Failed to parse expected results: %v", err))
 			return TestResultError
@@ -808,7 +831,7 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 }
 
 // parseRDFData parses RDF data in the specified format
-func (r *TestRunner) parseRDFData(data string, format string) ([]*rdf.Triple, error) {
+func (r *TestRunner) parseRDFData(data string, format string, filePath string) ([]*rdf.Triple, error) {
 	switch format {
 	case "turtle":
 		parser := rdf.NewTurtleParser(data)
@@ -842,6 +865,14 @@ func (r *TestRunner) parseRDFData(data string, format string) ([]*rdf.Triple, er
 		return triples, nil
 	case "rdfxml":
 		parser := rdf.NewRDFXMLParser()
+
+		// Set base URI from file path if provided
+		if filePath != "" {
+			// Convert file path to URI
+			baseURI := r.filePathToURI(filePath)
+			parser.SetBaseURI(baseURI)
+		}
+
 		reader := strings.NewReader(data)
 		quads, err := parser.Parse(reader)
 		if err != nil {
