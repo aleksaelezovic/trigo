@@ -61,14 +61,16 @@ header {
 }
 
 .logo-section img {
-    height: 40px;
+    height: 45px;
     width: auto;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 .logo-section h1 {
     font-size: 1.8rem;
     font-weight: 800;
     margin: 0;
+    color: white;
 }
 
 nav ul {
