@@ -493,7 +493,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 			// Check for subquery keywords
 			isSubquery := p.matchKeyword("SELECT") || p.matchKeyword("ASK") ||
-						  p.matchKeyword("CONSTRUCT") || p.matchKeyword("DESCRIBE")
+				p.matchKeyword("CONSTRUCT") || p.matchKeyword("DESCRIBE")
 
 			// Restore position
 			p.pos = savedPos
@@ -640,8 +640,9 @@ func (p *Parser) parseTriplePattern() (*TriplePattern, error) {
 
 // parseTriplePatterns parses triple patterns with property list shorthand (semicolon and comma)
 // Syntax:
-//   ?s ?p1 ?o1 ; ?p2 ?o2 ; ?p3 ?o3 .  (semicolon repeats subject)
-//   ?s ?p ?o1 , ?o2 , ?o3 .           (comma repeats subject and predicate)
+//
+//	?s ?p1 ?o1 ; ?p2 ?o2 ; ?p3 ?o3 .  (semicolon repeats subject)
+//	?s ?p ?o1 , ?o2 , ?o3 .           (comma repeats subject and predicate)
 func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 	var triples []*TriplePattern
 

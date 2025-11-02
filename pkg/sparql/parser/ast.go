@@ -25,14 +25,14 @@ const (
 
 // SelectQuery represents a SELECT query
 type SelectQuery struct {
-	Variables  []*Variable       // Variables to select (* for all)
-	Distinct   bool              // DISTINCT modifier
-	Where      *GraphPattern     // WHERE clause
-	GroupBy    []*GroupCondition // GROUP BY clause
-	Having     []*Filter         // HAVING clause
-	OrderBy    []*OrderCondition // ORDER BY clause
-	Limit      *int              // LIMIT clause
-	Offset     *int              // OFFSET clause
+	Variables []*Variable       // Variables to select (* for all)
+	Distinct  bool              // DISTINCT modifier
+	Where     *GraphPattern     // WHERE clause
+	GroupBy   []*GroupCondition // GROUP BY clause
+	Having    []*Filter         // HAVING clause
+	OrderBy   []*OrderCondition // ORDER BY clause
+	Limit     *int              // LIMIT clause
+	Offset    *int              // OFFSET clause
 }
 
 // ConstructQuery represents a CONSTRUCT query
@@ -49,17 +49,17 @@ type AskQuery struct {
 // DescribeQuery represents a DESCRIBE query
 type DescribeQuery struct {
 	Resources []*rdf.NamedNode // Resources to describe
-	Where     *GraphPattern     // WHERE clause (optional)
+	Where     *GraphPattern    // WHERE clause (optional)
 }
 
 // GraphPattern represents a graph pattern
 type GraphPattern struct {
 	Type     GraphPatternType
 	Patterns []*TriplePattern // For basic graph patterns (kept for backward compatibility)
-	Filters  []*Filter         // FILTER expressions (kept for backward compatibility)
-	Binds    []*Bind           // BIND expressions (kept for backward compatibility)
-	Children []*GraphPattern   // For complex patterns (UNION, OPTIONAL, etc.)
-	Graph    *GraphTerm        // For GRAPH patterns
+	Filters  []*Filter        // FILTER expressions (kept for backward compatibility)
+	Binds    []*Bind          // BIND expressions (kept for backward compatibility)
+	Children []*GraphPattern  // For complex patterns (UNION, OPTIONAL, etc.)
+	Graph    *GraphTerm       // For GRAPH patterns
 	// Elements preserves the textual order of patterns, BINDs, and FILTERs.
 	// This is critical for correct SPARQL semantics where BIND makes variables
 	// available to subsequent patterns.

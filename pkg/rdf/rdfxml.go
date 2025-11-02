@@ -219,8 +219,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					}
 					// Skip xml: namespace attributes (xml:lang, xml:base, xml:space, etc.)
 					if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
-					   strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
-					   (attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+						strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+						(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
 						continue
 					}
 					if attr.Name.Space == "" {
@@ -247,8 +247,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						}
 						// Skip xml: namespace attributes
 						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
-						   strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
-						   (attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+							strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+							(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
 							continue
 						}
 						if attr.Name.Space == "" {

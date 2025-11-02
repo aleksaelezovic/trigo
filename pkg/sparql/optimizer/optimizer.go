@@ -328,12 +328,12 @@ func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (Que
 
 // optimizeBasicGraphPattern optimizes a basic graph pattern.
 // This function handles two execution paths:
-// 1. Order-preserving (when Elements is populated): Processes patterns, BINDs, and
-//    FILTERs in their textual order to ensure BIND variables are available to
-//    subsequent patterns. This is the correct SPARQL semantics.
-// 2. Legacy selectivity-based (fallback): Reorders patterns by selectivity for
-//    optimization, but may produce incorrect results when BIND variables are
-//    used in subsequent patterns.
+//  1. Order-preserving (when Elements is populated): Processes patterns, BINDs, and
+//     FILTERs in their textual order to ensure BIND variables are available to
+//     subsequent patterns. This is the correct SPARQL semantics.
+//  2. Legacy selectivity-based (fallback): Reorders patterns by selectivity for
+//     optimization, but may produce incorrect results when BIND variables are
+//     used in subsequent patterns.
 func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
 	var plan QueryPlan
 
@@ -516,4 +516,3 @@ func (o *Optimizer) selectJoinType(left, right QueryPlan) JoinType {
 	// For now, default to nested loop (simpler to implement)
 	return JoinTypeNestedLoop
 }
-

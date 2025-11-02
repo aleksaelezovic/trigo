@@ -18,17 +18,17 @@ import (
 
 // TestRunner runs W3C SPARQL test suite tests
 type TestRunner struct {
-	store    *store.TripleStore
-	stats    *TestStats
+	store *store.TripleStore
+	stats *TestStats
 }
 
 // TestStats tracks test execution statistics
 type TestStats struct {
-	Total    int
-	Passed   int
-	Failed   int
-	Skipped  int
-	Errors   []TestError
+	Total   int
+	Passed  int
+	Failed  int
+	Skipped int
+	Errors  []TestError
 }
 
 // TestError represents a test failure

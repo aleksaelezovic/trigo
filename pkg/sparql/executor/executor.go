@@ -3,10 +3,10 @@ package executor
 import (
 	"fmt"
 
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/evaluator"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/store"
 )
 
@@ -1106,7 +1106,7 @@ func (it *unionIterator) Binding() *store.Binding {
 }
 
 func (it *unionIterator) Close() error {
-	_ = it.left.Close()  // #nosec G104 - left close error less critical than right close error
+	_ = it.left.Close() // #nosec G104 - left close error less critical than right close error
 	return it.right.Close()
 }
 
@@ -1198,10 +1198,10 @@ func (e *Executor) createOrderByIterator(plan *optimizer.OrderByPlan) (store.Bin
 
 // orderByIterator implements ORDER BY operations
 type orderByIterator struct {
-	input      store.BindingIterator
-	orderBy    []*parser.OrderCondition
-	bindings   []*store.Binding
-	position   int
+	input       store.BindingIterator
+	orderBy     []*parser.OrderCondition
+	bindings    []*store.Binding
+	position    int
 	initialized bool
 }
 

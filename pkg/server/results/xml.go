@@ -12,9 +12,9 @@ import (
 
 // Results represents SPARQL XML query results
 type Results struct {
-	Head    Head            `xml:"head"`
-	Results ResultsElement  `xml:"results"`
-	Boolean *bool           `xml:"boolean"` // For ASK queries
+	Head    Head           `xml:"head"`
+	Results ResultsElement `xml:"results"`
+	Boolean *bool          `xml:"boolean"` // For ASK queries
 }
 
 // Head represents the head element with variable names

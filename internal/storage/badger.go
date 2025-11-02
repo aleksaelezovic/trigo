@@ -124,8 +124,8 @@ func (t *BadgerTransaction) Scan(table store.Table, start, end []byte) (store.It
 
 	return &BadgerIterator{
 		it:         it,
-		prefix:     tablePrefix,     // Use table prefix for stripping
-		scanPrefix: scanPrefix,      // Use full prefix for validation
+		prefix:     tablePrefix, // Use table prefix for stripping
+		scanPrefix: scanPrefix,  // Use full prefix for validation
 		endKey:     endKey,
 		seekKey:    seekKey,
 		started:    false,

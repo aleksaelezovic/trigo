@@ -3,9 +3,9 @@ package evaluator
 import (
 	"fmt"
 
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 	"github.com/aleksaelezovic/trigo/pkg/store"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // Evaluator evaluates SPARQL expressions against bindings

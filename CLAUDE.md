@@ -435,6 +435,252 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - `storage` - Triple store
 - `server` - HTTP API
 
+## Development Workflow
+
+**CRITICAL: This workflow MUST be followed for every code change.**
+
+### Standard Development Process
+
+When implementing features or fixing bugs, follow these steps **in order**:
+
+#### 1. Format Code (ALWAYS)
+```bash
+go fmt ./...
+```
+**Do this first and after any code changes.** This ensures consistent formatting across the codebase.
+
+#### 2. Build and Check Compilation
+```bash
+go build ./...
+```
+Ensures all packages compile without errors. Fix any compilation errors before proceeding.
+
+#### 3. Run Unit Tests
+```bash
+go test ./...
+```
+Or for verbose output:
+```bash
+go test ./... -v
+```
+**All existing tests must pass.** If you break existing tests, fix your code or update tests appropriately.
+
+#### 4. Run Quality Checks (MANDATORY)
+
+**Run ALL three quality checks:**
+
+```bash
+# Check for suspicious constructs
+go vet ./...
+
+# Advanced static analysis
+staticcheck ./...
+
+# Security vulnerability scanning
+gosec -quiet ./...
+```
+
+**All three must pass with no errors before committing.** This is non-negotiable.
+
+**Common Issues:**
+- `go vet`: Catches unreachable code, printf issues, struct tags
+- `staticcheck`: Finds unused code, ineffective assignments, simplifications (use `//lint:ignore` if needed)
+- `gosec`: Security issues like file inclusion, weak crypto (use `#nosec` with justification if needed)
+
+#### 5. Run W3C Test Suite (For RDF/SPARQL Changes)
+
+If you modified RDF parsers or SPARQL components:
+
+```bash
+# Build test runner
+go build -o test-runner ./cmd/test-runner
+
+# Run relevant test suite
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle        # For Turtle changes
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml          # For RDF/XML changes
+./test-runner testdata/rdf-tests/sparql/sparql11/bind       # For SPARQL changes
+```
+
+**Document the results** in your commit message:
+- Before: X% (N/M tests)
+- After: Y% (K/M tests)
+- Change: +Z percentage points
+
+#### 6. Update Documentation (If Needed)
+
+**Update these files when appropriate:**
+
+- `TESTING.md` - Always update for test result changes
+- `README.md` - Update for new features or API changes
+- `CLAUDE.md` - Update for architectural changes or new patterns
+
+**Test results in TESTING.md format:**
+```markdown
+- **rdf11/rdf-xml**: 38.8% pass rate (64/165 tests) ✅ **IMPROVED from 34.5%**
+```
+
+#### 7. Stage and Commit Changes
+
+```bash
+# Check what changed
+git status
+git diff
+
+# Stage specific files (prefer specific files over '.')
+git add pkg/rdf/rdfxml.go internal/testsuite/runner.go TESTING.md
+
+# Commit with proper message
+git commit -m "feat(rdf): Add property attributes support
+
+Detailed description here...
+
+RDF/XML compliance: 34.5% → 38.8% (+4.3pp, +7 tests)
+
+All quality checks pass: go vet, staticcheck, gosec
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+#### 8. Push to Remote (Optional)
+
+```bash
+# Push to main branch
+git push origin main
+
+# Or push to feature branch
+git push origin feature-branch-name
+```
+
+### Quick Workflow Checklist
+
+Use this checklist for every change:
+
+- [ ] `go fmt ./...` - Format code
+- [ ] `go build ./...` - Verify compilation
+- [ ] `go test ./...` - Run unit tests
+- [ ] `go vet ./...` - Check for issues
+- [ ] `staticcheck ./...` - Static analysis
+- [ ] `gosec -quiet ./...` - Security scan
+- [ ] Run W3C test suite (if applicable)
+- [ ] Update `TESTING.md` (if test results changed)
+- [ ] Update `README.md` (if features/API changed)
+- [ ] `git add <files>` - Stage specific files
+- [ ] `git commit -m "..."` - Commit with proper message
+- [ ] Document test results in commit message
+- [ ] `git push` (if ready)
+
+### When to Commit
+
+**Commit frequency guidelines:**
+
+✅ **DO commit when:**
+- A feature is complete and all checks pass
+- A bug is fixed and verified
+- Tests pass rate improves significantly
+- A logical unit of work is done
+
+❌ **DON'T commit when:**
+- Code doesn't compile
+- Tests are failing (unless intentionally adding failing tests)
+- Quality checks have errors
+- Work is incomplete and would break others
+
+**Prefer smaller, focused commits over large monolithic ones.**
+
+### Example: Complete Development Session
+
+```bash
+# 1. Make code changes in your editor
+
+# 2. Format
+go fmt ./...
+
+# 3. Build
+go build ./...
+
+# 4. Test
+go test ./...
+
+# 5. Quality checks
+go vet ./... && staticcheck ./... && gosec -quiet ./...
+
+# 6. Run W3C tests (if applicable)
+go build -o test-runner ./cmd/test-runner
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml
+
+# 7. Update docs
+# Edit TESTING.md with new test results
+
+# 8. Commit
+git add pkg/rdf/rdfxml.go TESTING.md
+git commit -m "feat(rdf): Implement feature X
+
+- Detail 1
+- Detail 2
+
+Test results: 30% → 35% (+5pp, +8 tests)
+
+All quality checks pass: go vet, staticcheck, gosec
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+# 9. Push
+git push origin main
+```
+
+### Emergency Fixes
+
+If you need to commit a quick fix:
+
+**Minimum requirements:**
+1. `go fmt ./...`
+2. `go build ./...`
+3. `go vet ./...`
+4. Commit
+
+Even for emergency fixes, **never skip formatting and vet checks.**
+
+### Working with Feature Branches
+
+```bash
+# Create feature branch
+git checkout -b feature/new-parser
+
+# Make changes, follow full workflow
+
+# Commit to feature branch
+git add .
+git commit -m "feat: ..."
+git push origin feature/new-parser
+
+# When ready to merge
+git checkout main
+git merge feature/new-parser
+git push origin main
+```
+
+### Handling Quality Check Failures
+
+**If staticcheck complains about unused code:**
+```go
+// Option 1: Remove unused code
+// Option 2: Use lint directive with explanation
+//lint:ignore U1000 This will be used in future feature X
+func unusedFunction() { }
+```
+
+**If gosec flags false positives:**
+```go
+// Use #nosec with clear justification
+data, err := os.ReadFile(path) // #nosec G304 - test suite reads test files
+```
+
+**Never suppress warnings without understanding why they exist.**
+
 ### Building and Running
 
 **Build Everything:**

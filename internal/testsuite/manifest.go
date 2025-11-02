@@ -37,18 +37,18 @@ type TestType string
 
 const (
 	// SPARQL Syntax tests
-	TestTypePositiveSyntax       TestType = "PositiveSyntaxTest"
-	TestTypePositiveSyntax11     TestType = "PositiveSyntaxTest11"
-	TestTypeNegativeSyntax       TestType = "NegativeSyntaxTest"
-	TestTypeNegativeSyntax11     TestType = "NegativeSyntaxTest11"
+	TestTypePositiveSyntax   TestType = "PositiveSyntaxTest"
+	TestTypePositiveSyntax11 TestType = "PositiveSyntaxTest11"
+	TestTypeNegativeSyntax   TestType = "NegativeSyntaxTest"
+	TestTypeNegativeSyntax11 TestType = "NegativeSyntaxTest11"
 
 	// SPARQL Evaluation tests
-	TestTypeQueryEvaluation      TestType = "QueryEvaluationTest"
+	TestTypeQueryEvaluation TestType = "QueryEvaluationTest"
 
 	// SPARQL Result format tests
-	TestTypeCSVResultFormat      TestType = "CSVResultFormatTest"
-	TestTypeTSVResultFormat      TestType = "TSVResultFormatTest"
-	TestTypeJSONResultFormat     TestType = "JSONResultFormatTest"
+	TestTypeCSVResultFormat  TestType = "CSVResultFormatTest"
+	TestTypeTSVResultFormat  TestType = "TSVResultFormatTest"
+	TestTypeJSONResultFormat TestType = "JSONResultFormatTest"
 
 	// SPARQL Update tests
 	TestTypePositiveUpdateSyntax TestType = "PositiveUpdateSyntaxTest11"
@@ -69,13 +69,13 @@ const (
 	TestTypeNQuadsNegativeSyntax TestType = "TestNQuadsNegativeSyntax"
 
 	// RDF TriG tests
-	TestTypeTrigEval             TestType = "TestTrigEval"
-	TestTypeTrigPositiveSyntax   TestType = "TestTrigPositiveSyntax"
-	TestTypeTrigNegativeSyntax   TestType = "TestTrigNegativeSyntax"
+	TestTypeTrigEval           TestType = "TestTrigEval"
+	TestTypeTrigPositiveSyntax TestType = "TestTrigPositiveSyntax"
+	TestTypeTrigNegativeSyntax TestType = "TestTrigNegativeSyntax"
 
 	// RDF/XML tests
-	TestTypeXMLEval              TestType = "TestXMLEval"
-	TestTypeXMLNegativeSyntax    TestType = "TestXMLNegativeSyntax"
+	TestTypeXMLEval           TestType = "TestXMLEval"
+	TestTypeXMLNegativeSyntax TestType = "TestXMLNegativeSyntax"
 
 	// JSON-LD tests (if needed in future)
 	TestTypeJSONLDEval           TestType = "TestJSONLDEval"
@@ -147,36 +147,36 @@ func ParseManifest(path string) (*TestManifest, error) {
 				currentTest.Type = TestTypeJSONResultFormat
 			} else if strings.Contains(line, "QueryEvaluationTest") {
 				currentTest.Type = TestTypeQueryEvaluation
-			// RDF Turtle tests
+				// RDF Turtle tests
 			} else if strings.Contains(line, "TestTurtleEval") {
 				currentTest.Type = TestTypeTurtleEval
 			} else if strings.Contains(line, "TestTurtlePositiveSyntax") {
 				currentTest.Type = TestTypeTurtlePositiveSyntax
 			} else if strings.Contains(line, "TestTurtleNegativeSyntax") {
 				currentTest.Type = TestTypeTurtleNegativeSyntax
-			// RDF N-Triples tests
+				// RDF N-Triples tests
 			} else if strings.Contains(line, "TestNTriplesPositiveSyntax") {
 				currentTest.Type = TestTypeNTriplesPositiveSyntax
 			} else if strings.Contains(line, "TestNTriplesNegativeSyntax") {
 				currentTest.Type = TestTypeNTriplesNegativeSyntax
-			// RDF N-Quads tests
+				// RDF N-Quads tests
 			} else if strings.Contains(line, "TestNQuadsPositiveSyntax") {
 				currentTest.Type = TestTypeNQuadsPositiveSyntax
 			} else if strings.Contains(line, "TestNQuadsNegativeSyntax") {
 				currentTest.Type = TestTypeNQuadsNegativeSyntax
-			// RDF TriG tests
+				// RDF TriG tests
 			} else if strings.Contains(line, "TestTrigEval") {
 				currentTest.Type = TestTypeTrigEval
 			} else if strings.Contains(line, "TestTrigPositiveSyntax") {
 				currentTest.Type = TestTypeTrigPositiveSyntax
 			} else if strings.Contains(line, "TestTrigNegativeSyntax") {
 				currentTest.Type = TestTypeTrigNegativeSyntax
-			// RDF/XML tests
+				// RDF/XML tests
 			} else if strings.Contains(line, "TestXMLEval") {
 				currentTest.Type = TestTypeXMLEval
 			} else if strings.Contains(line, "TestXMLNegativeSyntax") {
 				currentTest.Type = TestTypeXMLNegativeSyntax
-			// JSON-LD tests
+				// JSON-LD tests
 			} else if strings.Contains(line, "TestJSONLDEval") {
 				currentTest.Type = TestTypeJSONLDEval
 			} else if strings.Contains(line, "TestJSONLDNegativeSyntax") {
@@ -237,7 +237,7 @@ func ParseManifest(path string) (*TestManifest, error) {
 	// TSV tests are marked as QueryEvaluationTest but have .tsv result files
 	for i := range manifest.Tests {
 		if manifest.Tests[i].Type == TestTypeQueryEvaluation &&
-		   strings.HasSuffix(manifest.Tests[i].Result, ".tsv") {
+			strings.HasSuffix(manifest.Tests[i].Result, ".tsv") {
 			manifest.Tests[i].Type = TestTypeTSVResultFormat
 		}
 	}

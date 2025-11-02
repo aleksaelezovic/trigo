@@ -338,8 +338,8 @@ func TestEncodeDecodeFloat64(t *testing.T) {
 		-1.0,
 		3.14,
 		-3.14,
-		1.7976931348623157e+308,  // Max float64
-		2.2250738585072014e-308,  // Min positive float64
+		1.7976931348623157e+308, // Max float64
+		2.2250738585072014e-308, // Min positive float64
 	}
 
 	for _, val := range testCases {

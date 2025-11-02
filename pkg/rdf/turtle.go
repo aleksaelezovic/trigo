@@ -711,7 +711,7 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	return NewLiteral(value.String()), nil
 }
 
-// parseLongLiteral parses a long string literal (""" or ''')
+// parseLongLiteral parses a long string literal (""" or ”')
 func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 	if p.pos+3 > p.length || p.input[p.pos:p.pos+3] != delimiter {
 		return nil, fmt.Errorf("expected %s at start of long literal", delimiter)
@@ -915,8 +915,8 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 		// Local names can contain alphanumeric, underscore, hyphen, colon, and many other chars
 		// Break on whitespace, punctuation that ends a triple, or special Turtle syntax
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
-		   ch == '.' || ch == ';' || ch == ',' || ch == '>' || ch == '<' ||
-		   ch == '"' || ch == '#' {
+			ch == '.' || ch == ';' || ch == ',' || ch == '>' || ch == '<' ||
+			ch == '"' || ch == '#' {
 			break
 		}
 		p.pos++

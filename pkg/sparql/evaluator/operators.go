@@ -5,9 +5,9 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 	"github.com/aleksaelezovic/trigo/pkg/store"
-	"github.com/aleksaelezovic/trigo/pkg/rdf"
 )
 
 // evaluateBinaryExpression evaluates binary operations
