@@ -210,6 +210,71 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			if currentSubject != nil {
 				predicate := elem.Name.Space + elem.Name.Local
 
+				// Check for non-RDF property attributes (these create a blank node with additional properties)
+				hasPropertyAttrs := false
+				for _, attr := range elem.Attr {
+					// Skip RDF-specific and XML-specific attributes
+					if attr.Name.Space == rdfNS {
+						continue
+					}
+					// Skip xml: namespace attributes (xml:lang, xml:base, xml:space, etc.)
+					if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+					   strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+					   (attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+						continue
+					}
+					if attr.Name.Space == "" {
+						continue
+					}
+					hasPropertyAttrs = true
+					break
+				}
+
+				if hasPropertyAttrs {
+					// Create blank node as object
+					blankNodeCounter++
+					blankNode := NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
+
+					// Create triple with blank node as object
+					quad := NewQuad(currentSubject, NewNamedNode(predicate), blankNode, NewDefaultGraph())
+					quads = append(quads, quad)
+
+					// Create triples for property attributes
+					for _, attr := range elem.Attr {
+						// Skip RDF-specific and XML-specific attributes
+						if attr.Name.Space == rdfNS {
+							continue
+						}
+						// Skip xml: namespace attributes
+						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+						   strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+						   (attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+							continue
+						}
+						if attr.Name.Space == "" {
+							continue
+						}
+
+						attrPredicate := attr.Name.Space + attr.Name.Local
+						attrObject := NewLiteral(attr.Value)
+						attrQuad := NewQuad(blankNode, NewNamedNode(attrPredicate), attrObject, NewDefaultGraph())
+						quads = append(quads, attrQuad)
+					}
+
+					// Consume the end element
+					for {
+						token, err := decoder.Token()
+						if err != nil {
+							return nil, fmt.Errorf("error reading property content: %w", err)
+						}
+						if _, ok := token.(xml.EndElement); ok {
+							break
+						}
+					}
+
+					continue
+				}
+
 				// Check for rdf:resource attribute (object is IRI)
 				resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
 				if resourceAttr != "" {

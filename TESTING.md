@@ -211,15 +211,18 @@ Parse RDF documents and compare with expected triples:
   - ✅ Named graph blocks `<iri> { triples }` and `_:bnode { triples }`
   - ✅ GRAPH keyword syntax `GRAPH <iri> { triples }`
   - ⚠️ Complex blank node patterns, collections (inherited from Turtle parser)
-- **rdf11/rdf-xml**: 34.5% pass rate (57/165 tests) ✅ **IMPROVED from 20.6%**
+- **rdf11/rdf-xml**: 38.8% pass rate (64/165 tests) ✅ **IMPROVED from 20.6%**
   - ✅ Basic rdf:Description, simple properties
   - ✅ RDF containers (rdf:Bag, rdf:Seq, rdf:Alt) with blank node subjects
   - ✅ Auto-numbered rdf:li elements (rdf:_1, rdf:_2, ...)
   - ✅ Explicit rdf:_N properties
   - ✅ xml:base for base URI resolution
-  - ✅ rdf:ID attribute handling (base + "#" + ID)
+  - ✅ rdf:ID attribute handling with document base URI
   - ✅ Property attributes on rdf:Description elements
-  - ⚠️ Blank node isomorphism (affects container tests), complex xml:base scenarios
+  - ✅ rdf:parseType="Resource" for blank node objects
+  - ✅ Property attributes on property elements (creates blank nodes)
+  - ✅ Document base URI support (W3C canonical URIs for test files)
+  - ⚠️ Blank node isomorphism (affects many tests), reification, negative test validation
 - **rdf12/**: Latest RDF 1.2 specifications including RDF-star features
   - Test support infrastructure in place
 
@@ -239,7 +242,7 @@ Parse RDF documents and compare with expected triples:
   - Implemented named graph blocks `<iri> { triples }` and `_:bnode { triples }`
   - Added lookahead parsing to distinguish graph blocks from regular triples
   - **TriG compliance improved: 32.2% → 46.0%** (+13.8 percentage points, +46 tests)
-- **RDF/XML Parser Enhancements:**
+- **RDF/XML Parser Enhancements (Phase 2a):**
   - Implemented RDF containers (rdf:Bag, rdf:Seq, rdf:Alt)
   - Added auto-numbered rdf:li element support (rdf:_1, rdf:_2, etc.)
   - Implemented explicit rdf:_N property handling
@@ -247,7 +250,13 @@ Parse RDF documents and compare with expected triples:
   - Implemented rdf:ID attribute handling with base URI concatenation
   - Added property attribute support on rdf:Description elements
   - Implemented typed node parsing (elements with implicit rdf:type)
-  - **RDF/XML compliance improved: 20.6% → 34.5%** (+13.9 percentage points, +23 tests)
+- **RDF/XML Parser Enhancements (Phase 2b):**
+  - Added rdf:parseType="Resource" support for blank node objects
+  - Implemented document base URI with SetBaseURI() method
+  - Test runner now provides W3C canonical URIs for test files
+  - Added property attributes on property elements (structured values)
+  - Proper xml: namespace attribute filtering (xml:lang, xml:space, etc.)
+  - **RDF/XML compliance improved: 20.6% → 38.8%** (+18.2 percentage points, +26 tests)
 
 ### Syntax Tests (Parser Validation)
 - **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)
