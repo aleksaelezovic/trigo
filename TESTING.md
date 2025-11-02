@@ -190,12 +190,28 @@ Parse RDF documents and compare with expected triples:
   - Full context processing not yet implemented
 
 #### Test Results
-- **rdf11/rdf-turtle**: Comprehensive Turtle syntax validation
-- **rdf11/rdf-n-triples**: 70.0% pass rate (validates strict N-Triples compliance)
-- **rdf11/rdf-n-quads**: Named graph support validation
-- **rdf11/rdf-trig**: TriG format with named graphs
-- **rdf11/rdf-xml**: RDF/XML parser validation
+- **rdf11/rdf-turtle**: 44.4% pass rate (139/313 tests)
+  - ✅ Basic triples, PREFIX/BASE, property lists
+  - ⚠️ Blank node property lists, collections, some Unicode escapes
+- **rdf11/rdf-n-triples**: 84.3% pass rate (59/70 tests) ✅ **IMPROVED from 70.0%**
+  - ✅ Basic triples, most IRI validation, literals
+  - ⚠️ Unicode escape sequences, some strict validations
+- **rdf11/rdf-n-quads**: 71.3% pass rate (62/87 tests)
+  - ✅ Quads with named graphs, basic syntax
+  - ⚠️ Similar issues to N-Triples
+- **rdf11/rdf-trig**: 33.4% pass rate (119/356 tests)
+  - ✅ Some GRAPH blocks, basic TriG syntax
+  - ⚠️ Complex graph patterns, blank nodes in graphs
+- **rdf11/rdf-xml**: 18.7% pass rate (31/166 tests)
+  - ✅ Basic rdf:Description, simple properties
+  - ⚠️ RDF containers (rdf:Bag, rdf:Seq), advanced patterns
 - **rdf12/**: Latest RDF 1.2 specifications including RDF-star features
+  - Test support infrastructure in place
+
+**Recent Improvements:**
+- Fixed manifest parser to correctly identify test types
+- Added IRI validation (space detection, invalid characters, relative IRI detection)
+- N-Triples compliance improved from 70.0% → 84.3%
 
 ### Syntax Tests (Parser Validation)
 - **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)

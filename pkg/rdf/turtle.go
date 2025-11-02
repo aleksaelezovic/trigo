@@ -288,6 +288,16 @@ func (p *TurtleParser) parseIRI() (string, error) {
 
 	start := p.pos
 	for p.pos < p.length && p.input[p.pos] != '>' {
+		ch := p.input[p.pos]
+
+		// N-Triples/Turtle IRI validation
+		// IRIs cannot contain: space, <, >, ", {, }, |, \, ^, `
+		// and must not contain control characters (0x00-0x1F)
+		if ch == ' ' || ch == '<' || ch == '>' || ch == '"' || ch == '{' || ch == '}' ||
+			ch == '|' || ch == '\\' || ch == '^' || ch == '`' || ch <= 0x1F {
+			return "", fmt.Errorf("invalid character in IRI: %q at position %d", ch, p.pos)
+		}
+
 		p.pos++
 	}
 
@@ -297,6 +307,12 @@ func (p *TurtleParser) parseIRI() (string, error) {
 
 	iri := p.input[start:p.pos]
 	p.pos++ // skip '>'
+
+	// Validate that IRI is absolute (has a scheme) for N-Triples compliance
+	// This is a simple check - just look for ':'
+	if !strings.Contains(iri, ":") {
+		return "", fmt.Errorf("relative IRI not allowed in N-Triples: %s", iri)
+	}
 
 	return iri, nil
 }

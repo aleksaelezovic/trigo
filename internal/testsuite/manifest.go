@@ -107,22 +107,25 @@ func ParseManifest(path string) (*TestManifest, error) {
 			continue
 		}
 
-		// Start of new test
-		if strings.Contains(line, "mf:name") {
+		// Start of new test (test definition starts with <#testname>)
+		if strings.HasPrefix(line, "<#") && strings.Contains(line, "> rdf:type") {
 			if currentTest != nil {
 				manifest.Tests = append(manifest.Tests, *currentTest)
 			}
 			currentTest = &TestCase{}
 			inTest = true
-
-			// Extract test name
-			if parts := strings.Split(line, `"`); len(parts) >= 2 {
-				currentTest.Name = parts[1]
-			}
+			// Parse the rdf:type on this line immediately
 		}
 
 		if !inTest || currentTest == nil {
 			continue
+		}
+
+		// Extract test name
+		if strings.Contains(line, "mf:name") {
+			if parts := strings.Split(line, `"`); len(parts) >= 2 {
+				currentTest.Name = parts[1]
+			}
 		}
 
 		// Parse test type
