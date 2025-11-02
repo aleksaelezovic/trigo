@@ -218,6 +218,10 @@ func NewDoubleLiteral(value float64) *Literal {
 	return NewLiteralWithDatatype(fmt.Sprintf("%g", value), XSDDouble)
 }
 
+func NewDecimalLiteral(value float64) *Literal {
+	return NewLiteralWithDatatype(fmt.Sprintf("%g", value), XSDDecimal)
+}
+
 func NewBooleanLiteral(value bool) *Literal {
 	return NewLiteralWithDatatype(fmt.Sprintf("%t", value), XSDBoolean)
 }

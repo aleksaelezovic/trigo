@@ -108,7 +108,9 @@ func ParseManifest(path string) (*TestManifest, error) {
 		}
 
 		// Start of new test (test definition starts with <#testname>)
-		if strings.HasPrefix(line, "<#") && strings.Contains(line, "> rdf:type") {
+		// Handles both "rdf:type" and shorthand "a rdft:" or "a mf:"
+		if strings.HasPrefix(line, "<#") && (strings.Contains(line, "> rdf:type") ||
+			strings.Contains(line, "> a rdft:") || strings.Contains(line, "> a mf:")) {
 			if currentTest != nil {
 				manifest.Tests = append(manifest.Tests, *currentTest)
 			}

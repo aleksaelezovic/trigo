@@ -374,10 +374,10 @@ go build -o test-runner ./cmd/test-runner
 # - json-res/ (JSON format): Variable ordering ✅, format compliance ✅
 #
 # RDF PARSER TESTS (RDF 1.1):
-# - rdf-turtle/: 44.4% pass rate (139/313 tests) - baseline Turtle support
-# - rdf-n-triples/: 84.3% pass rate (59/70 tests) ✅ IMPROVED!
-# - rdf-n-quads/: 71.3% pass rate (62/87 tests) - N-Quads with named graphs
-# - rdf-trig/: 33.4% pass rate (119/356 tests) - TriG with named graphs
+# - rdf-turtle/: 62.2% pass rate (184/296 tests) ✅ MAJOR IMPROVEMENT! (+17.8pp)
+# - rdf-n-triples/: 84.3% pass rate (59/70 tests) ✅ MAINTAINED
+# - rdf-n-quads/: 75.9% pass rate (66/87 tests) ✅ MAINTAINED
+# - rdf-trig/: 32.2% pass rate (108/335 tests) - TriG with named graphs
 # - rdf-xml/: 18.7% pass rate (31/166 tests) - RDF/XML baseline support
 #
 # RDF PARSER TESTS (RDF 1.2):

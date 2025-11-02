@@ -8,10 +8,12 @@ import (
 
 // TurtleParser is a simple Turtle/N-Triples parser for loading test data
 type TurtleParser struct {
-	input    string
-	pos      int
-	length   int
-	prefixes map[string]string
+	input            string
+	pos              int
+	length           int
+	prefixes         map[string]string
+	base             string
+	blankNodeCounter int
 }
 
 // NewTurtleParser creates a new Turtle parser
@@ -145,10 +147,13 @@ func (p *TurtleParser) parseBase() error {
 	p.skipWhitespaceAndComments()
 
 	// Read IRI
-	_, err := p.parseIRI()
+	baseIRI, err := p.parseIRI()
 	if err != nil {
 		return fmt.Errorf("failed to parse base IRI: %w", err)
 	}
+
+	// Store the base IRI
+	p.base = baseIRI
 
 	p.skipWhitespaceAndComments()
 	if p.pos < p.length && (p.input[p.pos] == '.' || p.input[p.pos] == ';') {
@@ -245,13 +250,23 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 		return NewNamedNode(iri), nil
 	}
 
-	// Blank node
+	// Blank node (labeled: _:label)
 	if ch == '_' && p.pos+1 < p.length && p.input[p.pos+1] == ':' {
 		return p.parseBlankNode()
 	}
 
-	// String literal
-	if ch == '"' {
+	// Anonymous blank node or blank node property list: []
+	if ch == '[' {
+		return p.parseAnonymousBlankNode()
+	}
+
+	// Collection: (...)
+	if ch == '(' {
+		return p.parseCollection()
+	}
+
+	// String literal (double or single quote)
+	if ch == '"' || ch == '\'' {
 		return p.parseLiteral()
 	}
 
@@ -264,6 +279,16 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 	if ch == 'a' && (p.pos+1 >= p.length || !isNameChar(p.input[p.pos+1])) {
 		p.pos++ // skip 'a'
 		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+	}
+
+	// Check for boolean literals
+	if p.matchKeyword("true") {
+		p.pos += 4 // skip "true"
+		return NewBooleanLiteral(true), nil
+	}
+	if p.matchKeyword("false") {
+		p.pos += 5 // skip "false"
+		return NewBooleanLiteral(false), nil
 	}
 
 	// Prefixed name
@@ -286,18 +311,37 @@ func (p *TurtleParser) parseIRI() (string, error) {
 	}
 	p.pos++ // skip '<'
 
-	start := p.pos
+	var result strings.Builder
 	for p.pos < p.length && p.input[p.pos] != '>' {
 		ch := p.input[p.pos]
 
+		// Handle Unicode escape sequences
+		if ch == '\\' {
+			if p.pos+1 < p.length {
+				nextCh := p.input[p.pos+1]
+				if nextCh == 'u' || nextCh == 'U' {
+					// Process Unicode escape
+					escaped, err := p.processUnicodeEscape()
+					if err != nil {
+						return "", err
+					}
+					result.WriteString(escaped)
+					continue
+				}
+			}
+			// Backslash not followed by u/U is invalid in IRIs
+			return "", fmt.Errorf("invalid escape sequence in IRI at position %d", p.pos)
+		}
+
 		// N-Triples/Turtle IRI validation
-		// IRIs cannot contain: space, <, >, ", {, }, |, \, ^, `
+		// IRIs cannot contain: space, <, >, ", {, }, |, ^, `
 		// and must not contain control characters (0x00-0x1F)
 		if ch == ' ' || ch == '<' || ch == '>' || ch == '"' || ch == '{' || ch == '}' ||
-			ch == '|' || ch == '\\' || ch == '^' || ch == '`' || ch <= 0x1F {
+			ch == '|' || ch == '^' || ch == '`' || ch <= 0x1F {
 			return "", fmt.Errorf("invalid character in IRI: %q at position %d", ch, p.pos)
 		}
 
+		result.WriteByte(ch)
 		p.pos++
 	}
 
@@ -305,16 +349,131 @@ func (p *TurtleParser) parseIRI() (string, error) {
 		return "", fmt.Errorf("unclosed IRI")
 	}
 
-	iri := p.input[start:p.pos]
+	iri := result.String()
 	p.pos++ // skip '>'
 
-	// Validate that IRI is absolute (has a scheme) for N-Triples compliance
-	// This is a simple check - just look for ':'
+	// Check if IRI is relative (doesn't contain scheme with ':')
 	if !strings.Contains(iri, ":") {
-		return "", fmt.Errorf("relative IRI not allowed in N-Triples: %s", iri)
+		// Relative IRI - resolve against base if available
+		if p.base == "" {
+			return "", fmt.Errorf("relative IRI not allowed without base: %s", iri)
+		}
+		// Resolve relative IRI against base
+		iri = p.resolveRelativeIRI(p.base, iri)
 	}
 
 	return iri, nil
+}
+
+// resolveRelativeIRI resolves a relative IRI against a base IRI
+// This is a simplified implementation of RFC 3986 resolution
+func (p *TurtleParser) resolveRelativeIRI(base, relative string) string {
+	// Empty relative IRI → use base
+	if relative == "" {
+		return base
+	}
+
+	// Fragment only (#foo) → base without fragment + new fragment
+	if strings.HasPrefix(relative, "#") {
+		// Remove any existing fragment from base
+		if idx := strings.Index(base, "#"); idx >= 0 {
+			base = base[:idx]
+		}
+		return base + relative
+	}
+
+	// Query or fragment (?foo or #foo) → base without query/fragment + relative
+	if strings.HasPrefix(relative, "?") {
+		// Remove query and fragment from base
+		if idx := strings.Index(base, "?"); idx >= 0 {
+			base = base[:idx]
+		} else if idx := strings.Index(base, "#"); idx >= 0 {
+			base = base[:idx]
+		}
+		return base + relative
+	}
+
+	// Absolute path (/foo) → scheme + authority + relative path
+	if strings.HasPrefix(relative, "/") {
+		// Find scheme and authority in base
+		schemeEnd := strings.Index(base, ":")
+		if schemeEnd < 0 {
+			return relative // shouldn't happen
+		}
+
+		// Check for authority (://...)
+		if schemeEnd+2 < len(base) && base[schemeEnd:schemeEnd+3] == "://" {
+			// Find end of authority (next /)
+			authorityStart := schemeEnd + 3
+			pathStart := strings.Index(base[authorityStart:], "/")
+			if pathStart >= 0 {
+				return base[:authorityStart+pathStart] + relative
+			}
+			// No path in base, append to authority
+			return base + relative
+		}
+
+		// No authority, just scheme
+		return base[:schemeEnd+1] + relative
+	}
+
+	// Relative path (foo or ./foo or ../foo) → resolve against base path
+	// Remove query and fragment from base
+	baseWithoutQF := base
+	if idx := strings.Index(baseWithoutQF, "?"); idx >= 0 {
+		baseWithoutQF = baseWithoutQF[:idx]
+	} else if idx := strings.Index(baseWithoutQF, "#"); idx >= 0 {
+		baseWithoutQF = baseWithoutQF[:idx]
+	}
+
+	// Find the last / in base to get the directory
+	lastSlash := strings.LastIndex(baseWithoutQF, "/")
+	if lastSlash >= 0 {
+		// Append relative path to base directory
+		return baseWithoutQF[:lastSlash+1] + relative
+	}
+
+	// No / found, just concatenate (shouldn't happen with valid IRIs)
+	return baseWithoutQF + "/" + relative
+}
+
+// processUnicodeEscape processes \uXXXX or \UXXXXXXXX escape sequences
+func (p *TurtleParser) processUnicodeEscape() (string, error) {
+	if p.pos >= p.length || p.input[p.pos] != '\\' {
+		return "", fmt.Errorf("expected '\\' at start of escape sequence")
+	}
+	p.pos++ // skip '\'
+
+	if p.pos >= p.length {
+		return "", fmt.Errorf("incomplete escape sequence")
+	}
+
+	escapeType := p.input[p.pos]
+	p.pos++ // skip 'u' or 'U'
+
+	var hexDigits int
+	if escapeType == 'u' {
+		hexDigits = 4
+	} else if escapeType == 'U' {
+		hexDigits = 8
+	} else {
+		return "", fmt.Errorf("invalid escape type: %c", escapeType)
+	}
+
+	if p.pos+hexDigits > p.length {
+		return "", fmt.Errorf("incomplete Unicode escape sequence")
+	}
+
+	hexStr := p.input[p.pos : p.pos+hexDigits]
+	p.pos += hexDigits
+
+	// Parse hex string to rune
+	codePoint, err := strconv.ParseInt(hexStr, 16, 32)
+	if err != nil {
+		return "", fmt.Errorf("invalid hex digits in Unicode escape: %s", hexStr)
+	}
+
+	return string(rune(codePoint)), nil
 }
 
 // parseBlankNode parses a blank node
@@ -337,37 +496,130 @@ func (p *TurtleParser) parseBlankNode() (Term, error) {
 	return NewBlankNode(label), nil
 }
 
+// parseAnonymousBlankNode parses an anonymous blank node [] or blank node property list
+func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
+	if p.pos >= p.length || p.input[p.pos] != '[' {
+		return nil, fmt.Errorf("expected '[' at start of blank node")
+	}
+	p.pos++ // skip '['
+	p.skipWhitespaceAndComments()
+
+	p.blankNodeCounter++
+	blankNode := NewBlankNode(fmt.Sprintf("anon%d", p.blankNodeCounter))
+
+	// Check if it's just [] or has properties
+	if p.pos < p.length && p.input[p.pos] == ']' {
+		p.pos++ // skip ']'
+		return blankNode, nil
+	}
+
+	// Skip property list content (architecture limitation: parseTerm returns single Term
+	// but property lists generate multiple triples - need parser refactoring to support properly)
+	bracketDepth := 1
+	for p.pos < p.length && bracketDepth > 0 {
+		if p.input[p.pos] == '[' {
+			bracketDepth++
+		} else if p.input[p.pos] == ']' {
+			bracketDepth--
+		}
+		p.pos++
+	}
+
+	return blankNode, nil
+}
+
+// parseCollection parses a collection (RDF list): (item1 item2 ...)
+func (p *TurtleParser) parseCollection() (Term, error) {
+	if p.pos >= p.length || p.input[p.pos] != '(' {
+		return nil, fmt.Errorf("expected '(' at start of collection")
+	}
+	p.pos++ // skip '('
+	p.skipWhitespaceAndComments()
+
+	// Check for empty collection
+	if p.pos < p.length && p.input[p.pos] == ')' {
+		p.pos++ // skip ')'
+		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"), nil
+	}
+
+	// Non-empty collection - create blank node for list head
+	p.blankNodeCounter++
+	listHead := NewBlankNode(fmt.Sprintf("list%d", p.blankNodeCounter))
+
+	// Skip collection content (architecture limitation: collections generate multiple
+	// triples using rdf:first/rdf:rest but parseTerm returns single Term)
+	parenDepth := 1
+	for p.pos < p.length && parenDepth > 0 {
+		if p.input[p.pos] == '(' {
+			parenDepth++
+		} else if p.input[p.pos] == ')' {
+			parenDepth--
+		}
+		p.pos++
+	}
+
+	return listHead, nil
+}
+
 // parseLiteral parses a string literal
 func (p *TurtleParser) parseLiteral() (Term, error) {
-	if p.pos >= p.length || p.input[p.pos] != '"' {
-		return nil, fmt.Errorf("expected '\"' at start of literal")
+	if p.pos >= p.length {
+		return nil, fmt.Errorf("unexpected end of input when expecting literal")
 	}
-	p.pos++ // skip '"'
+
+	// Check if it's a long literal (""" or ''')
+	if p.pos+2 < p.length {
+		if p.input[p.pos:p.pos+3] == `"""` {
+			return p.parseLongLiteral(`"""`)
+		} else if p.input[p.pos:p.pos+3] == `'''` {
+			return p.parseLongLiteral(`'''`)
+		}
+	}
+
+	// Single or double quote literal
+	quoteChar := p.input[p.pos]
+	if quoteChar != '"' && quoteChar != '\'' {
+		return nil, fmt.Errorf("expected quote at start of literal")
+	}
+	p.pos++ // skip opening quote
 
 	var value strings.Builder
 	for p.pos < p.length {
 		ch := p.input[p.pos]
-		if ch == '"' {
+		if ch == quoteChar {
 			break
 		}
 		if ch == '\\' && p.pos+1 < p.length {
 			// Handle escape sequences
-			p.pos++
-			switch p.input[p.pos] {
-			case 'n':
-				value.WriteByte('\n')
-			case 't':
-				value.WriteByte('\t')
-			case 'r':
-				value.WriteByte('\r')
-			case '"':
-				value.WriteByte('"')
-			case '\\':
-				value.WriteByte('\\')
-			default:
-				value.WriteByte(p.input[p.pos])
+			nextCh := p.input[p.pos+1]
+			if nextCh == 'u' || nextCh == 'U' {
+				// Unicode escape sequence
+				escaped, err := p.processUnicodeEscape()
+				if err != nil {
+					return nil, err
+				}
+				value.WriteString(escaped)
+			} else {
+				// Regular escape sequences
+				p.pos++
+				switch p.input[p.pos] {
+				case 'n':
+					value.WriteByte('\n')
+				case 't':
+					value.WriteByte('\t')
+				case 'r':
+					value.WriteByte('\r')
+				case '"':
+					value.WriteByte('"')
+				case '\'':
+					value.WriteByte('\'')
+				case '\\':
+					value.WriteByte('\\')
+				default:
+					value.WriteByte(p.input[p.pos])
+				}
+				p.pos++
 			}
-			p.pos++
 		} else {
 			value.WriteByte(ch)
 			p.pos++
@@ -377,7 +629,7 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	if p.pos >= p.length {
 		return nil, fmt.Errorf("unclosed string literal")
 	}
-	p.pos++ // skip closing '"'
+	p.pos++ // skip closing quote
 
 	// Check for language tag or datatype
 	p.skipWhitespaceAndComments()
@@ -409,16 +661,105 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	return NewLiteral(value.String()), nil
 }
 
+// parseLongLiteral parses a long string literal (""" or ''')
+func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
+	if p.pos+3 > p.length || p.input[p.pos:p.pos+3] != delimiter {
+		return nil, fmt.Errorf("expected %s at start of long literal", delimiter)
+	}
+	p.pos += 3 // skip opening delimiter
+
+	var value strings.Builder
+	for p.pos < p.length {
+		// Check for closing delimiter
+		if p.pos+3 <= p.length && p.input[p.pos:p.pos+3] == delimiter {
+			p.pos += 3 // skip closing delimiter
+			break
+		}
+
+		ch := p.input[p.pos]
+		if ch == '\\' && p.pos+1 < p.length {
+			// Handle escape sequences
+			nextCh := p.input[p.pos+1]
+			if nextCh == 'u' || nextCh == 'U' {
+				// Unicode escape sequence
+				escaped, err := p.processUnicodeEscape()
+				if err != nil {
+					return nil, err
+				}
+				value.WriteString(escaped)
+			} else {
+				// Regular escape sequences
+				p.pos++
+				switch p.input[p.pos] {
+				case 'n':
+					value.WriteByte('\n')
+				case 't':
+					value.WriteByte('\t')
+				case 'r':
+					value.WriteByte('\r')
+				case '"':
+					value.WriteByte('"')
+				case '\'':
+					value.WriteByte('\'')
+				case '\\':
+					value.WriteByte('\\')
+				default:
+					value.WriteByte(p.input[p.pos])
+				}
+				p.pos++
+			}
+		} else {
+			value.WriteByte(ch)
+			p.pos++
+		}
+	}
+
+	// Check if we found the closing delimiter
+	if p.pos > p.length || (p.pos == p.length && !strings.HasSuffix(p.input, delimiter)) {
+		return nil, fmt.Errorf("unclosed long string literal")
+	}
+
+	// Check for language tag or datatype
+	p.skipWhitespaceAndComments()
+	if p.pos < p.length && p.input[p.pos] == '@' {
+		// Language tag
+		p.pos++ // skip '@'
+		langStart := p.pos
+		for p.pos < p.length && ((p.input[p.pos] >= 'a' && p.input[p.pos] <= 'z') || (p.input[p.pos] >= 'A' && p.input[p.pos] <= 'Z') || p.input[p.pos] == '-') {
+			p.pos++
+		}
+		lang := p.input[langStart:p.pos]
+		return NewLiteralWithLanguage(value.String(), lang), nil
+	}
+
+	if p.pos+1 < p.length && p.input[p.pos] == '^' && p.input[p.pos+1] == '^' {
+		// Datatype
+		p.pos += 2 // skip '^^'
+		datatypeTerm, err := p.parseTerm()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse datatype: %w", err)
+		}
+		if namedNode, ok := datatypeTerm.(*NamedNode); ok {
+			return NewLiteralWithDatatype(value.String(), namedNode), nil
+		}
+		return nil, fmt.Errorf("datatype must be an IRI or prefixed name")
+	}
+
+	return NewLiteral(value.String()), nil
+}
+
 // parseNumber parses a numeric literal
 func (p *TurtleParser) parseNumber() (Term, error) {
 	start := p.pos
+	isDecimal := false
+	isDouble := false
 
 	// Handle sign
 	if p.pos < p.length && (p.input[p.pos] == '+' || p.input[p.pos] == '-') {
 		p.pos++
 	}
 
-	// Read digits
+	// Read integer part digits
 	hasDigits := false
 	for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
 		p.pos++
@@ -431,28 +772,66 @@ func (p *TurtleParser) parseNumber() (Term, error) {
 
 	// Check for decimal point
 	if p.pos < p.length && p.input[p.pos] == '.' {
-		p.pos++
-		// Read fractional digits
-		for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+		// Look ahead to check if this is really a decimal or end of statement
+		if p.pos+1 < p.length {
+			nextCh := p.input[p.pos+1]
+			// If next char is a digit, it's a decimal
+			if nextCh >= '0' && nextCh <= '9' {
+				isDecimal = true
+				p.pos++ // skip '.'
+				// Read fractional digits
+				for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+					p.pos++
+				}
+			}
+		}
+	}
+
+	// Check for exponent (e or E) which makes it a double
+	if p.pos < p.length && (p.input[p.pos] == 'e' || p.input[p.pos] == 'E') {
+		isDouble = true
+		p.pos++ // skip 'e' or 'E'
+
+		// Optional sign after exponent
+		if p.pos < p.length && (p.input[p.pos] == '+' || p.input[p.pos] == '-') {
 			p.pos++
 		}
 
-		// It's a double
-		numStr := p.input[start:p.pos]
+		// Read exponent digits
+		expHasDigits := false
+		for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
+			p.pos++
+			expHasDigits = true
+		}
+
+		if !expHasDigits {
+			return nil, fmt.Errorf("expected digits in exponent")
+		}
+	}
+
+	numStr := p.input[start:p.pos]
+
+	// Return appropriate type
+	if isDouble {
 		val, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse double: %w", err)
 		}
 		return NewDoubleLiteral(val), nil
+	} else if isDecimal {
+		val, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse decimal: %w", err)
+		}
+		return NewDecimalLiteral(val), nil
+	} else {
+		// Integer
+		val, err := strconv.ParseInt(numStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse integer: %w", err)
+		}
+		return NewIntegerLiteral(val), nil
 	}
-
-	// It's an integer
-	numStr := p.input[start:p.pos]
-	val, err := strconv.ParseInt(numStr, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse integer: %w", err)
-	}
-	return NewIntegerLiteral(val), nil
 }
 
 // parsePrefixedName parses a prefixed name (e.g., ex:foo or :foo)

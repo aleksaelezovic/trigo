@@ -190,16 +190,19 @@ Parse RDF documents and compare with expected triples:
   - Full context processing not yet implemented
 
 #### Test Results
-- **rdf11/rdf-turtle**: 44.4% pass rate (139/313 tests)
-  - ✅ Basic triples, PREFIX/BASE, property lists
-  - ⚠️ Blank node property lists, collections, some Unicode escapes
-- **rdf11/rdf-n-triples**: 84.3% pass rate (59/70 tests) ✅ **IMPROVED from 70.0%**
-  - ✅ Basic triples, most IRI validation, literals
-  - ⚠️ Unicode escape sequences, some strict validations
-- **rdf11/rdf-n-quads**: 71.3% pass rate (62/87 tests)
+- **rdf11/rdf-turtle**: 62.2% pass rate (184/296 tests) ✅ **IMPROVED from 44.4%**
+  - ✅ Basic triples, PREFIX/BASE, property lists, Unicode escapes
+  - ✅ Single/double/triple-quote literals, numeric literals, boolean literals
+  - ✅ Anonymous blank nodes [], empty collections ()
+  - ✅ @base directive and relative IRI resolution
+  - ⚠️ Blank node property lists (partial), collections with items, some PName escapes
+- **rdf11/rdf-n-triples**: 84.3% pass rate (59/70 tests) ✅ **MAINTAINED**
+  - ✅ Basic triples, IRI validation, literals, Unicode escapes
+  - ⚠️ Some strict negative syntax validations
+- **rdf11/rdf-n-quads**: 75.9% pass rate (66/87 tests) ✅ **MAINTAINED**
   - ✅ Quads with named graphs, basic syntax
-  - ⚠️ Similar issues to N-Triples
-- **rdf11/rdf-trig**: 33.4% pass rate (119/356 tests)
+  - ⚠️ Some strict validations
+- **rdf11/rdf-trig**: 32.2% pass rate (108/335 tests)
   - ✅ Some GRAPH blocks, basic TriG syntax
   - ⚠️ Complex graph patterns, blank nodes in graphs
 - **rdf11/rdf-xml**: 18.7% pass rate (31/166 tests)
@@ -208,10 +211,15 @@ Parse RDF documents and compare with expected triples:
 - **rdf12/**: Latest RDF 1.2 specifications including RDF-star features
   - Test support infrastructure in place
 
-**Recent Improvements:**
-- Fixed manifest parser to correctly identify test types
-- Added IRI validation (space detection, invalid characters, relative IRI detection)
-- N-Triples compliance improved from 70.0% → 84.3%
+**Recent Improvements (Phase 1):**
+- Fixed manifest parser to correctly identify test types (improved N-Quads detection)
+- Added comprehensive Unicode escape sequence support (\uXXXX, \UXXXXXXXX)
+- Added single-quote and triple-quote literal support (''', """)
+- Implemented anonymous blank nodes [] and empty collections ()
+- Added @base directive with relative IRI resolution (RFC 3986)
+- Implemented numeric literals (integers, decimals with proper xsd:decimal type, doubles with scientific notation)
+- Added boolean literal support (true/false with xsd:boolean type)
+- **Turtle compliance improved: 44.4% → 62.2%** (+17.8 percentage points, +45 tests)
 
 ### Syntax Tests (Parser Validation)
 - **Pass Rate: 69.1%** (65/94 tests in syntax-query suite)
