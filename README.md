@@ -7,9 +7,9 @@
 
   [![Go Report Card](https://goreportcard.com/badge/github.com/aleksaelezovic/trigo)](https://goreportcard.com/report/github.com/aleksaelezovic/trigo)
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-  [![Documentation](https://img.shields.io/badge/docs-github.io-blue)](https://aleksaelezovic.github.io/trigo/)
+  [![Documentation](https://img.shields.io/badge/docs-trigodb.com-blue)](https://trigodb.com/)
 
-  [Documentation](https://aleksaelezovic.github.io/trigo/) | [Quick Start](https://aleksaelezovic.github.io/trigo/quickstart.html) | [Architecture](https://aleksaelezovic.github.io/trigo/architecture.html) | [HTTP API](https://aleksaelezovic.github.io/trigo/http-endpoint.html)
+  [Documentation](https://trigodb.com/) | [Quick Start](https://trigodb.com/quickstart.html) | [Architecture](https://trigodb.com/architecture.html) | [HTTP API](https://trigodb.com/http-endpoint.html)
 </div>
 
 ## Overview
@@ -77,12 +77,12 @@ ts.InsertTriple(triple)
 
 ## Documentation
 
-📚 **[Full Documentation](https://aleksaelezovic.github.io/trigo/)** - Complete guides and API reference
+📚 **[Full Documentation](https://trigodb.com/)** - Complete guides and API reference
 
-- **[Quick Start Guide](https://aleksaelezovic.github.io/trigo/quickstart.html)** - Get started in minutes
-- **[Architecture](https://aleksaelezovic.github.io/trigo/architecture.html)** - Deep dive into design and implementation
-- **[HTTP API Reference](https://aleksaelezovic.github.io/trigo/http-endpoint.html)** - REST API documentation
-- **[Testing & Compliance](https://aleksaelezovic.github.io/trigo/testing.html)** - W3C test suite results
+- **[Quick Start Guide](https://trigodb.com/quickstart.html)** - Get started in minutes
+- **[Architecture](https://trigodb.com/architecture.html)** - Deep dive into design and implementation
+- **[HTTP API Reference](https://trigodb.com/http-endpoint.html)** - REST API documentation
+- **[Testing & Compliance](https://trigodb.com/testing.html)** - W3C test suite results
 
 ## Test Results
 
@@ -104,7 +104,7 @@ trigo/
 └── docs/          # Documentation site
 ```
 
-See the [Architecture Guide](https://aleksaelezovic.github.io/trigo/architecture.html) for details.
+See the [Architecture Guide](https://trigodb.com/architecture.html) for details.
 
 ## Contributing
 
@@ -125,7 +125,7 @@ Inspired by [Oxigraph](https://github.com/oxigraph/oxigraph) architecture. Built
 ---
 
 <div align="center">
-  <a href="https://aleksaelezovic.github.io/trigo/">Documentation</a> •
+  <a href="https://trigodb.com/">Documentation</a> •
   <a href="https://github.com/aleksaelezovic/trigo/issues">Issues</a> •
   <a href="https://github.com/aleksaelezovic/trigo/blob/main/CLAUDE.md">AI Assistant Context</a>
 </div>
