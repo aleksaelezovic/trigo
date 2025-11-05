@@ -25,13 +25,16 @@ import (
 // - rdf:parseType="Collection"
 // - Property attributes on Description elements
 type RDFXMLParser struct {
-	baseURIStack []string // Stack of xml:base values
-	documentBase string   // Document base URI (file location)
+	baseURIStack []string        // Stack of xml:base values
+	documentBase string          // Document base URI (file location)
+	usedIDs      map[string]bool // Track used rdf:ID values to detect duplicates
 }
 
 // NewRDFXMLParser creates a new RDF/XML parser
 func NewRDFXMLParser() *RDFXMLParser {
-	return &RDFXMLParser{}
+	return &RDFXMLParser{
+		usedIDs: make(map[string]bool),
+	}
 }
 
 // SetBaseURI sets the document base URI (used for resolving relative URIs and rdf:ID)
@@ -119,9 +122,10 @@ func (p *RDFXMLParser) resolveURI(uri string) string {
 	return resolved.String()
 }
 
-// isXMLNameStartChar checks if a rune can start an XML Name
-func isXMLNameStartChar(r rune) bool {
-	return r == ':' || r == '_' ||
+// isXMLNCNameStartChar checks if a rune can start an XML NCName (Name without colons)
+// Used for rdf:ID validation which must be NCNames
+func isXMLNCNameStartChar(r rune) bool {
+	return r == '_' ||
 		(r >= 'A' && r <= 'Z') ||
 		(r >= 'a' && r <= 'z') ||
 		(r >= 0xC0 && r <= 0xD6) ||
@@ -138,9 +142,9 @@ func isXMLNameStartChar(r rune) bool {
 		(r >= 0x10000 && r <= 0xEFFFF)
 }
 
-// isXMLNameChar checks if a rune can be part of an XML Name
-func isXMLNameChar(r rune) bool {
-	return isXMLNameStartChar(r) ||
+// isXMLNCNameChar checks if a rune can be part of an XML NCName (no colons allowed)
+func isXMLNCNameChar(r rune) bool {
+	return isXMLNCNameStartChar(r) ||
 		r == '-' || r == '.' ||
 		(r >= '0' && r <= '9') ||
 		r == 0xB7 ||
@@ -148,19 +152,20 @@ func isXMLNameChar(r rune) bool {
 		(r >= 0x203F && r <= 0x2040)
 }
 
-// isValidXMLName checks if a string is a valid XML Name
-func isValidXMLName(s string) bool {
+// isValidXMLNCName checks if a string is a valid XML NCName (no colons)
+// This is required for rdf:ID values
+func isValidXMLNCName(s string) bool {
 	if len(s) == 0 {
 		return false
 	}
 
 	runes := []rune(s)
-	if !isXMLNameStartChar(runes[0]) {
+	if !isXMLNCNameStartChar(runes[0]) {
 		return false
 	}
 
 	for i := 1; i < len(runes); i++ {
-		if !isXMLNameChar(runes[i]) {
+		if !isXMLNCNameChar(runes[i]) {
 			return false
 		}
 	}
@@ -169,11 +174,18 @@ func isValidXMLName(s string) bool {
 }
 
 // resolveID resolves an rdf:ID value against the current base
-// It also validates that the ID is a valid XML Name
+// It also validates that the ID is a valid XML NCName (no colons) and checks for duplicates
 func (p *RDFXMLParser) resolveID(id string) (string, error) {
-	if !isValidXMLName(id) {
-		return "", fmt.Errorf("rdf:ID value '%s' is not a valid XML Name", id)
+	// rdf:ID values must be valid XML NCNames (no colons allowed)
+	if !isValidXMLNCName(id) {
+		return "", fmt.Errorf("rdf:ID value '%s' is not a valid XML NCName (must not contain colons)", id)
 	}
+
+	// Check for duplicate ID within the document
+	if p.usedIDs[id] {
+		return "", fmt.Errorf("rdf:ID value '%s' is not unique within the document", id)
+	}
+	p.usedIDs[id] = true
 
 	base := p.getCurrentBase()
 	if base != "" {
@@ -364,10 +376,15 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 				// Process property attributes on Description element
 				for _, attr := range elem.Attr {
-					// Skip RDF-specific and XML-specific attributes
+					// Skip structural RDF attributes (these have special meaning)
 					if attr.Name.Space == rdfNS {
-						// Skip rdf:about, rdf:ID, rdf:nodeID, rdf:type (handled separately)
-						continue
+						// Only skip these specific structural attributes
+						if attr.Name.Local == "about" || attr.Name.Local == "ID" ||
+							attr.Name.Local == "nodeID" || attr.Name.Local == "resource" ||
+							attr.Name.Local == "datatype" || attr.Name.Local == "parseType" {
+							continue
+						}
+						// Allow other RDF namespace attributes as properties (e.g., rdf:Seq, rdf:Bag, rdf:li)
 					}
 					if attr.Name.Local == "base" || attr.Name.Local == "lang" {
 						// Skip xml:base and xml:lang
@@ -758,6 +775,68 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 			case xml.EndElement:
 				// End of parseType="Resource" element
 				return blankNode, quads, nil
+			}
+		}
+	} else if parseTypeAttr == "Literal" {
+		// Parse content as XML literal
+		// Collect all tokens until the matching end element
+		var content strings.Builder
+		depth := 1
+		for {
+			token, err := decoder.Token()
+			if err != nil {
+				return nil, nil, err
+			}
+
+			switch t := token.(type) {
+			case xml.StartElement:
+				// Serialize start element
+				content.WriteString("<")
+				if t.Name.Space != "" {
+					// Find prefix for namespace (simplified - just use namespace)
+					content.WriteString(t.Name.Local)
+					content.WriteString(" xmlns=\"")
+					content.WriteString(t.Name.Space)
+					content.WriteString("\"")
+				} else {
+					content.WriteString(t.Name.Local)
+				}
+				// Add attributes
+				for _, attr := range t.Attr {
+					content.WriteString(" ")
+					if attr.Name.Space != "" {
+						content.WriteString(attr.Name.Space)
+						content.WriteString(":")
+					}
+					content.WriteString(attr.Name.Local)
+					content.WriteString("=\"")
+					content.WriteString(attr.Value)
+					content.WriteString("\"")
+				}
+				content.WriteString(">")
+				depth++
+
+			case xml.EndElement:
+				depth--
+				if depth == 0 {
+					// End of parseType="Literal" element
+					xmlLiteral := &Literal{
+						Value:    content.String(),
+						Datatype: NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral"),
+					}
+					return xmlLiteral, nil, nil
+				}
+				// Serialize end element
+				content.WriteString("</")
+				if t.Name.Space != "" {
+					content.WriteString(t.Name.Local)
+				} else {
+					content.WriteString(t.Name.Local)
+				}
+				content.WriteString(">")
+
+			case xml.CharData:
+				content.Write(t)
 			}
 		}
 	}
