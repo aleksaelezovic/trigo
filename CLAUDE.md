@@ -320,9 +320,9 @@ This is critical for RDF/XML `rdf:ID` resolution.
 |--------|-----------|--------|
 | N-Triples | 100.0% (70/70) | ✅ PERFECT |
 | N-Quads | 100.0% (87/87) | ✅ PERFECT |
-| Turtle | 62.2% (184/296) | 🟨 Good |
-| TriG | 46.0% (154/335) | 🟨 Moderate |
-| RDF/XML | 38.8% (64/165) | 🟨 Basic |
+| Turtle | 66.2% (196/296) | 🟨 Good |
+| TriG | 47.2% (158/335) | 🟨 Moderate |
+| RDF/XML | 47.0% (78/166) | 🟨 Good |
 | JSON-LD | Not measured | ⚠️ Basic |
 
 ### SPARQL Compliance
@@ -339,18 +339,6 @@ This is critical for RDF/XML `rdf:ID` resolution.
 - Other suites not fully measured
 
 ## Known Limitations
-
-### Blank Node Isomorphism
-
-**Problem:** Many tests show "expected N triples, got N triples" but fail because blank node labels differ.
-
-Example:
-```
-Expected: _:bag rdf:type rdf:Bag .
-Got:      _:b1 rdf:type rdf:Bag .
-```
-
-**Solution Required:** Graph isomorphism algorithm (NP-complete problem). This affects ~50-60 RDF/XML tests and some Turtle tests.
 
 ### Collections and Property Lists
 
@@ -798,6 +786,20 @@ type TurtleParser struct {
 - Property attributes on property elements
 - Proper xml: namespace filtering
 - W3C canonical URI resolution in test runner
+
+### Phase 3: Graph Isomorphism & SPARQL Result Formats (Latest)
+- Implemented graph isomorphism for blank node matching
+  - VF2-inspired backtracking algorithm
+  - Handles both triples and quads
+  - Fixed 30 tests across RDF formats
+  - Turtle: 62.2% → 66.2% (+12 tests)
+  - RDF/XML: 38.8% → 47.0% (+14 tests)
+  - TriG: 46.0% → 47.2% (+4 tests)
+- Implemented W3C-compliant CSV/TSV result serialization
+  - Canonical blank node labeling
+  - Proper double formatting (1.0E6 for CSV, 1.0e6 for TSV)
+  - Datatype handling for TSV format
+  - CSV/TSV tests: 0% → 83.3% (5/6 tests)
 
 ## Working with This Codebase
 

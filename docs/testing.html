@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 62.2% pass rate (184/296 tests) - <strong>IMPROVED from 44.4%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 66.2% pass rate (196/296 tests) - <strong>IMPROVED from 62.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -252,7 +252,7 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 46.0% pass rate (154/335 tests) - <strong>IMPROVED from 32.2%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 47.2% pass rate (158/335 tests) - <strong>IMPROVED from 46.0%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
@@ -260,7 +260,7 @@ Skipped: 1
                     <li>Complex blank node patterns, collections (inherited from Turtle parser)</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-xml</strong>: 38.8% pass rate (64/165 tests) - <strong>IMPROVED from 20.6%</strong>
+            <li><strong>rdf11/rdf-xml</strong>: 47.0% pass rate (78/166 tests) - <strong>IMPROVED from 38.8%</strong>
                 <ul>
                     <li>Basic rdf:Description, simple properties</li>
                     <li>RDF containers (rdf:Bag, rdf:Seq, rdf:Alt) with blank node subjects</li>
@@ -292,6 +292,29 @@ Skipped: 1
             <li>Implemented numeric literals (integers, decimals with proper xsd:decimal type, doubles with scientific notation)</li>
             <li>Added boolean literal support (true/false with xsd:boolean type)</li>
             <li><strong>Turtle compliance improved: 44.4% → 62.2%</strong> (+17.8 percentage points, +45 tests)</li>
+        </ul>
+
+        <p><strong>Recent Improvements (Phase 3 - Graph Isomorphism & SPARQL Results):</strong></p>
+        <ul>
+            <li><strong>Graph Isomorphism for Blank Nodes:</strong>
+                <ul>
+                    <li>Implemented VF2-inspired backtracking algorithm for blank node matching</li>
+                    <li>Properly compares RDF graphs despite different blank node labels</li>
+                    <li>Fixed 30 tests across Turtle, RDF/XML, and TriG formats</li>
+                    <li><strong>Turtle: 62.2% → 66.2%</strong> (+4.0pp, +12 tests)</li>
+                    <li><strong>RDF/XML: 38.8% → 47.0%</strong> (+8.2pp, +14 tests)</li>
+                    <li><strong>TriG: 46.0% → 47.2%</strong> (+1.2pp, +4 tests)</li>
+                </ul>
+            </li>
+            <li><strong>SPARQL CSV/TSV Result Serialization:</strong>
+                <ul>
+                    <li>Implemented W3C-compliant CSV and TSV result format serialization</li>
+                    <li>Canonical blank node labeling (a, b, c... for CSV; b0, b1, b2... for TSV)</li>
+                    <li>Proper double formatting with scientific notation (1.0E6 for CSV, 1.0e6 for TSV)</li>
+                    <li>Datatype handling: skip for basic XSD types, preserve for derived types</li>
+                    <li><strong>CSV/TSV tests: 0% → 83.3%</strong> (5/6 tests passing)</li>
+                </ul>
+            </li>
         </ul>
 
         <p><strong>Recent Improvements (Phase 2 - TriG & RDF/XML):</strong></p>
@@ -355,6 +378,14 @@ Skipped: 1
                     <li>Template instantiation</li>
                     <li>CONSTRUCT WHERE shorthand</li>
                     <li>N-Triples output</li>
+                </ul>
+            </li>
+            <li><strong>CSV/TSV Result Formats</strong>: 83.3% pass rate (5/6 tests)
+                <ul>
+                    <li>CSV format with canonical blank node labels</li>
+                    <li>TSV format with proper datatype suffixes</li>
+                    <li>Scientific notation formatting for doubles</li>
+                    <li>Known limitation: datatype preservation through executor</li>
                 </ul>
             </li>
             <li><strong>Basic graph patterns</strong>: Full support
@@ -563,8 +594,7 @@ jobs:
         <ul>
             <li>Complete evaluation test support</li>
             <li>Add UPDATE test support</li>
-            <li>Implement result comparison (XML, JSON, CSV)</li>
-            <li>Add graph isomorphism checking</li>
+            <li>Improve datatype preservation through SPARQL executor</li>
             <li>Support federated query tests</li>
             <li>Generate HTML test reports</li>
             <li>Track compliance percentage over time</li>
