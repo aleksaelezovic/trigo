@@ -173,6 +173,24 @@ func isValidXMLNCName(s string) bool {
 	return true
 }
 
+// generateReificationQuads generates the 4 reification quads for a statement
+// when rdf:ID is present on a property element
+func generateReificationQuads(statementID string, subject, predicate, object Term) []*Quad {
+	statementNode := NewNamedNode(statementID)
+	rdfType := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+	rdfStatement := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement")
+	rdfSubject := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#subject")
+	rdfPredicate := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate")
+	rdfObject := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#object")
+
+	return []*Quad{
+		NewQuad(statementNode, rdfType, rdfStatement, NewDefaultGraph()),
+		NewQuad(statementNode, rdfSubject, subject, NewDefaultGraph()),
+		NewQuad(statementNode, rdfPredicate, predicate, NewDefaultGraph()),
+		NewQuad(statementNode, rdfObject, object, NewDefaultGraph()),
+	}
+}
+
 // resolveID resolves an rdf:ID value against the current base
 // It also validates that the ID is a valid XML NCName (no colons) and checks for duplicates
 func (p *RDFXMLParser) resolveID(id string) (string, error) {
@@ -487,6 +505,16 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					quad := NewQuad(currentSubject, NewNamedNode(predicate), blankNode, NewDefaultGraph())
 					quads = append(quads, quad)
 
+					// Check for rdf:ID on property element (triggers reification)
+					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+						statementID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), blankNode)
+						quads = append(quads, reificationQuads...)
+					}
+
 					// Create triples for property attributes
 					for _, attr := range elem.Attr {
 						// Skip RDF-specific and XML-specific attributes
@@ -529,6 +557,17 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					object := NewNamedNode(p.resolveURI(resourceAttr))
 					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
 					quads = append(quads, quad)
+
+					// Check for rdf:ID on property element (triggers reification)
+					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+						statementID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, reificationQuads...)
+					}
+
 					continue
 				}
 
@@ -571,6 +610,17 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 						quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
 						quads = append(quads, quad)
+
+						// Check for rdf:ID on property element (triggers reification)
+						if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+							statementID, err := p.resolveID(idAttr)
+							if err != nil {
+								return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+							}
+							reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+							quads = append(quads, reificationQuads...)
+						}
+
 						goto propertyDone
 					case xml.StartElement:
 						// Nested element (blank node or another Description)
@@ -705,6 +755,17 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 				quad := NewQuad(subject, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
 				quads = append(quads, nestedQuads...)
+
+				// Check for rdf:ID on property element (triggers reification)
+				if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+					statementID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, err
+					}
+					reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(memberPredicate), object)
+					quads = append(quads, reificationQuads...)
+				}
+
 				continue
 			}
 
@@ -720,6 +781,17 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 				quad := NewQuad(subject, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
 				quads = append(quads, nestedQuads...)
+
+				// Check for rdf:ID on property element (triggers reification)
+				if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+					statementID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, err
+					}
+					reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(memberPredicate), object)
+					quads = append(quads, reificationQuads...)
+				}
+
 				continue
 			}
 
@@ -733,6 +805,16 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 			quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
 			quads = append(quads, quad)
 			quads = append(quads, nestedQuads...)
+
+			// Check for rdf:ID on property element (triggers reification)
+			if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+				statementID, err := p.resolveID(idAttr)
+				if err != nil {
+					return nil, err
+				}
+				reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(predicate), object)
+				quads = append(quads, reificationQuads...)
+			}
 
 		case xml.EndElement:
 			// End of typed node
