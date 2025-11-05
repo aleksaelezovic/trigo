@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 )
 
@@ -42,9 +43,46 @@ const (
 	rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 )
 
-// pushBase adds a base URI to the stack
+// Forbidden RDF names that cannot be used as node elements
+var forbiddenNodeElements = map[string]bool{
+	"RDF":             true,
+	"ID":              true,
+	"about":           true,
+	"parseType":       true,
+	"resource":        true,
+	"nodeID":          true,
+	"datatype":        true,
+	"aboutEach":       true, // Removed from RDF 1.1
+	"aboutEachPrefix": true, // Removed from RDF 1.1
+}
+
+// Forbidden RDF names that cannot be used as property elements
+var forbiddenPropertyElements = map[string]bool{
+	"Description":     true,
+	"RDF":             true,
+	"ID":              true,
+	"about":           true,
+	"parseType":       true,
+	"resource":        true,
+	"nodeID":          true,
+	"datatype":        true,
+	"aboutEach":       true,
+	"aboutEachPrefix": true,
+	"li":              false, // li is allowed as property element
+}
+
+// pushBase adds a base URI to the stack (resolving it against the current base)
 func (p *RDFXMLParser) pushBase(base string) {
-	p.baseURIStack = append(p.baseURIStack, base)
+	// Resolve the new base against the current base
+	resolvedBase := p.resolveURI(base)
+	p.baseURIStack = append(p.baseURIStack, resolvedBase)
+}
+
+// popBase removes the most recent base URI from the stack
+func (p *RDFXMLParser) popBase() {
+	if len(p.baseURIStack) > 0 {
+		p.baseURIStack = p.baseURIStack[:len(p.baseURIStack)-1]
+	}
 }
 
 // getCurrentBase returns the current base URI (xml:base takes precedence, then document base)
@@ -55,13 +93,93 @@ func (p *RDFXMLParser) getCurrentBase() string {
 	return p.documentBase
 }
 
+// resolveURI resolves a potentially relative URI against the current base URI
+func (p *RDFXMLParser) resolveURI(uri string) string {
+	base := p.getCurrentBase()
+	if base == "" {
+		return uri
+	}
+
+	// Parse the base URI
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		// If base is invalid, return uri as-is
+		return uri
+	}
+
+	// Parse the URI to resolve
+	refURL, err := url.Parse(uri)
+	if err != nil {
+		// If uri is invalid, return as-is
+		return uri
+	}
+
+	// Resolve the reference against the base
+	resolved := baseURL.ResolveReference(refURL)
+	return resolved.String()
+}
+
+// isXMLNameStartChar checks if a rune can start an XML Name
+func isXMLNameStartChar(r rune) bool {
+	return r == ':' || r == '_' ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 0xC0 && r <= 0xD6) ||
+		(r >= 0xD8 && r <= 0xF6) ||
+		(r >= 0xF8 && r <= 0x2FF) ||
+		(r >= 0x370 && r <= 0x37D) ||
+		(r >= 0x37F && r <= 0x1FFF) ||
+		(r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) ||
+		(r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) ||
+		(r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) ||
+		(r >= 0x10000 && r <= 0xEFFFF)
+}
+
+// isXMLNameChar checks if a rune can be part of an XML Name
+func isXMLNameChar(r rune) bool {
+	return isXMLNameStartChar(r) ||
+		r == '-' || r == '.' ||
+		(r >= '0' && r <= '9') ||
+		r == 0xB7 ||
+		(r >= 0x0300 && r <= 0x036F) ||
+		(r >= 0x203F && r <= 0x2040)
+}
+
+// isValidXMLName checks if a string is a valid XML Name
+func isValidXMLName(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	runes := []rune(s)
+	if !isXMLNameStartChar(runes[0]) {
+		return false
+	}
+
+	for i := 1; i < len(runes); i++ {
+		if !isXMLNameChar(runes[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // resolveID resolves an rdf:ID value against the current base
-func (p *RDFXMLParser) resolveID(id string) string {
+// It also validates that the ID is a valid XML Name
+func (p *RDFXMLParser) resolveID(id string) (string, error) {
+	if !isValidXMLName(id) {
+		return "", fmt.Errorf("rdf:ID value '%s' is not a valid XML Name", id)
+	}
+
 	base := p.getCurrentBase()
 	if base != "" {
-		return base + "#" + id
+		return base + "#" + id, nil
 	}
-	return "#" + id
+	return "#" + id, nil
 }
 
 // isContainer checks if an element is an RDF container
@@ -72,6 +190,69 @@ func isContainer(elem xml.StartElement) bool {
 	return elem.Name.Local == "Bag" || elem.Name.Local == "Seq" || elem.Name.Local == "Alt"
 }
 
+// validateNodeElement checks if an element can be used as a node element
+func validateNodeElement(elem xml.StartElement) error {
+	if elem.Name.Space == rdfNS {
+		if forbiddenNodeElements[elem.Name.Local] {
+			return fmt.Errorf("forbidden node element: rdf:%s", elem.Name.Local)
+		}
+	}
+	return nil
+}
+
+// validatePropertyElement checks if an element can be used as a property element
+func validatePropertyElement(elem xml.StartElement) error {
+	if elem.Name.Space == rdfNS {
+		if forbidden, exists := forbiddenPropertyElements[elem.Name.Local]; exists && forbidden {
+			return fmt.Errorf("forbidden property element: rdf:%s", elem.Name.Local)
+		}
+	}
+	return nil
+}
+
+// validateAttributes checks for invalid attribute combinations
+func validateAttributes(elem xml.StartElement) error {
+	hasAbout := getAttr(elem.Attr, rdfNS, "about") != ""
+	hasID := getAttr(elem.Attr, rdfNS, "ID") != ""
+	hasResource := getAttr(elem.Attr, rdfNS, "resource") != ""
+	hasNodeID := getAttr(elem.Attr, rdfNS, "nodeID") != ""
+
+	// Can't have both rdf:about and rdf:ID
+	if hasAbout && hasID {
+		return fmt.Errorf("element cannot have both rdf:about and rdf:ID")
+	}
+
+	// Can't have both rdf:about and rdf:nodeID
+	if hasAbout && hasNodeID {
+		return fmt.Errorf("element cannot have both rdf:about and rdf:nodeID")
+	}
+
+	// Can't have both rdf:ID and rdf:nodeID
+	if hasID && hasNodeID {
+		return fmt.Errorf("element cannot have both rdf:ID and rdf:nodeID")
+	}
+
+	// Can't have both rdf:ID and rdf:resource
+	if hasID && hasResource {
+		return fmt.Errorf("element cannot have both rdf:ID and rdf:resource")
+	}
+
+	// Check for rdf:li as an attribute (containers error)
+	if getAttr(elem.Attr, rdfNS, "li") != "" {
+		return fmt.Errorf("rdf:li cannot be used as an attribute")
+	}
+
+	// Check for aboutEach and aboutEachPrefix (removed in RDF 1.1)
+	if getAttr(elem.Attr, rdfNS, "aboutEach") != "" {
+		return fmt.Errorf("rdf:aboutEach is not supported (removed in RDF 1.1)")
+	}
+	if getAttr(elem.Attr, rdfNS, "aboutEachPrefix") != "" {
+		return fmt.Errorf("rdf:aboutEachPrefix is not supported (removed in RDF 1.1)")
+	}
+
+	return nil
+}
+
 // Parse parses RDF/XML and returns quads (all in default graph)
 func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 	decoder := xml.NewDecoder(reader)
@@ -79,6 +260,13 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 	var currentSubject Term
 	var blankNodeCounter int
 	var liCounter int // Counter for rdf:li elements within current container
+
+	// Stack to track element depth and whether each element has xml:base
+	type elementInfo struct {
+		name    xml.Name
+		hasBase bool
+	}
+	var elementStack []elementInfo
 
 	for {
 		token, err := decoder.Token()
@@ -93,10 +281,16 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 		case xml.StartElement:
 			// Check for xml:base attribute and push to stack
 			xmlBase := getAttrAny(elem.Attr, "base")
-			if xmlBase != "" {
+			hasBase := xmlBase != ""
+			if hasBase {
 				p.pushBase(xmlBase)
-				// Note: will be popped when we see the corresponding EndElement
 			}
+
+			// Track this element on the stack
+			elementStack = append(elementStack, elementInfo{
+				name:    elem.Name,
+				hasBase: hasBase,
+			})
 
 			// Check if this is rdf:RDF (root element) - skip it
 			if elem.Name.Local == "RDF" && elem.Name.Space == rdfNS {
@@ -105,15 +299,24 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 			// Check if this is an RDF container (rdf:Bag, rdf:Seq, rdf:Alt)
 			if isContainer(elem) {
+				// Validate attributes
+				if err := validateAttributes(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+
 				// Check for rdf:about or rdf:ID, otherwise create blank node
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
 
 				var containerNode Term
 				if aboutAttr != "" {
-					containerNode = NewNamedNode(aboutAttr)
+					containerNode = NewNamedNode(p.resolveURI(aboutAttr))
 				} else if idAttr != "" {
-					containerNode = NewNamedNode(p.resolveID(idAttr))
+					resolvedID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					containerNode = NewNamedNode(resolvedID)
 				} else {
 					// Create blank node for container
 					blankNodeCounter++
@@ -137,13 +340,22 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 			// Check if this is rdf:Description (subject)
 			if elem.Name.Local == "Description" && elem.Name.Space == rdfNS {
+				// Validate attributes
+				if err := validateAttributes(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+
 				// Get rdf:about, rdf:ID, or create blank node
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
 				if aboutAttr != "" {
-					currentSubject = NewNamedNode(aboutAttr)
+					currentSubject = NewNamedNode(p.resolveURI(aboutAttr))
 				} else if idAttr != "" {
-					currentSubject = NewNamedNode(p.resolveID(idAttr))
+					resolvedID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					currentSubject = NewNamedNode(resolvedID)
 				} else {
 					// Blank node
 					blankNodeCounter++
@@ -180,12 +392,26 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 			idAttr := getAttr(elem.Attr, rdfNS, "ID")
 			if aboutAttr != "" || idAttr != "" || currentSubject == nil {
+				// Validate this is not a forbidden node element
+				if err := validateNodeElement(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+
+				// Validate attributes
+				if err := validateAttributes(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+
 				// This is a typed node (implicit rdf:type)
 				var subject Term
 				if aboutAttr != "" {
-					subject = NewNamedNode(aboutAttr)
+					subject = NewNamedNode(p.resolveURI(aboutAttr))
 				} else if idAttr != "" {
-					subject = NewNamedNode(p.resolveID(idAttr))
+					resolvedID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					subject = NewNamedNode(resolvedID)
 				} else {
 					blankNodeCounter++
 					subject = NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
@@ -208,6 +434,11 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 			// This is a property element
 			if currentSubject != nil {
+				// Validate property element
+				if err := validatePropertyElement(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+
 				predicate := elem.Name.Space + elem.Name.Local
 
 				// Check for non-RDF property attributes (these create a blank node with additional properties)
@@ -278,7 +509,7 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// Check for rdf:resource attribute (object is IRI)
 				resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
 				if resourceAttr != "" {
-					object := NewNamedNode(resourceAttr)
+					object := NewNamedNode(p.resolveURI(resourceAttr))
 					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
 					quads = append(quads, quad)
 					continue
@@ -347,10 +578,14 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			}
 
 		case xml.EndElement:
-			// Check if we need to pop xml:base
-			if getAttrAny([]xml.Attr{}, "base") != "" {
-				// Note: We can't easily check if this element had xml:base
-				// This is a simplified implementation
+			// Pop the element from the stack and check if we need to pop xml:base
+			if len(elementStack) > 0 {
+				info := elementStack[len(elementStack)-1]
+				elementStack = elementStack[:len(elementStack)-1]
+
+				if info.hasBase {
+					p.popBase()
+				}
 			}
 
 			// End of rdf:Description - reset current subject
@@ -381,13 +616,14 @@ func (p *RDFXMLParser) parseContainer(decoder *xml.Decoder, containerNode Term, 
 				memberPredicate := fmt.Sprintf("%s_%d", rdfNS, *liCounter)
 
 				// Parse the content
-				object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+				object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 				if err != nil {
 					return nil, err
 				}
 
 				quad := NewQuad(containerNode, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
+				quads = append(quads, nestedQuads...)
 				continue
 			}
 
@@ -396,25 +632,27 @@ func (p *RDFXMLParser) parseContainer(decoder *xml.Decoder, containerNode Term, 
 				memberPredicate := elem.Name.Space + elem.Name.Local
 
 				// Parse the content
-				object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+				object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 				if err != nil {
 					return nil, err
 				}
 
 				quad := NewQuad(containerNode, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
+				quads = append(quads, nestedQuads...)
 				continue
 			}
 
 			// Other properties (not typical in containers, but allowed)
 			predicate := elem.Name.Space + elem.Name.Local
-			object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+			object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 			if err != nil {
 				return nil, err
 			}
 
 			quad := NewQuad(containerNode, NewNamedNode(predicate), object, NewDefaultGraph())
 			quads = append(quads, quad)
+			quads = append(quads, nestedQuads...)
 
 		case xml.EndElement:
 			// End of container
@@ -442,13 +680,14 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 				*liCounter++
 				memberPredicate := fmt.Sprintf("%s_%d", rdfNS, *liCounter)
 
-				object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+				object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 				if err != nil {
 					return nil, err
 				}
 
 				quad := NewQuad(subject, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
+				quads = append(quads, nestedQuads...)
 				continue
 			}
 
@@ -456,25 +695,27 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 			if strings.HasPrefix(elem.Name.Local, "_") && elem.Name.Space == rdfNS {
 				memberPredicate := elem.Name.Space + elem.Name.Local
 
-				object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+				object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 				if err != nil {
 					return nil, err
 				}
 
 				quad := NewQuad(subject, NewNamedNode(memberPredicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
+				quads = append(quads, nestedQuads...)
 				continue
 			}
 
 			// Regular property
 			predicate := elem.Name.Space + elem.Name.Local
-			object, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
+			object, nestedQuads, err := p.parsePropertyContent(decoder, elem, blankNodeCounter)
 			if err != nil {
 				return nil, err
 			}
 
 			quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
 			quads = append(quads, quad)
+			quads = append(quads, nestedQuads...)
 
 		case xml.EndElement:
 			// End of typed node
@@ -484,7 +725,8 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 }
 
 // parsePropertyContent parses the content of a property element and returns the object
-func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.StartElement, blankNodeCounter *int) (Term, error) {
+// It also returns any additional quads generated (e.g., for parseType="Resource")
+func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.StartElement, blankNodeCounter *int) (Term, []*Quad, error) {
 	// Check for rdf:parseType attribute
 	parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
 	if parseTypeAttr == "Resource" {
@@ -492,18 +734,32 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		*blankNodeCounter++
 		blankNode := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
 
-		// Consume tokens until end element
+		// Parse nested properties as properties of this blank node
+		var quads []*Quad
 		for {
 			token, err := decoder.Token()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			if _, ok := token.(xml.EndElement); ok {
-				break
+
+			switch t := token.(type) {
+			case xml.StartElement:
+				// This is a property of the blank node
+				predicate := t.Name.Space + t.Name.Local
+				object, nestedQuads, err := p.parsePropertyContent(decoder, t, blankNodeCounter)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				quad := NewQuad(blankNode, NewNamedNode(predicate), object, NewDefaultGraph())
+				quads = append(quads, quad)
+				quads = append(quads, nestedQuads...)
+
+			case xml.EndElement:
+				// End of parseType="Resource" element
+				return blankNode, quads, nil
 			}
 		}
-
-		return blankNode, nil
 	}
 
 	// Check for rdf:resource attribute (object is IRI)
@@ -512,9 +768,9 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		// Consume the end element
 		_, err := decoder.Token()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return NewNamedNode(resourceAttr), nil
+		return NewNamedNode(p.resolveURI(resourceAttr)), nil, nil
 	}
 
 	// Check for rdf:datatype attribute
@@ -528,7 +784,7 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return nil, fmt.Errorf("error reading property content: %w", err)
+			return nil, nil, fmt.Errorf("error reading property content: %w", err)
 		}
 
 		switch t := token.(type) {
@@ -553,14 +809,14 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 				// Plain literal
 				object = NewLiteral(textContent.String())
 			}
-			return object, nil
+			return object, nil, nil
 
 		case xml.StartElement:
 			// Nested element (blank node or another Description)
 			if t.Name.Local == "Description" && t.Name.Space == rdfNS {
 				// Nested blank node
 				*blankNodeCounter++
-				return NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter)), nil
+				return NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter)), nil, nil
 			}
 		}
 	}
@@ -584,7 +840,7 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 			// Check for rdf:resource attribute
 			resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
 			if resourceAttr != "" {
-				object := NewNamedNode(resourceAttr)
+				object := NewNamedNode(p.resolveURI(resourceAttr))
 				quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
 				continue
