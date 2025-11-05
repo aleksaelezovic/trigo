@@ -8,11 +8,12 @@ import (
 
 // TriGParser parses TriG format (Turtle + named graphs)
 type TriGParser struct {
-	input    string
-	pos      int
-	length   int
-	prefixes map[string]string
-	base     string
+	input            string
+	pos              int
+	length           int
+	prefixes         map[string]string
+	base             string
+	blankNodeCounter int // Global blank node counter shared across all graph blocks
 }
 
 // NewTriGParser creates a new TriG parser
@@ -237,12 +238,16 @@ func (p *TriGParser) parseTriplesBlock(startPos int) ([]*Triple, int, error) {
 		turtleParser.prefixes[k] = v
 	}
 	turtleParser.base = p.base
+	turtleParser.blankNodeCounter = p.blankNodeCounter
 
 	// Parse the triples
 	triples, err := turtleParser.Parse()
 	if err != nil {
 		return nil, pos, fmt.Errorf("failed to parse triples in graph block: %w", err)
 	}
+
+	// Update TriG parser's blank node counter to maintain uniqueness across graph blocks
+	p.blankNodeCounter = turtleParser.blankNodeCounter
 
 	// Skip the closing '}'
 	pos++
@@ -289,12 +294,16 @@ func (p *TriGParser) parseDefaultGraphTripleBlock() ([]*Triple, error) {
 		turtleParser.prefixes[k] = v
 	}
 	turtleParser.base = p.base
+	turtleParser.blankNodeCounter = p.blankNodeCounter
 
 	// Parse the triples
 	triples, err := turtleParser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse triple block: %w", err)
 	}
+
+	// Update TriG parser's blank node counter to maintain uniqueness
+	p.blankNodeCounter = turtleParser.blankNodeCounter
 
 	// Update position to after the '.'
 	p.pos = endPos

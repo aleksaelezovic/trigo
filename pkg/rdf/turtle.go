@@ -15,7 +15,8 @@ type TurtleParser struct {
 	prefixes         map[string]string
 	base             string
 	blankNodeCounter int
-	strictNTriples   bool // When true, enforce strict N-Triples syntax
+	strictNTriples   bool      // When true, enforce strict N-Triples syntax
+	extraTriples     []*Triple // Triples generated during term parsing (collections, blank node property lists)
 }
 
 // NewTurtleParser creates a new Turtle parser
@@ -192,6 +193,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
+	// Collect any extra triples generated during subject parsing (e.g., collections)
+	triples = append(triples, p.extraTriples...)
+	p.extraTriples = nil
 
 	// Parse predicate-object pairs
 	for {
@@ -202,6 +206,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse predicate: %w", err)
 		}
+		// Collect any extra triples from predicate parsing
+		triples = append(triples, p.extraTriples...)
+		p.extraTriples = nil
 
 		// Parse objects (can be multiple with comma separator)
 		for {
@@ -212,6 +219,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse object: %w", err)
 			}
+			// Collect any extra triples from object parsing
+			triples = append(triples, p.extraTriples...)
+			p.extraTriples = nil
 
 			triples = append(triples, NewTriple(subject, predicate, object))
 
@@ -631,17 +641,73 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 		return blankNode, nil
 	}
 
-	// Skip property list content (architecture limitation: parseTerm returns single Term
-	// but property lists generate multiple triples - need parser refactoring to support properly)
-	bracketDepth := 1
-	for p.pos < p.length && bracketDepth > 0 {
-		if p.input[p.pos] == '[' {
-			bracketDepth++
-		} else if p.input[p.pos] == ']' {
-			bracketDepth--
+	// Parse property list: predicate object pairs with ; and , separators
+	// Similar to parseTripleBlock but the subject is the blank node
+	for {
+		p.skipWhitespaceAndComments()
+
+		// Check if we've reached the end
+		if p.pos >= p.length {
+			return nil, fmt.Errorf("unexpected end of input in blank node property list")
 		}
-		p.pos++
+		if p.input[p.pos] == ']' {
+			break
+		}
+
+		// Parse predicate
+		predicate, err := p.parseTerm()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse predicate in blank node property list: %w", err)
+		}
+		// Collect any extra triples from predicate parsing
+		// (Note: these stay in extraTriples, will be collected by parseTripleBlock)
+
+		// Parse objects (can be multiple with comma separator)
+		for {
+			p.skipWhitespaceAndComments()
+
+			// Parse object
+			object, err := p.parseTerm()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse object in blank node property list: %w", err)
+			}
+			// Collect any extra triples from object parsing
+
+			// Add triple for this blank node property
+			p.extraTriples = append(p.extraTriples, NewTriple(blankNode, predicate, object))
+
+			p.skipWhitespaceAndComments()
+
+			// Check for comma (more objects with same predicate)
+			if p.pos < p.length && p.input[p.pos] == ',' {
+				p.pos++ // skip ','
+				continue
+			}
+			break
+		}
+
+		p.skipWhitespaceAndComments()
+
+		// Check for semicolon (more predicates with same subject)
+		if p.pos < p.length && p.input[p.pos] == ';' {
+			// Skip all consecutive semicolons (repeated semicolons are allowed)
+			for p.pos < p.length && p.input[p.pos] == ';' {
+				p.pos++
+				p.skipWhitespaceAndComments()
+			}
+			// Check if there's actually a predicate following (not just trailing semicolons)
+			if p.pos < p.length && p.input[p.pos] != ']' {
+				continue
+			}
+		}
+
+		break
 	}
+
+	if p.pos >= p.length || p.input[p.pos] != ']' {
+		return nil, fmt.Errorf("expected ']' at end of blank node property list")
+	}
+	p.pos++ // skip ']'
 
 	return blankNode, nil
 }
@@ -660,20 +726,66 @@ func (p *TurtleParser) parseCollection() (Term, error) {
 		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"), nil
 	}
 
-	// Non-empty collection - create blank node for list head
-	p.blankNodeCounter++
-	listHead := NewBlankNode(fmt.Sprintf("list%d", p.blankNodeCounter))
-
-	// Skip collection content (architecture limitation: collections generate multiple
-	// triples using rdf:first/rdf:rest but parseTerm returns single Term)
-	parenDepth := 1
-	for p.pos < p.length && parenDepth > 0 {
-		if p.input[p.pos] == '(' {
-			parenDepth++
-		} else if p.input[p.pos] == ')' {
-			parenDepth--
+	// Non-empty collection - parse items and build RDF list
+	var items []Term
+	for {
+		p.skipWhitespaceAndComments()
+		if p.pos >= p.length {
+			return nil, fmt.Errorf("unexpected end of input in collection")
 		}
-		p.pos++
+		if p.input[p.pos] == ')' {
+			break
+		}
+
+		// Parse collection item
+		item, err := p.parseTerm()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse collection item: %w", err)
+		}
+		items = append(items, item)
+
+		p.skipWhitespaceAndComments()
+	}
+
+	if p.pos >= p.length || p.input[p.pos] != ')' {
+		return nil, fmt.Errorf("expected ')' at end of collection")
+	}
+	p.pos++ // skip ')'
+
+	if len(items) == 0 {
+		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"), nil
+	}
+
+	// Build RDF list structure: _:b1 rdf:first item1 ; rdf:rest _:b2 . etc.
+	rdfFirst := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+	rdfRest := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+	rdfNil := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+
+	var listHead Term
+	var prevNode Term
+
+	for i, item := range items {
+		p.blankNodeCounter++
+		node := NewBlankNode(fmt.Sprintf("el%d", p.blankNodeCounter))
+
+		if i == 0 {
+			listHead = node
+		}
+
+		// Add rdf:first triple (this node points to the item)
+		p.extraTriples = append(p.extraTriples, NewTriple(node, rdfFirst, item))
+
+		// Link previous node to this one
+		if i > 0 && prevNode != nil {
+			p.extraTriples = append(p.extraTriples, NewTriple(prevNode, rdfRest, node))
+		}
+
+		// Add rdf:rest triple for last item
+		if i == len(items)-1 {
+			p.extraTriples = append(p.extraTriples, NewTriple(node, rdfRest, rdfNil))
+		}
+
+		prevNode = node
 	}
 
 	return listHead, nil

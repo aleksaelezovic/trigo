@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 75.0% pass rate (222/296 tests) - <strong>IMPROVED from 74.0%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 80.4% pass rate (238/296 tests) - <strong>IMPROVED from 75.0%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -235,9 +235,10 @@ Skipped: 1
                     <li>Full Unicode support for prefixed names, blank node labels (PN_CHARS, combining marks)</li>
                     <li>Unicode-aware 'a' keyword detection</li>
                     <li>Anonymous blank nodes [], empty collections ()</li>
+                    <li>Collections with items (RDF list expansion via rdf:first/rdf:rest/rdf:nil)</li>
+                    <li>Blank node property lists with multiple predicates and objects</li>
                     <li>@base directive and relative IRI resolution</li>
                     <li>Repeated semicolons, PName escape sequences (\_\~\.\-\!\$ etc.)</li>
-                    <li>Blank node property lists (partial), collections with items</li>
                 </ul>
             </li>
             <li><strong>rdf11/rdf-n-triples</strong>: 100.0% pass rate (70/70 tests) - <strong>PERFECT! Improved from 84.3%</strong>
@@ -256,12 +257,14 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 74.0% pass rate (248/335 tests) - <strong>IMPROVED from 73.7%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 78.8% pass rate (264/335 tests) - <strong>IMPROVED from 74.0%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
                     <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
-                    <li>Delegates triple parsing to Turtle parser (74.0% → 74.0% with Turtle improvements)</li>
+                    <li>Delegates triple parsing to Turtle parser (74.0% → 78.8% with Turtle improvements)</li>
+                    <li>Global blank node counter across graph blocks ensures unique blank node IDs</li>
+                    <li>Collections and blank node property lists fully supported</li>
                     <li>Repeated semicolons, PName escape sequences, numeric literals, Unicode support</li>
                 </ul>
             </li>
@@ -327,6 +330,17 @@ Skipped: 1
                     <li>Proper handling of '.' character in prefix/blank node names (allowed in middle, not at end)</li>
                     <li><strong>Turtle: 74.0% → 75.0%</strong> (+1.0pp, +3 tests)</li>
                     <li><strong>TriG: 73.7% → 74.0%</strong> (+0.3pp, +1 test)</li>
+                </ul>
+            </li>
+            <li><strong>Collections and Blank Node Property Lists:</strong>
+                <ul>
+                    <li>Implemented full RDF collection parsing with expansion to rdf:first/rdf:rest/rdf:nil linked list structure</li>
+                    <li>Support for nested collections and collections in subject/object positions</li>
+                    <li>Implemented blank node property list syntax <code>[ pred obj ]</code> with multiple predicates and objects</li>
+                    <li>Refactored parser architecture with extraTriples field to support constructs that generate multiple triples</li>
+                    <li>Global blank node counter in TriG parser ensures unique blank node IDs across graph blocks</li>
+                    <li><strong>Turtle: 75.0% → 80.4%</strong> (+5.4pp, +16 tests)</li>
+                    <li><strong>TriG: 74.0% → 78.8%</strong> (+4.8pp, +16 tests)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
