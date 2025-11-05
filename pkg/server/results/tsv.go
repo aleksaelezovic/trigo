@@ -1,6 +1,7 @@
 package results
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -14,6 +15,9 @@ import (
 // FormatSelectResultsTSV converts a SELECT result to SPARQL TSV format
 func FormatSelectResultsTSV(result *executor.SelectResult) ([]byte, error) {
 	var builder strings.Builder
+
+	// Create blank node canonicalization mapping
+	bnodeMap := createBlankNodeMappingTSV(result)
 
 	// Extract variable names
 	var varNames []string
@@ -54,7 +58,7 @@ func FormatSelectResultsTSV(result *executor.SelectResult) ([]byte, error) {
 				builder.WriteString("\t")
 			}
 			if term, ok := binding.Vars[varName]; ok {
-				builder.WriteString(termToTSVValue(term))
+				builder.WriteString(termToTSVValue(term, bnodeMap))
 			}
 			// If variable is not bound, leave empty
 		}
@@ -82,6 +86,28 @@ func FormatAskResultTSV(result *executor.AskResult) ([]byte, error) {
 	return []byte(builder.String()), nil
 }
 
+// createBlankNodeMappingTSV creates a canonical mapping for blank nodes
+// Maps internal blank node IDs to canonical labels (b0, b1, b2, ...)
+func createBlankNodeMappingTSV(result *executor.SelectResult) map[string]string {
+	bnodeMap := make(map[string]string)
+	counter := 0
+
+	// Collect all blank nodes in order of first appearance
+	for _, binding := range result.Bindings {
+		for _, term := range binding.Vars {
+			if bn, ok := term.(*rdf.BlankNode); ok {
+				if _, exists := bnodeMap[bn.ID]; !exists {
+					// Use b0, b1, b2... for TSV (as per W3C test expectations)
+					bnodeMap[bn.ID] = fmt.Sprintf("b%d", counter)
+					counter++
+				}
+			}
+		}
+	}
+
+	return bnodeMap
+}
+
 // termToTSVValue converts an RDF term to a TSV value string
 // According to SPARQL TSV spec:
 // - IRIs are enclosed in angle brackets: <iri>
@@ -89,14 +115,17 @@ func FormatAskResultTSV(result *executor.AskResult) ([]byte, error) {
 // - Numeric literals (integer, decimal, double) without quotes: 4, 5.5
 // - Language-tagged literals: "value"@language
 // - Typed literals: "value"^^<datatype> (except for standard numeric types)
-// - Blank nodes: _:label
+// - Blank nodes: _:label (canonicalized)
 // - Special characters in literals must be escaped
-func termToTSVValue(term rdf.Term) string {
+func termToTSVValue(term rdf.Term, bnodeMap map[string]string) string {
 	switch t := term.(type) {
 	case *rdf.NamedNode:
 		return "<" + t.IRI + ">"
 
 	case *rdf.BlankNode:
+		if canonical, ok := bnodeMap[t.ID]; ok {
+			return "_:" + canonical
+		}
 		return "_:" + t.ID
 
 	case *rdf.Literal:
@@ -104,16 +133,23 @@ func termToTSVValue(term rdf.Term) string {
 			escaped := escapeTSVString(t.Value)
 			return "\"" + escaped + "\"@" + t.Language
 		} else if t.Datatype != nil {
-			// For numeric types (integer, decimal, double), output without quotes or datatype
-			// according to SPARQL 1.1 TSV spec examples
 			datatypeIRI := t.Datatype.IRI
+
+			// For the three basic numeric types (integer, decimal, double), output without quotes or datatype
+			// according to SPARQL 1.1 TSV spec examples
 			if datatypeIRI == "http://www.w3.org/2001/XMLSchema#integer" ||
 				datatypeIRI == "http://www.w3.org/2001/XMLSchema#decimal" ||
 				datatypeIRI == "http://www.w3.org/2001/XMLSchema#double" {
+				// Format doubles with uppercase E notation
+				if datatypeIRI == "http://www.w3.org/2001/XMLSchema#double" {
+					return formatDoubleTSV(t.Value)
+				}
 				// Output numeric value without quotes or datatype
 				return t.Value
 			}
-			// For other typed literals, include the datatype
+
+			// For other typed literals (including derived numeric types like negativeInteger),
+			// include the datatype
 			escaped := escapeTSVString(t.Value)
 			return "\"" + escaped + "\"^^<" + datatypeIRI + ">"
 		}
@@ -124,6 +160,49 @@ func termToTSVValue(term rdf.Term) string {
 	default:
 		return term.String()
 	}
+}
+
+// formatDoubleTSV formats a double value with lowercase e notation and decimal point
+func formatDoubleTSV(value string) string {
+	// Normalize to lowercase 'e' and remove '+' sign
+	value = strings.ReplaceAll(value, "E+", "e")
+	value = strings.ReplaceAll(value, "E-", "e-")
+	value = strings.ReplaceAll(value, "E", "e")
+	value = strings.ReplaceAll(value, "e+", "e")
+
+	// Ensure there's a decimal point before the e if there isn't one
+	// and remove leading zeros from exponent
+	// e.g., "1e06" should become "1.0e6"
+	if strings.Contains(value, "e") {
+		parts := strings.Split(value, "e")
+		if len(parts) == 2 {
+			mantissa := parts[0]
+			exponent := parts[1]
+
+			// Add decimal point if missing
+			if !strings.Contains(mantissa, ".") {
+				mantissa += ".0"
+			}
+
+			// Remove leading zeros from exponent, but preserve sign
+			isNegative := strings.HasPrefix(exponent, "-")
+			if isNegative {
+				exponent = exponent[1:] // Remove minus sign temporarily
+			}
+			// Remove leading zeros
+			exponent = strings.TrimLeft(exponent, "0")
+			if exponent == "" {
+				exponent = "0"
+			}
+			if isNegative {
+				exponent = "-" + exponent
+			}
+
+			value = mantissa + "e" + exponent
+		}
+	}
+
+	return value
 }
 
 // escapeTSVString escapes special characters in TSV strings
