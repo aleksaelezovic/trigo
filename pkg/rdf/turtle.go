@@ -234,9 +234,12 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			if p.strictNTriples {
 				return nil, fmt.Errorf("semicolon abbreviation not allowed in N-Triples at position %d", p.pos)
 			}
-			p.pos++ // skip ';'
-			p.skipWhitespaceAndComments()
-			// Check if there's actually a predicate following (not just a trailing semicolon)
+			// Skip all consecutive semicolons (repeated semicolons are allowed)
+			for p.pos < p.length && p.input[p.pos] == ';' {
+				p.pos++
+				p.skipWhitespaceAndComments()
+			}
+			// Check if there's actually a predicate following (not just trailing semicolons)
 			if p.pos < p.length && p.input[p.pos] != '.' {
 				continue
 			}
@@ -909,20 +912,43 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	p.pos++ // skip ':'
 
 	// Read local part - can contain colons and many other characters per Turtle spec
-	localStart := p.pos
+	// Also supports escape sequences like \- \. \~ etc. (PN_LOCAL_ESC)
+	var localPart strings.Builder
 	for p.pos < p.length {
 		ch := p.input[p.pos]
+
+		// Handle escape sequences
+		if ch == '\\' && p.pos+1 < p.length {
+			nextCh := p.input[p.pos+1]
+			// Check if this is a valid PN_LOCAL_ESC character
+			if nextCh == '_' || nextCh == '~' || nextCh == '.' || nextCh == '-' ||
+				nextCh == '!' || nextCh == '$' || nextCh == '&' || nextCh == '\'' ||
+				nextCh == '(' || nextCh == ')' || nextCh == '*' || nextCh == '+' ||
+				nextCh == ',' || nextCh == ';' || nextCh == '=' || nextCh == '/' ||
+				nextCh == '?' || nextCh == '#' || nextCh == '@' || nextCh == '%' {
+				// Add the escaped character without the backslash
+				localPart.WriteByte(nextCh)
+				p.pos += 2
+				continue
+			}
+		}
+
 		// Local names can contain alphanumeric, underscore, hyphen, colon, and many other chars
 		// Break on whitespace, punctuation that ends a triple, or special Turtle syntax
+		// Note: we don't break on characters that can be escaped
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
-			ch == '.' || ch == ';' || ch == ',' || ch == '>' || ch == '<' ||
-			ch == '"' || ch == '#' {
+			ch == '>' || ch == '<' || ch == '"' {
 			break
 		}
+		// Break on these only if not escaped (we already handled escaping above)
+		if ch == '.' || ch == ';' || ch == ',' || ch == '#' {
+			break
+		}
+		localPart.WriteByte(ch)
 		p.pos++
 	}
 
-	localPart := p.input[localStart:p.pos]
+	localPartStr := localPart.String()
 
 	// Expand prefix
 	baseIRI, ok := p.prefixes[prefix]
@@ -930,6 +956,6 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 		return nil, fmt.Errorf("undefined prefix: '%s'", prefix)
 	}
 
-	fullIRI := baseIRI + localPart
+	fullIRI := baseIRI + localPartStr
 	return NewNamedNode(fullIRI), nil
 }

@@ -227,13 +227,14 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 66.2% pass rate (196/296 tests) - <strong>IMPROVED from 62.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 70.3% pass rate (208/296 tests) - <strong>IMPROVED from 66.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
                     <li>Anonymous blank nodes [], empty collections ()</li>
                     <li>@base directive and relative IRI resolution</li>
-                    <li>Blank node property lists (partial), collections with items, some PName escapes</li>
+                    <li>Repeated semicolons, PName escape sequences (\_\~\.\-\!\$ etc.)</li>
+                    <li>Blank node property lists (partial), collections with items</li>
                 </ul>
             </li>
             <li><strong>rdf11/rdf-n-triples</strong>: 100.0% pass rate (70/70 tests) - <strong>PERFECT! Improved from 84.3%</strong>
@@ -252,12 +253,13 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 47.2% pass rate (158/335 tests) - <strong>IMPROVED from 46.0%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 70.4% pass rate (236/335 tests) - <strong>IMPROVED from 47.2%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
                     <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
-                    <li>Complex blank node patterns, collections (inherited from Turtle parser)</li>
+                    <li>Delegates triple parsing to Turtle parser (66.9% → 70.4% with Turtle improvements)</li>
+                    <li>Repeated semicolons, PName escape sequences, numeric literals</li>
                 </ul>
             </li>
             <li><strong>rdf11/rdf-xml</strong>: 63.9% pass rate (106/166 tests) - <strong>IMPROVED from 47.0%</strong>
@@ -296,6 +298,15 @@ Skipped: 1
 
         <p><strong>Recent Improvements (Phase 3 - Graph Isomorphism & SPARQL Results):</strong></p>
         <ul>
+            <li><strong>Turtle/TriG Quick Wins (Numeric Formatting, Semicolons, Escapes):</strong>
+                <ul>
+                    <li>Fixed numeric literal formatting to preserve trailing zeros (.0)</li>
+                    <li>Added support for repeated semicolons in property lists</li>
+                    <li>Implemented PName escape sequences (\_\~\.\-\!\$ etc.)</li>
+                    <li><strong>Turtle: 66.2% → 70.3%</strong> (+4.1pp, +12 tests)</li>
+                    <li><strong>TriG: 66.9% → 70.4%</strong> (+3.5pp, +12 tests)</li>
+                </ul>
+            </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
                 <ul>
                     <li>Implemented VF2-inspired backtracking algorithm for blank node matching</li>

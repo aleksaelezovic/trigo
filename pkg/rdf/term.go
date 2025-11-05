@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -215,11 +216,34 @@ func NewIntegerLiteral(value int64) *Literal {
 }
 
 func NewDoubleLiteral(value float64) *Literal {
-	return NewLiteralWithDatatype(fmt.Sprintf("%g", value), XSDDouble)
+	// Format doubles preserving decimal point and using scientific notation for large/small values
+	var str string
+	// If it's a whole number, ensure it has .0
+	if value == float64(int64(value)) && value < 1e15 && value > -1e15 {
+		str = fmt.Sprintf("%.1f", value)
+	} else {
+		// Use %g for scientific notation, but ensure decimal point exists
+		str = fmt.Sprintf("%g", value)
+		if !strings.Contains(str, ".") && !strings.Contains(str, "e") && !strings.Contains(str, "E") {
+			str = str + ".0"
+		}
+	}
+	return NewLiteralWithDatatype(str, XSDDouble)
 }
 
 func NewDecimalLiteral(value float64) *Literal {
-	return NewLiteralWithDatatype(fmt.Sprintf("%g", value), XSDDecimal)
+	// Decimals should always have a decimal point, preserve trailing zeros
+	str := fmt.Sprintf("%.1f", value)
+	// If the value has more precision, show it
+	if value != float64(int64(value*10)/10) {
+		str = fmt.Sprintf("%f", value)
+		// Trim excessive trailing zeros but keep at least one digit after decimal
+		str = strings.TrimRight(str, "0")
+		if strings.HasSuffix(str, ".") {
+			str = str + "0"
+		}
+	}
+	return NewLiteralWithDatatype(str, XSDDecimal)
 }
 
 func NewBooleanLiteral(value bool) *Literal {
