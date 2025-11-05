@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // TurtleParser is a simple Turtle/N-Triples parser for loading test data
@@ -307,12 +308,26 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 	}
 
 	// Check for 'a' keyword (shorthand for rdf:type)
-	if ch == 'a' && (p.pos+1 >= p.length || !isNameChar(p.input[p.pos+1])) {
-		if p.strictNTriples {
-			return nil, fmt.Errorf("'a' abbreviation not allowed in N-Triples at position %d", p.pos)
+	// Must check if 'a' is followed by a non-name character (using Unicode-aware check)
+	if ch == 'a' {
+		// Peek at the next character to see if it could be part of a prefixed name
+		nextPos := p.pos + 1
+		isStandaloneA := true
+		if nextPos < p.length {
+			// Decode the next rune to check if it's a valid name continuation
+			nextRune, _ := utf8.DecodeRuneInString(p.input[nextPos:])
+			// Check if it could be part of a prefixed name (PN_CHARS or ':')
+			if isPN_CHARS(nextRune) || nextRune == ':' || nextRune == '.' {
+				isStandaloneA = false
+			}
 		}
-		p.pos++ // skip 'a'
-		return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+		if isStandaloneA {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("'a' abbreviation not allowed in N-Triples at position %d", p.pos)
+			}
+			p.pos++ // skip 'a'
+			return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
+		}
 	}
 
 	// Check for boolean literals
@@ -339,9 +354,53 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 	return nil, fmt.Errorf("unexpected character: %c at position %d", ch, p.pos)
 }
 
-// isNameChar checks if a character can be part of a name
-func isNameChar(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-'
+// peekRune reads the next UTF-8 rune at the current position without advancing permanently
+func (p *TurtleParser) peekRune() (rune, int) {
+	if p.pos >= p.length {
+		return 0, 0
+	}
+	r, size := utf8.DecodeRuneInString(p.input[p.pos:])
+	return r, size
+}
+
+// isPN_CHARS_BASE checks if a rune is a PN_CHARS_BASE character per Turtle spec
+// PN_CHARS_BASE ::= [A-Z] | [a-z] | [#x00C0-#x00D6] | [#x00D8-#x00F6] | [#x00F8-#x02FF] |
+//
+//	[#x0370-#x037D] | [#x037F-#x1FFF] | [#x200C-#x200D] | [#x2070-#x218F] |
+//	[#x2C00-#x2FEF] | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD] |
+//	[#x10000-#xEFFFF]
+func isPN_CHARS_BASE(r rune) bool {
+	return (r >= 'A' && r <= 'Z') ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 0x00C0 && r <= 0x00D6) ||
+		(r >= 0x00D8 && r <= 0x00F6) ||
+		(r >= 0x00F8 && r <= 0x02FF) ||
+		(r >= 0x0370 && r <= 0x037D) ||
+		(r >= 0x037F && r <= 0x1FFF) ||
+		(r >= 0x200C && r <= 0x200D) ||
+		(r >= 0x2070 && r <= 0x218F) ||
+		(r >= 0x2C00 && r <= 0x2FEF) ||
+		(r >= 0x3001 && r <= 0xD7FF) ||
+		(r >= 0xF900 && r <= 0xFDCF) ||
+		(r >= 0xFDF0 && r <= 0xFFFD) ||
+		(r >= 0x10000 && r <= 0xEFFFF)
+}
+
+// isPN_CHARS_U checks if a rune is a PN_CHARS_U character per Turtle spec
+// PN_CHARS_U ::= PN_CHARS_BASE | '_'
+func isPN_CHARS_U(r rune) bool {
+	return isPN_CHARS_BASE(r) || r == '_'
+}
+
+// isPN_CHARS checks if a rune is a PN_CHARS character per Turtle spec
+// PN_CHARS ::= PN_CHARS_U | '-' | [0-9] | #x00B7 | [#x0300-#x036F] | [#x203F-#x2040]
+func isPN_CHARS(r rune) bool {
+	return isPN_CHARS_U(r) ||
+		r == '-' ||
+		(r >= '0' && r <= '9') ||
+		r == 0x00B7 ||
+		(r >= 0x0300 && r <= 0x036F) ||
+		(r >= 0x203F && r <= 0x2040)
 }
 
 // parseIRI parses an IRI in angle brackets
@@ -524,12 +583,31 @@ func (p *TurtleParser) parseBlankNode() (Term, error) {
 	p.pos += 2 // skip '_:'
 
 	start := p.pos
+
+	// BLANK_NODE_LABEL ::= '_:' (PN_CHARS_U | [0-9]) ((PN_CHARS | '.')* PN_CHARS)?
+	// First character must be PN_CHARS_U or digit
+	if p.pos < p.length {
+		r, size := p.peekRune()
+		if !isPN_CHARS_U(r) && !(r >= '0' && r <= '9') {
+			return nil, fmt.Errorf("invalid blank node label start character at position %d", p.pos)
+		}
+		p.pos += size
+	}
+
+	// Continue reading label characters (PN_CHARS | '.')
+	lastCharWasDot := false
 	for p.pos < p.length {
-		ch := p.input[p.pos]
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+		r, size := p.peekRune()
+		if !isPN_CHARS(r) && r != '.' {
 			break
 		}
-		p.pos++
+		lastCharWasDot = (r == '.')
+		p.pos += size
+	}
+
+	// Blank node labels cannot end with '.' - backtrack if needed
+	if lastCharWasDot {
+		p.pos--
 	}
 
 	label := p.input[start:p.pos]
@@ -901,12 +979,31 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	start := p.pos
 
 	// Read prefix (until ':')
-	for p.pos < p.length && p.input[p.pos] != ':' {
-		ch := p.input[p.pos]
-		if !isNameChar(ch) {
-			break
+	// PN_PREFIX ::= PN_CHARS_BASE ((PN_CHARS|'.')* PN_CHARS)?
+	// Empty prefix is allowed (e.g., :localName)
+	if p.pos < p.length && p.input[p.pos] != ':' {
+		// First character must be PN_CHARS_BASE
+		r, size := p.peekRune()
+		if !isPN_CHARS_BASE(r) {
+			return nil, fmt.Errorf("invalid prefix start character at position %d", p.pos)
 		}
-		p.pos++
+		p.pos += size
+
+		// Continue reading prefix characters (PN_CHARS | '.')
+		lastCharWasDot := false
+		for p.pos < p.length && p.input[p.pos] != ':' {
+			r, size := p.peekRune()
+			if !isPN_CHARS(r) && r != '.' {
+				break
+			}
+			lastCharWasDot = (r == '.')
+			p.pos += size
+		}
+
+		// Prefix cannot end with '.' - backtrack if needed
+		if lastCharWasDot {
+			p.pos--
+		}
 	}
 
 	if p.pos >= p.length || p.input[p.pos] != ':' {
@@ -918,19 +1015,20 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 
 	// Read local part - can contain colons and many other characters per Turtle spec
 	// Also supports escape sequences like \- \. \~ etc. (PN_LOCAL_ESC)
+	// PN_LOCAL ::= (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
 	var localPart strings.Builder
 	for p.pos < p.length {
-		ch := p.input[p.pos]
+		r, size := p.peekRune()
 
-		// Handle escape sequences
-		if ch == '\\' && p.pos+1 < p.length {
+		// Handle escape sequences (PLX includes PN_LOCAL_ESC and PERCENT)
+		if r == '\\' && p.pos+1 < p.length {
 			nextCh := p.input[p.pos+1]
 			// Check if this is a valid PN_LOCAL_ESC character
 			if nextCh == '_' || nextCh == '~' || nextCh == '.' || nextCh == '-' ||
 				nextCh == '!' || nextCh == '$' || nextCh == '&' || nextCh == '\'' ||
 				nextCh == '(' || nextCh == ')' || nextCh == '*' || nextCh == '+' ||
 				nextCh == ',' || nextCh == ';' || nextCh == '=' || nextCh == '/' ||
-				nextCh == '?' || nextCh == '#' || nextCh == '@' || nextCh == '%' {
+				nextCh == '?' || nextCh == '#' || nextCh == '@' || nextCh == '%' || nextCh == ':' {
 				// Add the escaped character without the backslash
 				localPart.WriteByte(nextCh)
 				p.pos += 2
@@ -938,19 +1036,20 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 			}
 		}
 
-		// Local names can contain alphanumeric, underscore, hyphen, colon, and many other chars
+		// Local names can contain PN_CHARS, ':', '.', and many other chars
 		// Break on whitespace, punctuation that ends a triple, or special Turtle syntax
-		// Note: we don't break on characters that can be escaped
-		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
-			ch == '>' || ch == '<' || ch == '"' {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
+			r == '>' || r == '<' || r == '"' {
 			break
 		}
 		// Break on these only if not escaped (we already handled escaping above)
-		if ch == '.' || ch == ';' || ch == ',' || ch == '#' {
+		if r == ';' || r == ',' || r == '#' {
 			break
 		}
-		localPart.WriteByte(ch)
-		p.pos++
+		// Allow PN_CHARS, ':', '.', digits for local names
+		// This is more permissive than the spec but matches existing behavior
+		localPart.WriteRune(r)
+		p.pos += size
 	}
 
 	localPartStr := localPart.String()

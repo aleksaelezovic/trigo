@@ -227,11 +227,13 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 74.0% pass rate (219/296 tests) - <strong>IMPROVED from 70.3%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 75.0% pass rate (222/296 tests) - <strong>IMPROVED from 74.0%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
                     <li>Lexical form preservation for numeric literals (exponents, signs, leading zeros)</li>
+                    <li>Full Unicode support for prefixed names, blank node labels (PN_CHARS, combining marks)</li>
+                    <li>Unicode-aware 'a' keyword detection</li>
                     <li>Anonymous blank nodes [], empty collections ()</li>
                     <li>@base directive and relative IRI resolution</li>
                     <li>Repeated semicolons, PName escape sequences (\_\~\.\-\!\$ etc.)</li>
@@ -254,13 +256,13 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 73.7% pass rate (247/335 tests) - <strong>IMPROVED from 70.4%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 74.0% pass rate (248/335 tests) - <strong>IMPROVED from 73.7%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
                     <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
-                    <li>Delegates triple parsing to Turtle parser (70.3% → 73.7% with Turtle improvements)</li>
-                    <li>Repeated semicolons, PName escape sequences, numeric literals</li>
+                    <li>Delegates triple parsing to Turtle parser (74.0% → 74.0% with Turtle improvements)</li>
+                    <li>Repeated semicolons, PName escape sequences, numeric literals, Unicode support</li>
                 </ul>
             </li>
             <li><strong>rdf11/rdf-xml</strong>: 63.9% pass rate (106/166 tests) - <strong>IMPROVED from 47.0%</strong>
@@ -315,6 +317,16 @@ Skipped: 1
                     <li>Applied same fixes to both Turtle and TriG parsers</li>
                     <li><strong>Turtle: 70.3% → 74.0%</strong> (+3.7pp, +11 tests)</li>
                     <li><strong>TriG: 70.4% → 73.7%</strong> (+3.3pp, +11 tests)</li>
+                </ul>
+            </li>
+            <li><strong>Unicode Character Support (PN_CHARS):</strong>
+                <ul>
+                    <li>Implemented full Unicode character validation per Turtle spec (PN_CHARS_BASE, PN_CHARS_U, PN_CHARS)</li>
+                    <li>Support combining marks, diacritics, and full Unicode range in prefixed names and blank nodes</li>
+                    <li>UTF-8 aware 'a' keyword detection to handle Unicode prefixes correctly</li>
+                    <li>Proper handling of '.' character in prefix/blank node names (allowed in middle, not at end)</li>
+                    <li><strong>Turtle: 74.0% → 75.0%</strong> (+1.0pp, +3 tests)</li>
+                    <li><strong>TriG: 73.7% → 74.0%</strong> (+0.3pp, +1 test)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
