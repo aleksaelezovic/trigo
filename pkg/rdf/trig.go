@@ -605,26 +605,31 @@ func (p *TriGParser) parseNumber() (Term, error) {
 
 	numStr := p.input[start:p.pos]
 
-	// Return appropriate type
+	// Return appropriate type preserving original lexical form
 	if isDouble {
-		val, err := strconv.ParseFloat(numStr, 64)
+		// Validate it's a valid double
+		_, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse double: %w", err)
 		}
-		return NewDoubleLiteral(val), nil
+		// Preserve original lexical form
+		return NewLiteralWithDatatype(numStr, XSDDouble), nil
 	} else if isDecimal {
-		val, err := strconv.ParseFloat(numStr, 64)
+		// Validate it's a valid decimal
+		_, err := strconv.ParseFloat(numStr, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse decimal: %w", err)
 		}
-		return NewDecimalLiteral(val), nil
+		// Preserve original lexical form
+		return NewLiteralWithDatatype(numStr, XSDDecimal), nil
 	} else {
-		// Integer
-		val, err := strconv.ParseInt(numStr, 10, 64)
+		// Integer - validate it's a valid integer
+		_, err := strconv.ParseInt(numStr, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse integer: %w", err)
 		}
-		return NewIntegerLiteral(val), nil
+		// Preserve original lexical form
+		return NewLiteralWithDatatype(numStr, XSDInteger), nil
 	}
 }
 

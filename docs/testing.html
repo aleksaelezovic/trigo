@@ -227,10 +227,11 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 70.3% pass rate (208/296 tests) - <strong>IMPROVED from 66.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 74.0% pass rate (219/296 tests) - <strong>IMPROVED from 70.3%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
+                    <li>Lexical form preservation for numeric literals (exponents, signs, leading zeros)</li>
                     <li>Anonymous blank nodes [], empty collections ()</li>
                     <li>@base directive and relative IRI resolution</li>
                     <li>Repeated semicolons, PName escape sequences (\_\~\.\-\!\$ etc.)</li>
@@ -253,12 +254,12 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 70.4% pass rate (236/335 tests) - <strong>IMPROVED from 47.2%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 73.7% pass rate (247/335 tests) - <strong>IMPROVED from 70.4%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
                     <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
-                    <li>Delegates triple parsing to Turtle parser (66.9% → 70.4% with Turtle improvements)</li>
+                    <li>Delegates triple parsing to Turtle parser (70.3% → 73.7% with Turtle improvements)</li>
                     <li>Repeated semicolons, PName escape sequences, numeric literals</li>
                 </ul>
             </li>
@@ -305,6 +306,15 @@ Skipped: 1
                     <li>Implemented PName escape sequences (\_\~\.\-\!\$ etc.)</li>
                     <li><strong>Turtle: 66.2% → 70.3%</strong> (+4.1pp, +12 tests)</li>
                     <li><strong>TriG: 66.9% → 70.4%</strong> (+3.5pp, +12 tests)</li>
+                </ul>
+            </li>
+            <li><strong>Literal Lexical Form Preservation:</strong>
+                <ul>
+                    <li>Fixed boolean literal parsing (matchKeyword already advances position)</li>
+                    <li>Preserve original lexical form for numeric literals (1E0, +1, 01, etc.)</li>
+                    <li>Applied same fixes to both Turtle and TriG parsers</li>
+                    <li><strong>Turtle: 70.3% → 74.0%</strong> (+3.7pp, +11 tests)</li>
+                    <li><strong>TriG: 70.4% → 73.7%</strong> (+3.3pp, +11 tests)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
