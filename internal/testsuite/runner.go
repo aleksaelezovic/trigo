@@ -485,33 +485,10 @@ func (r *TestRunner) filePathToURI(filePath string) string {
 	return "file://" + absPath
 }
 
-// compareTriples compares two sets of triples for equality (order-independent)
+// compareTriples compares two sets of triples for equality (order-independent, blank node isomorphism)
 func (r *TestRunner) compareTriples(expected, actual []*rdf.Triple) bool {
-	if len(expected) != len(actual) {
-		return false
-	}
-
-	// Create a map of expected triples for quick lookup
-	expectedMap := make(map[string]bool)
-	for _, triple := range expected {
-		key := r.tripleKey(triple)
-		expectedMap[key] = true
-	}
-
-	// Check if all actual triples are in expected
-	for _, triple := range actual {
-		key := r.tripleKey(triple)
-		if !expectedMap[key] {
-			return false
-		}
-	}
-
-	return true
-}
-
-// tripleKey creates a unique string key for a triple
-func (r *TestRunner) tripleKey(triple *rdf.Triple) string {
-	return fmt.Sprintf("%s|%s|%s", triple.Subject.String(), triple.Predicate.String(), triple.Object.String())
+	// Use graph isomorphism algorithm that handles blank node label differences
+	return rdf.AreGraphsIsomorphic(expected, actual)
 }
 
 // executorTermToRDFTerm converts an executor.Term to rdf.Term
