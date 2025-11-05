@@ -64,7 +64,13 @@ go build -o test-runner ./cmd/test-runner
 ### 6. Update Documentation
 - **ALWAYS** update README.md test results when they change
 - **ALWAYS** update docs/testing.html when test compliance improves
+- **ALWAYS** update docs/index.html test results badge section
 - Document test result changes in commit message
+
+**NOTE:** Test results appear in THREE locations:
+1. README.md (lines ~92-96) - Main test results section
+2. docs/testing.html (lines ~263, ~305) - Detailed compliance info
+3. docs/index.html (lines ~167-174) - Homepage test badges
 
 ### 7. Commit with Proper Format
 ```bash
