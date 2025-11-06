@@ -251,15 +251,11 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	triples = append(triples, p.extraTriples...)
 	p.extraTriples = nil
 
-	// Check if this is a sole blank node property list: [ <p> <o> ] . or [ <p> <o> ] (at end of input)
-	// If the subject is a blank node with generated triples and next char is '.' or end of input, we're done
+	// Check if this is a sole blank node property list: [ <p> <o> ] .
+	// If the subject is a blank node with generated triples and next char is '.', we're done
 	p.skipWhitespaceAndComments()
 	if _, isBlankNode := subject.(*BlankNode); isBlankNode && len(triples) > 0 {
-		if p.pos >= p.length {
-			// End of input after blank node property list
-			return triples, nil
-		}
-		if p.input[p.pos] == '.' {
+		if p.pos < p.length && p.input[p.pos] == '.' {
 			// This is a sole blank node property list with trailing dot, consume it and return
 			p.pos++ // skip '.'
 			return triples, nil
@@ -343,12 +339,8 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 	p.skipWhitespaceAndComments()
 
-	// Expect '.' (optional at end of input)
-	if p.pos >= p.length {
-		// End of input, dot is optional
-		return triples, nil
-	}
-	if p.input[p.pos] != '.' {
+	// Expect '.'
+	if p.pos >= p.length || p.input[p.pos] != '.' {
 		return nil, fmt.Errorf("expected '.' at end of triple")
 	}
 	p.pos++ // skip '.'
@@ -578,6 +570,11 @@ func (p *TurtleParser) parseIRI() (string, error) {
 
 	// Check if IRI is relative (doesn't contain scheme with ':')
 	if !strings.Contains(iri, ":") {
+		// In strict N-Triples mode, relative IRIs are never allowed
+		if p.strictNTriples {
+			return "", fmt.Errorf("relative IRI not allowed in N-Triples: %s", iri)
+		}
+
 		// Fragment-only IRIs (like "#" or "#foo") resolve against document URI or base
 		isFragmentOnly := strings.HasPrefix(iri, "#")
 
