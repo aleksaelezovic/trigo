@@ -134,27 +134,39 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 	return quads, nil
 }
 
-// parseGraphBlock parses a GRAPH block: GRAPH <iri> { triples }
+// parseGraphBlock parses a GRAPH block: GRAPH <iri> { triples }, GRAPH _:bnode { triples }, or GRAPH [] { triples }
 func (p *TriGParser) parseGraphBlock() ([]*Quad, error) {
 	p.skipWhitespaceAndComments()
 
-	// Parse graph IRI
-	graphTerm, err := p.parseTerm()
-	if err != nil {
-		return nil, fmt.Errorf("expected graph IRI after GRAPH: %w", err)
-	}
+	// Check for GRAPH [] (anonymous blank node) syntax
+	var graphTerm Term
+	if p.pos+1 < p.length && p.input[p.pos] == '[' && p.input[p.pos+1] == ']' {
+		// Anonymous blank node
+		p.pos += 2 // skip '[]'
+		p.blankNodeCounter++
+		graphTerm = NewBlankNode(fmt.Sprintf("anon%d", p.blankNodeCounter))
+	} else {
+		// Parse graph IRI or blank node
+		var err error
+		graphTerm, err = p.parseTerm()
+		if err != nil {
+			return nil, fmt.Errorf("expected graph IRI or blank node after GRAPH: %w", err)
+		}
 
-	// Graph must be a named node
-	graphNode, ok := graphTerm.(*NamedNode)
-	if !ok {
-		return nil, fmt.Errorf("graph name must be an IRI, got: %T", graphTerm)
+		// Graph must be a named node or blank node
+		switch graphTerm.(type) {
+		case *NamedNode, *BlankNode:
+			// Valid graph name
+		default:
+			return nil, fmt.Errorf("graph name must be an IRI or blank node, got: %T", graphTerm)
+		}
 	}
 
 	p.skipWhitespaceAndComments()
 
 	// Expect '{'
 	if p.pos >= p.length || p.input[p.pos] != '{' {
-		return nil, fmt.Errorf("expected '{' after graph IRI")
+		return nil, fmt.Errorf("expected '{' after graph name")
 	}
 	p.pos++ // skip '{'
 
@@ -169,7 +181,7 @@ func (p *TriGParser) parseGraphBlock() ([]*Quad, error) {
 	// Convert triples to quads with the graph name
 	var quads []*Quad
 	for _, triple := range triples {
-		quads = append(quads, NewQuad(triple.Subject, triple.Predicate, triple.Object, graphNode))
+		quads = append(quads, NewQuad(triple.Subject, triple.Predicate, triple.Object, graphTerm))
 	}
 
 	return quads, nil
