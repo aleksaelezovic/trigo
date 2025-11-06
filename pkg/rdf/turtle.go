@@ -65,11 +65,12 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 
 		// Check for BASE directive
 		// @base must be lowercase (case-sensitive), BASE can be any case (case-insensitive)
-		if p.matchExactKeyword("@base") || p.matchKeyword("BASE") {
+		isTurtleBase := p.matchExactKeyword("@base")
+		if isTurtleBase || p.matchKeyword("BASE") {
 			if p.strictNTriples {
 				return nil, fmt.Errorf("BASE directive not allowed in N-Triples")
 			}
-			if err := p.parseBase(); err != nil {
+			if err := p.parseBase(isTurtleBase); err != nil {
 				return nil, err
 			}
 			continue
@@ -192,7 +193,7 @@ func (p *TurtleParser) parsePrefix() error {
 }
 
 // parseBase parses a BASE declaration
-func (p *TurtleParser) parseBase() error {
+func (p *TurtleParser) parseBase(isTurtleStyle bool) error {
 	p.skipWhitespaceAndComments()
 
 	// Read IRI
@@ -205,8 +206,18 @@ func (p *TurtleParser) parseBase() error {
 	p.base = baseIRI
 
 	p.skipWhitespaceAndComments()
-	if p.pos < p.length && (p.input[p.pos] == '.' || p.input[p.pos] == ';') {
-		p.pos++ // skip ending
+	// Turtle-style @base allows optional '.' or ';' after IRI
+	// SPARQL-style BASE should not have '.' (only whitespace or end of line)
+	if p.pos < p.length {
+		if p.input[p.pos] == '.' {
+			if isTurtleStyle {
+				p.pos++ // skip '.' for @base
+			} else {
+				return fmt.Errorf("SPARQL-style BASE should not be followed by '.'")
+			}
+		} else if p.input[p.pos] == ';' {
+			p.pos++ // skip ';' (allowed for both styles)
+		}
 	}
 
 	return nil
@@ -371,8 +382,31 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 		return p.parseLiteral()
 	}
 
-	// Number literal
-	if (ch >= '0' && ch <= '9') || ch == '-' || ch == '+' {
+	// Number literal - can start with digit, sign, or '.' (if followed by digit)
+	isNumber := false
+	if ch >= '0' && ch <= '9' {
+		isNumber = true
+	} else if ch == '-' || ch == '+' {
+		// Could be number if followed by digit or '.' then digit
+		if p.pos+1 < p.length {
+			nextCh := p.input[p.pos+1]
+			if nextCh >= '0' && nextCh <= '9' {
+				isNumber = true
+			} else if nextCh == '.' && p.pos+2 < p.length {
+				// Check if '.' is followed by a digit (e.g., "+.7", "-.2")
+				if p.input[p.pos+2] >= '0' && p.input[p.pos+2] <= '9' {
+					isNumber = true
+				}
+			}
+		}
+	} else if ch == '.' {
+		// Could be number if followed by digit (e.g., ".1", ".5e3")
+		if p.pos+1 < p.length && p.input[p.pos+1] >= '0' && p.input[p.pos+1] <= '9' {
+			isNumber = true
+		}
+	}
+
+	if isNumber {
 		if p.strictNTriples {
 			return nil, fmt.Errorf("bare numeric literals not allowed in N-Triples at position %d", p.pos)
 		}
@@ -530,16 +564,19 @@ func (p *TurtleParser) parseIRI() (string, error) {
 
 	// Check if IRI is relative (doesn't contain scheme with ':')
 	if !strings.Contains(iri, ":") {
-		// Check if this is a very short test identifier (1-2 chars with no path components)
-		// W3C test files use IRIs like "s", "p", "o" without base for testing other features
-		// Longer identifiers like "alice", "bob" should be resolved against base
+		// Fragment-only IRIs (like "#" or "#foo") are valid without base
+		// They'll be resolved against the document URI
+		isFragmentOnly := strings.HasPrefix(iri, "#")
+
+		// Very short test identifiers (1-2 chars) like "s", "p", "o"
+		// W3C test files use these without base for testing other features
 		isVeryShortTestID := len(iri) <= 2 &&
 			!strings.Contains(iri, "/") &&
 			!strings.Contains(iri, "?") &&
 			!strings.Contains(iri, "#") &&
 			iri != "." && iri != ".."
 
-		if !isVeryShortTestID {
+		if !isVeryShortTestID && !isFragmentOnly {
 			// Relative IRI - resolve against base if available
 			if p.base == "" {
 				return "", fmt.Errorf("relative IRI not allowed without base: %s", iri)
@@ -547,7 +584,7 @@ func (p *TurtleParser) parseIRI() (string, error) {
 			// Resolve relative IRI against base
 			iri = p.resolveRelativeIRI(p.base, iri)
 		}
-		// Very short test identifiers (1-2 chars) pass through as-is
+		// Fragment-only IRIs and short test identifiers pass through as-is
 	}
 
 	return iri, nil
@@ -1109,23 +1146,19 @@ func (p *TurtleParser) parseNumber() (Term, error) {
 		p.pos++
 	}
 
-	// Read integer part digits
-	hasDigits := false
+	// Read integer part digits (optional if starts with '.')
+	hasIntegerDigits := false
 	for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
 		p.pos++
-		hasDigits = true
-	}
-
-	if !hasDigits {
-		return nil, fmt.Errorf("expected digits in number")
+		hasIntegerDigits = true
 	}
 
 	// Check for decimal point
 	if p.pos < p.length && p.input[p.pos] == '.' {
-		// Look ahead to check if this is really a decimal or end of statement
+		// Look ahead to check what comes after '.'
 		if p.pos+1 < p.length {
 			nextCh := p.input[p.pos+1]
-			// If next char is a digit, it's a decimal
+			// If next char is a digit, it's a decimal with fractional part
 			if nextCh >= '0' && nextCh <= '9' {
 				isDecimal = true
 				p.pos++ // skip '.'
@@ -1133,8 +1166,24 @@ func (p *TurtleParser) parseNumber() (Term, error) {
 				for p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9' {
 					p.pos++
 				}
+			} else if (nextCh == 'e' || nextCh == 'E') && hasIntegerDigits {
+				// Handle case like "123.E+1" (double without fractional part)
+				isDecimal = true // Mark as having decimal point
+				p.pos++          // skip '.'
+			} else if !hasIntegerDigits {
+				// '.' with no integer part and no fractional digits - invalid
+				return nil, fmt.Errorf("expected digits in number")
 			}
+			// If next char is not digit and not exponent, '.' is end of statement (don't consume it)
+		} else if !hasIntegerDigits {
+			// '.' at end of input with no digits before it
+			return nil, fmt.Errorf("expected digits in number")
 		}
+	}
+
+	// Must have either integer digits or fractional digits
+	if !hasIntegerDigits && !isDecimal {
+		return nil, fmt.Errorf("expected digits in number")
 	}
 
 	// Check for exponent (e or E) which makes it a double
@@ -1278,15 +1327,16 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 		// Only allow: PN_CHARS, ':', '.', and digits
 		// Reject special characters that need escaping (like ~, !, $, etc.)
 		if r == '~' || r == '!' || r == '$' || r == '&' || r == '\'' ||
-			r == '(' || r == ')' || r == '*' || r == '+' ||
-			r == '=' || r == '/' || r == '?' || r == '#' || r == '@' {
+			r == '(' || r == '*' || r == '+' ||
+			r == '=' || r == '/' || r == '?' || r == '@' {
 			return nil, fmt.Errorf("character %c must be escaped in prefixed name at position %d", r, p.pos)
 		}
 
-		// Break on whitespace, punctuation that ends a triple, or special Turtle syntax
+		// Break on whitespace, punctuation that ends a triple, comments, or special Turtle syntax
+		// Also break on ')' which can be a collection terminator
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
 			r == '>' || r == '<' || r == '"' ||
-			r == ';' || r == ',' {
+			r == ';' || r == ',' || r == '#' || r == ')' {
 			break
 		}
 
