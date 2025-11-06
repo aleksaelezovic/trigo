@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 98.6% pass rate (292/296 tests) - <strong>IMPROVED from 66.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 100% pass rate (296/296 tests) - <strong>PERFECT SCORE - IMPROVED from 66.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -376,6 +376,16 @@ Skipped: 1
                     <li>Query and fragment components preserved during path normalization</li>
                     <li><strong>Turtle: 97.0% → 98.6%</strong> (+1.6pp, +5 tests in this phase)</li>
                     <li><strong>TriG: 89.9% → 94.0%</strong> (+4.1pp, +14 tests in this phase)</li>
+                </ul>
+            </li>
+            <li><strong>Negative Evaluation Tests:</strong>
+                <ul>
+                    <li>Implemented semantic IRI validation for negative evaluation tests</li>
+                    <li>Parser allows syntactically valid but semantically invalid IRIs</li>
+                    <li>Validates RFC 3987 compliance: rejects space, angle brackets, curly braces, etc. in IRIs</li>
+                    <li>Tests check Unicode escapes that produce invalid characters (\u0020 for space, \u003C for &lt;)</li>
+                    <li>Distinguishes between syntax errors (fail during parsing) and semantic errors (fail during validation)</li>
+                    <li><strong>Turtle: 98.6% → 100%</strong> (+1.4pp, +4 tests - PERFECT SCORE)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
