@@ -91,7 +91,7 @@ Validated against official W3C test suites:
 ### RDF Parsers
 - **RDF N-Triples:** 100% (70/70 tests) ✅
 - **RDF N-Quads:** 100% (87/87 tests) ✅
-- **RDF Turtle:** 93.9% (278/296 tests) ✅ **IMPROVED from 66.2%**
+- **RDF Turtle:** 97.0% (287/296 tests) ✅ **IMPROVED from 66.2%**
 - **RDF/XML:** 69.3% (115/166 tests) ✅ **IMPROVED from 63.9%**
 - **RDF TriG:** 89.9% (301/335 tests) ✅ **IMPROVED from 47.2%**
 

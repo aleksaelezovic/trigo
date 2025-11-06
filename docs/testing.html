@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 93.9% pass rate (278/296 tests) - <strong>IMPROVED from 66.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 97.0% pass rate (287/296 tests) - <strong>IMPROVED from 66.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -354,6 +354,16 @@ Skipped: 1
                     <li>Validation applied to both regular triples and blank node property lists</li>
                     <li><strong>Turtle: 80.4% → 93.9%</strong> (+13.5pp, +40 tests in this phase)</li>
                     <li><strong>TriG: 78.8% → 89.9%</strong> (+11.1pp, +37 tests in this phase)</li>
+                </ul>
+            </li>
+            <li><strong>Number Literals and IRI Resolution:</strong>
+                <ul>
+                    <li>Extended number parsing to support edge cases: leading decimal points (.1, +.7, -.2e3)</li>
+                    <li>Support for exponents without fraction part (123.E+1)</li>
+                    <li>Fixed BASE directive validation: enforce case-sensitive @base with optional '.', reject '.' after SPARQL-style BASE</li>
+                    <li>Added fragment-only IRI support (#, #foo) without requiring base URI</li>
+                    <li>Improved prefixed name parsing: break on comments (#) and collection terminators ()</li>
+                    <li><strong>Turtle: 93.9% → 97.0%</strong> (+3.1pp, +9 tests in this phase)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
