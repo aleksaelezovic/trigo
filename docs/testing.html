@@ -194,7 +194,7 @@ Skipped: 1
                     <li>Some advanced features may not be fully compliant</li>
                 </ul>
             </li>
-            <li><strong>N-Triples</strong>: 70.0% pass rate (49/70 tests)
+            <li><strong>N-Triples</strong>: 94.3% pass rate (66/70 tests)
                 <ul>
                     <li>Basic triple parsing</li>
                     <li>Some strict validation rules not enforced</li>
@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 100% pass rate (296/296 tests) - <strong>PERFECT SCORE - IMPROVED from 66.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 99.3% pass rate (294/296 tests)
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -242,15 +242,15 @@ Skipped: 1
                     <li>Repeated semicolons, PName escape sequences (\_\~\.\-\!\$ etc.)</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-n-triples</strong>: 100.0% pass rate (70/70 tests) - <strong>PERFECT! Improved from 84.3%</strong>
+            <li><strong>rdf11/rdf-n-triples</strong>: 94.3% pass rate (66/70 tests)
                 <ul>
                     <li>Strict N-Triples validation (no PREFIX/BASE, no abbreviations, no bare literals)</li>
                     <li>Complete IRI validation with Unicode escape support</li>
                     <li>Proper escape sequence validation (only \t, \b, \n, \r, \f, \\, \", \uXXXX, \UXXXXXXXX)</li>
-                    <li>All negative syntax tests passing</li>
+                    <li>Most negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-n-quads</strong>: 100.0% pass rate (87/87 tests) - <strong>PERFECT! Improved from 75.9%</strong>
+            <li><strong>rdf11/rdf-n-quads</strong>: 100.0% pass rate (87/87 tests)
                 <ul>
                     <li>Strict N-Quads validation (same as N-Triples + optional graph component)</li>
                     <li>Complete IRI validation in all positions including graph names</li>
@@ -258,7 +258,7 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 94.0% pass rate (315/335 tests) - <strong>IMPROVED from 47.2%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 100.0% pass rate (335/335 tests)
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
@@ -270,7 +270,7 @@ Skipped: 1
                     <li>Repeated semicolons, PName escape sequences, numeric literals, Unicode support</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-xml</strong>: 63.9% pass rate (106/166 tests) - <strong>IMPROVED from 47.0%</strong>
+            <li><strong>rdf11/rdf-xml</strong>: 75.9% pass rate (126/166 tests)
                 <ul>
                     <li>Basic rdf:Description, simple properties</li>
                     <li>RDF containers (rdf:Bag, rdf:Seq, rdf:Alt) with blank node subjects</li>
