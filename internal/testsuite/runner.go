@@ -143,6 +143,8 @@ func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult 
 		return r.runRDFPositiveSyntaxTest(manifest, test, "trig")
 	case TestTypeTrigNegativeSyntax:
 		return r.runRDFNegativeSyntaxTest(manifest, test, "trig")
+	case TestTypeTrigNegativeEval:
+		return r.runRDFNegativeEvalTest(manifest, test, "trig")
 	// RDF/XML tests
 	case TestTypeXMLEval:
 		return r.runRDFEvalTest(manifest, test, "rdfxml")

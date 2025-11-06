@@ -73,6 +73,7 @@ const (
 	TestTypeTrigEval           TestType = "TestTrigEval"
 	TestTypeTrigPositiveSyntax TestType = "TestTrigPositiveSyntax"
 	TestTypeTrigNegativeSyntax TestType = "TestTrigNegativeSyntax"
+	TestTypeTrigNegativeEval   TestType = "TestTrigNegativeEval"
 
 	// RDF/XML tests
 	TestTypeXMLEval           TestType = "TestXMLEval"
@@ -170,6 +171,8 @@ func ParseManifest(path string) (*TestManifest, error) {
 			} else if strings.Contains(line, "TestNQuadsNegativeSyntax") {
 				currentTest.Type = TestTypeNQuadsNegativeSyntax
 				// RDF TriG tests
+			} else if strings.Contains(line, "TestTrigNegativeEval") {
+				currentTest.Type = TestTypeTrigNegativeEval
 			} else if strings.Contains(line, "TestTrigEval") {
 				currentTest.Type = TestTypeTrigEval
 			} else if strings.Contains(line, "TestTrigPositiveSyntax") {
