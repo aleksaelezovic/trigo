@@ -13,7 +13,7 @@ import (
 // It supports:
 // - rdf:Description elements
 // - Properties as XML elements
-// - rdf:about, rdf:resource, rdf:ID attributes
+// - rdf:about, rdf:resource, rdf:ID, rdf:nodeID attributes
 // - rdf:datatype, xml:lang attributes
 // - Nested blank nodes
 // - RDF containers (rdf:Bag, rdf:Seq, rdf:Alt)
@@ -21,19 +21,19 @@ import (
 // - xml:base for base URI resolution
 //
 // Not yet supported:
-// - rdf:parseType="Resource"
 // - rdf:parseType="Collection"
-// - Property attributes on Description elements
 type RDFXMLParser struct {
-	baseURIStack []string        // Stack of xml:base values
-	documentBase string          // Document base URI (file location)
-	usedIDs      map[string]bool // Track used rdf:ID values to detect duplicates
+	baseURIStack []string              // Stack of xml:base values
+	documentBase string                // Document base URI (file location)
+	usedIDs      map[string]bool       // Track used rdf:ID values to detect duplicates
+	nodeIDMap    map[string]*BlankNode // Track rdf:nodeID to blank node mappings
 }
 
 // NewRDFXMLParser creates a new RDF/XML parser
 func NewRDFXMLParser() *RDFXMLParser {
 	return &RDFXMLParser{
-		usedIDs: make(map[string]bool),
+		usedIDs:   make(map[string]bool),
+		nodeIDMap: make(map[string]*BlankNode),
 	}
 }
 
@@ -219,6 +219,26 @@ func (p *RDFXMLParser) resolveID(id string) (string, error) {
 	return resolvedURI, nil
 }
 
+// getOrCreateNodeID gets or creates a blank node for the given rdf:nodeID
+// It validates that the nodeID is a valid XML NCName and maintains consistent mapping
+func (p *RDFXMLParser) getOrCreateNodeID(nodeID string, blankNodeCounter *int) (Term, error) {
+	// rdf:nodeID values must be valid XML NCNames (no colons allowed)
+	if !isValidXMLNCName(nodeID) {
+		return nil, fmt.Errorf("rdf:nodeID value '%s' is not a valid XML NCName (must not contain colons)", nodeID)
+	}
+
+	// Check if we've already created a blank node for this nodeID
+	if node, exists := p.nodeIDMap[nodeID]; exists {
+		return node, nil
+	}
+
+	// Create a new blank node for this nodeID
+	*blankNodeCounter++
+	blankNode := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+	p.nodeIDMap[nodeID] = blankNode
+	return blankNode, nil
+}
+
 // isContainer checks if an element is an RDF container
 func isContainer(elem xml.StartElement) bool {
 	if elem.Name.Space != rdfNS {
@@ -275,6 +295,11 @@ func validateAttributes(elem xml.StartElement) error {
 		return fmt.Errorf("element cannot have both rdf:ID and rdf:resource")
 	}
 
+	// Can't have both rdf:nodeID and rdf:resource
+	if hasNodeID && hasResource {
+		return fmt.Errorf("element cannot have both rdf:nodeID and rdf:resource")
+	}
+
 	// Can't have rdf:parseType with rdf:resource
 	if parseType != "" && hasResource {
 		return fmt.Errorf("rdf:parseType and rdf:resource cannot be used together")
@@ -291,6 +316,11 @@ func validateAttributes(elem xml.StartElement) error {
 	}
 	if getAttr(elem.Attr, rdfNS, "aboutEachPrefix") != "" {
 		return fmt.Errorf("rdf:aboutEachPrefix is not supported (removed in RDF 1.1)")
+	}
+
+	// Check for bagID (removed in RDF 1.1)
+	if getAttr(elem.Attr, rdfNS, "bagID") != "" {
+		return fmt.Errorf("rdf:bagID is not supported (removed in RDF 1.1)")
 	}
 
 	return nil
@@ -347,9 +377,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 				}
 
-				// Check for rdf:about or rdf:ID, otherwise create blank node
+				// Check for rdf:about, rdf:ID, or rdf:nodeID, otherwise create blank node
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
+				nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
 
 				var containerNode Term
 				if aboutAttr != "" {
@@ -360,6 +391,12 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 					}
 					containerNode = NewNamedNode(resolvedID)
+				} else if nodeIDAttr != "" {
+					node, err := p.getOrCreateNodeID(nodeIDAttr, &blankNodeCounter)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					containerNode = node
 				} else {
 					// Create blank node for container
 					blankNodeCounter++
@@ -388,9 +425,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 				}
 
-				// Get rdf:about, rdf:ID, or create blank node
+				// Get rdf:about, rdf:ID, rdf:nodeID, or create blank node
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
+				nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
 				// Check if rdf:about attribute exists (even if empty)
 				hasAboutAttr := false
 				for _, attr := range elem.Attr {
@@ -412,6 +450,12 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 					}
 					currentSubject = NewNamedNode(resolvedID)
+				} else if nodeIDAttr != "" {
+					node, err := p.getOrCreateNodeID(nodeIDAttr, &blankNodeCounter)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					currentSubject = node
 				} else {
 					// Blank node
 					blankNodeCounter++
@@ -419,6 +463,9 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				}
 
 				// Process property attributes on Description element
+				// Track xml:lang for property attributes
+				xmlLang := getAttrAny(elem.Attr, "lang")
+
 				for _, attr := range elem.Attr {
 					// Skip structural RDF attributes (these have special meaning)
 					if attr.Name.Space == rdfNS {
@@ -428,7 +475,7 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 							attr.Name.Local == "datatype" || attr.Name.Local == "parseType" {
 							continue
 						}
-						// Allow other RDF namespace attributes as properties (e.g., rdf:Seq, rdf:Bag, rdf:li)
+						// Allow rdf:type and other RDF namespace attributes as properties
 					}
 					if attr.Name.Local == "base" || attr.Name.Local == "lang" {
 						// Skip xml:base and xml:lang
@@ -441,7 +488,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 					// This is a property attribute
 					predicate := attr.Name.Space + attr.Name.Local
-					object := NewLiteral(attr.Value)
+
+					// Create object - rdf:type takes an IRI, others take literals
+					var object Term
+					if attr.Name.Space == rdfNS && attr.Name.Local == "type" {
+						// rdf:type value should be resolved as an IRI
+						object = NewNamedNode(p.resolveURI(attr.Value))
+					} else if xmlLang != "" {
+						// Language-tagged literal
+						object = &Literal{
+							Value:    attr.Value,
+							Language: xmlLang,
+						}
+					} else {
+						// Plain literal
+						object = NewLiteral(attr.Value)
+					}
+
 					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
 					quads = append(quads, quad)
 				}
@@ -449,9 +512,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				continue
 			}
 
-			// Check if this is a typed node (not rdf:Description but has rdf:about/ID)
+			// Check if this is a typed node (not rdf:Description but has rdf:about/ID/nodeID)
 			aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 			idAttr := getAttr(elem.Attr, rdfNS, "ID")
+			nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
 			// Check if rdf:about attribute exists (even if empty)
 			hasAboutAttr := false
 			for _, attr := range elem.Attr {
@@ -460,7 +524,7 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					break
 				}
 			}
-			if hasAboutAttr || idAttr != "" || currentSubject == nil {
+			if hasAboutAttr || idAttr != "" || nodeIDAttr != "" || currentSubject == nil {
 				// Validate this is not a forbidden node element
 				if err := validateNodeElement(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
@@ -486,6 +550,12 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 					}
 					subject = NewNamedNode(resolvedID)
+				} else if nodeIDAttr != "" {
+					node, err := p.getOrCreateNodeID(nodeIDAttr, &blankNodeCounter)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					subject = node
 				} else {
 					blankNodeCounter++
 					subject = NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
@@ -697,6 +767,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// No special attributes - read the text content or check for empty element
 				datatypeAttr := getAttr(elem.Attr, rdfNS, "datatype")
 				langAttr := getAttrAny(elem.Attr, "lang")
+				// Capture rdf:ID early before entering nested loops (elem.Attr may not be accessible later)
+				propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
 
 				// Read the text content
 				var textContent strings.Builder
@@ -733,8 +805,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						quads = append(quads, quad)
 
 						// Check for rdf:ID on property element (triggers reification)
-						if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
-							statementID, err := p.resolveID(idAttr)
+						if propertyIDAttr != "" {
+							statementID, err := p.resolveID(propertyIDAttr)
 							if err != nil {
 								return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 							}
