@@ -79,9 +79,31 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 			continue
 		}
 
-		// Check for named graph block: <iri> { triples } or _:bnode { triples }
+		// Check for named graph block: <iri> { triples }, _:bnode { triples }, or [] { triples }
 		// Look ahead to see if there's a { after the first term
 		savedPos := p.pos
+
+		// Special case: [] { triples } - anonymous blank node graph
+		if p.input[p.pos] == '[' {
+			if p.pos+1 < p.length && p.input[p.pos+1] == ']' {
+				p.pos += 2 // skip '[]'
+				p.skipWhitespaceAndComments()
+				if p.pos < p.length && p.input[p.pos] == '{' {
+					// It's an anonymous blank node graph block
+					p.blankNodeCounter++
+					blankNode := NewBlankNode(fmt.Sprintf("anon%d", p.blankNodeCounter))
+					graphQuads, err := p.parseNamedGraphBlock(blankNode)
+					if err != nil {
+						return nil, err
+					}
+					quads = append(quads, graphQuads...)
+					continue
+				}
+			}
+			// Not a blank node graph, restore and continue
+			p.pos = savedPos
+		}
+
 		term, err := p.parseTerm()
 		if err == nil && term != nil {
 			p.skipWhitespaceAndComments()
