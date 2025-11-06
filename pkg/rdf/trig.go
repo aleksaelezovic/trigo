@@ -254,6 +254,14 @@ func (p *TriGParser) parseTriplesBlock(startPos int) ([]*Triple, int, error) {
 	// Extract the content between braces
 	content := p.input[startPos:pos]
 
+	// Validate that directives are not used inside graph blocks
+	// Per TriG spec, @prefix, @base, PREFIX, and BASE are only allowed at document level
+	trimmedContent := strings.TrimSpace(content)
+	if strings.HasPrefix(trimmedContent, "@prefix") || strings.HasPrefix(trimmedContent, "@base") ||
+		strings.HasPrefix(strings.ToUpper(trimmedContent), "PREFIX") || strings.HasPrefix(strings.ToUpper(trimmedContent), "BASE") {
+		return nil, pos, fmt.Errorf("directives (@prefix, @base, PREFIX, BASE) not allowed inside graph blocks")
+	}
+
 	// TriG allows optional trailing '.' in graph blocks, but Turtle parser expects it
 	// So we need to ensure the content ends with '.' for each triple statement
 	// The Turtle parser will handle the rest
