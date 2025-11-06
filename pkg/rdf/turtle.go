@@ -193,6 +193,16 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
+	// Validate subject position: literals cannot be subjects
+	if _, ok := subject.(*Literal); ok {
+		return nil, fmt.Errorf("literals cannot be used as subjects")
+	}
+	// Validate subject position: 'a' keyword (rdf:type) cannot be used as subject
+	if namedNode, ok := subject.(*NamedNode); ok {
+		if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
+			return nil, fmt.Errorf("keyword 'a' cannot be used as subject")
+		}
+	}
 	// Collect any extra triples generated during subject parsing (e.g., collections)
 	triples = append(triples, p.extraTriples...)
 	p.extraTriples = nil
@@ -206,6 +216,10 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse predicate: %w", err)
 		}
+		// Validate predicate position: literals cannot be predicates
+		if _, ok := predicate.(*Literal); ok {
+			return nil, fmt.Errorf("literals cannot be used as predicates")
+		}
 		// Collect any extra triples from predicate parsing
 		triples = append(triples, p.extraTriples...)
 		p.extraTriples = nil
@@ -218,6 +232,12 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			object, err := p.parseTerm()
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse object: %w", err)
+			}
+			// Validate object position: 'a' keyword (rdf:type) is only valid as predicate, not as object
+			if namedNode, ok := object.(*NamedNode); ok {
+				if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
+					return nil, fmt.Errorf("keyword 'a' cannot be used as object")
+				}
 			}
 			// Collect any extra triples from object parsing
 			triples = append(triples, p.extraTriples...)
@@ -659,6 +679,10 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse predicate in blank node property list: %w", err)
 		}
+		// Validate predicate position: literals cannot be predicates
+		if _, ok := predicate.(*Literal); ok {
+			return nil, fmt.Errorf("literals cannot be used as predicates in blank node property list")
+		}
 		// Collect any extra triples from predicate parsing
 		// (Note: these stay in extraTriples, will be collected by parseTripleBlock)
 
@@ -670,6 +694,12 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 			object, err := p.parseTerm()
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse object in blank node property list: %w", err)
+			}
+			// Validate object position: 'a' keyword (rdf:type) is only valid as predicate, not as object
+			if namedNode, ok := object.(*NamedNode); ok {
+				if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
+					return nil, fmt.Errorf("keyword 'a' cannot be used as object in blank node property list")
+				}
 			}
 			// Collect any extra triples from object parsing
 
