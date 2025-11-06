@@ -39,6 +39,10 @@ func NewRDFXMLParser() *RDFXMLParser {
 
 // SetBaseURI sets the document base URI (used for resolving relative URIs and rdf:ID)
 func (p *RDFXMLParser) SetBaseURI(base string) {
+	// Strip fragment from base URI per RFC 3986 section 5.1
+	if idx := strings.Index(base, "#"); idx != -1 {
+		base = base[:idx]
+	}
 	p.documentBase = base
 }
 
@@ -79,6 +83,13 @@ var forbiddenPropertyElements = map[string]bool{
 func (p *RDFXMLParser) pushBase(base string) {
 	// Resolve the new base against the current base
 	resolvedBase := p.resolveURI(base)
+
+	// Strip fragment from base URI per RFC 3986 section 5.1
+	// Fragments should not be part of the base URI for resolution
+	if idx := strings.Index(resolvedBase, "#"); idx != -1 {
+		resolvedBase = resolvedBase[:idx]
+	}
+
 	p.baseURIStack = append(p.baseURIStack, resolvedBase)
 }
 
@@ -371,7 +382,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			}
 
 			// Check if this is an RDF container (rdf:Bag, rdf:Seq, rdf:Alt)
-			if isContainer(elem) {
+			// Containers are only treated as node elements if they don't have rdf:resource
+			// (if they have rdf:resource, they're property elements)
+			resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
+			if isContainer(elem) && resourceAttr == "" && currentSubject == nil {
 				// Validate attributes
 				if err := validateAttributes(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
@@ -461,6 +475,9 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					blankNodeCounter++
 					currentSubject = NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
 				}
+
+				// Reset liCounter for this Description element
+				liCounter = 0
 
 				// Process property attributes on Description element
 				// Track xml:lang for property attributes
@@ -588,7 +605,14 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					return nil, err
 				}
 
-				predicate := elem.Name.Space + elem.Name.Local
+				// Handle rdf:li specially - it auto-numbers to rdf:_N
+				var predicate string
+				if elem.Name.Local == "li" && elem.Name.Space == rdfNS {
+					liCounter++
+					predicate = fmt.Sprintf("%s_%d", rdfNS, liCounter)
+				} else {
+					predicate = elem.Name.Space + elem.Name.Local
+				}
 
 				// Check for rdf:parseType (highest priority)
 				parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
@@ -1117,6 +1141,104 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 
 			case xml.CharData:
 				content.Write(t)
+			}
+		}
+	} else if parseTypeAttr == "Collection" {
+		// Parse content as a collection (linked list)
+		// Create a chain of blank nodes with rdf:first/rdf:rest
+		var quads []*Quad
+		var headNode Term
+		var currentNode Term
+
+		for {
+			token, err := decoder.Token()
+			if err != nil {
+				return nil, nil, err
+			}
+
+			switch t := token.(type) {
+			case xml.StartElement:
+				// Parse each child element as a collection item
+				var itemNode Term
+
+				// Check if it's a Description or typed node
+				if t.Name.Local == "Description" && t.Name.Space == rdfNS {
+					// Parse as Description to get the subject
+					aboutAttr := getAttr(t.Attr, rdfNS, "about")
+					idAttr := getAttr(t.Attr, rdfNS, "ID")
+					nodeIDAttr := getAttr(t.Attr, rdfNS, "nodeID")
+
+					if aboutAttr != "" {
+						itemNode = NewNamedNode(p.resolveURI(aboutAttr))
+					} else if idAttr != "" {
+						resolvedID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, nil, err
+						}
+						itemNode = NewNamedNode(resolvedID)
+					} else if nodeIDAttr != "" {
+						node, err := p.getOrCreateNodeID(nodeIDAttr, blankNodeCounter)
+						if err != nil {
+							return nil, nil, err
+						}
+						itemNode = node
+					} else {
+						*blankNodeCounter++
+						itemNode = NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+					}
+
+					// Consume the Description element
+					for {
+						tok, err := decoder.Token()
+						if err != nil {
+							return nil, nil, err
+						}
+						if _, ok := tok.(xml.EndElement); ok {
+							break
+						}
+					}
+				} else {
+					// Typed node - use its type IRI
+					itemNode = NewNamedNode(t.Name.Space + t.Name.Local)
+					// Consume the element
+					for {
+						tok, err := decoder.Token()
+						if err != nil {
+							return nil, nil, err
+						}
+						if _, ok := tok.(xml.EndElement); ok {
+							break
+						}
+					}
+				}
+
+				// Create a blank node for this list cell
+				*blankNodeCounter++
+				listCell := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+
+				// Add rdf:first triple
+				quads = append(quads, NewQuad(listCell, NewNamedNode(rdfNS+"first"), itemNode, NewDefaultGraph()))
+
+				// Link from previous cell or set as head
+				if currentNode != nil {
+					// Link previous cell's rest to this cell
+					quads = append(quads, NewQuad(currentNode, NewNamedNode(rdfNS+"rest"), listCell, NewDefaultGraph()))
+				} else {
+					// This is the head of the list
+					headNode = listCell
+				}
+				currentNode = listCell
+
+			case xml.EndElement:
+				// End of collection
+				if currentNode != nil {
+					// Terminate the list with rdf:nil
+					quads = append(quads, NewQuad(currentNode, NewNamedNode(rdfNS+"rest"), NewNamedNode(rdfNS+"nil"), NewDefaultGraph()))
+				} else {
+					// Empty collection - return rdf:nil
+					return NewNamedNode(rdfNS + "nil"), nil, nil
+				}
+				return headNode, quads, nil
 			}
 		}
 	}
