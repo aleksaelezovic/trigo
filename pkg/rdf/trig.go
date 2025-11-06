@@ -37,7 +37,8 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 		}
 
 		// Check for PREFIX directive
-		if p.matchKeyword("@prefix") || p.matchKeyword("PREFIX") {
+		// @prefix must be lowercase (case-sensitive), PREFIX can be any case (case-insensitive)
+		if p.matchExactKeyword("@prefix") || p.matchKeyword("PREFIX") {
 			if err := p.parsePrefix(); err != nil {
 				return nil, err
 			}
@@ -45,7 +46,8 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 		}
 
 		// Check for BASE directive
-		if p.matchKeyword("@base") || p.matchKeyword("BASE") {
+		// @base must be lowercase (case-sensitive), BASE can be any case (case-insensitive)
+		if p.matchExactKeyword("@base") || p.matchKeyword("BASE") {
 			if err := p.parseBase(); err != nil {
 				return nil, err
 			}
@@ -258,15 +260,65 @@ func (p *TriGParser) parseTriplesBlock(startPos int) ([]*Triple, int, error) {
 // ensureProperTermination ensures content ends with '.' if it contains triples
 // This is needed because TriG allows optional '.' but Turtle parser requires it
 func (p *TriGParser) ensureProperTermination(content string) string {
-	// Trim whitespace and check if already ends with '.'
+	// Trim whitespace
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		return content
 	}
-	if !strings.HasSuffix(trimmed, ".") {
-		return content + " ."
+
+	// Find the last '.' that's not in a comment or string
+	// Scan forward and track the last '.' we see outside comments
+	lastDotPos := -1
+	inComment := false
+	inString := false
+	stringChar := byte(0)
+
+	for i := 0; i < len(trimmed); i++ {
+		ch := trimmed[i]
+
+		// Handle escape sequences in strings
+		if inString && ch == '\\' && i+1 < len(trimmed) {
+			i++ // Skip next character
+			continue
+		}
+
+		// Track string state
+		if !inComment && (ch == '"' || ch == '\'') {
+			if !inString {
+				inString = true
+				stringChar = ch
+			} else if ch == stringChar {
+				inString = false
+				stringChar = 0
+			}
+			continue
+		}
+
+		// Track comment state (# starts a comment until end of line)
+		if !inString && ch == '#' {
+			inComment = true
+			continue
+		}
+
+		// Newline ends a comment
+		if ch == '\n' {
+			inComment = false
+			continue
+		}
+
+		// Record '.' positions that are not in comments or strings
+		if !inComment && !inString && ch == '.' {
+			lastDotPos = i
+		}
 	}
-	return content
+
+	// If we found a '.', we're good
+	if lastDotPos >= 0 {
+		return content
+	}
+
+	// No '.' found, add one
+	return content + " ."
 }
 
 // parseDefaultGraphTripleBlock parses a triple block in the default graph using Turtle parser
@@ -394,11 +446,11 @@ func (p *TriGParser) parseTerm() (Term, error) {
 			return p.parseNumber()
 		}
 
-		// Check for boolean literals
-		if p.matchKeyword("true") {
+		// Check for boolean literals (case-sensitive per Turtle spec)
+		if p.matchExactKeyword("true") {
 			return NewBooleanLiteral(true), nil
 		}
-		if p.matchKeyword("false") {
+		if p.matchExactKeyword("false") {
 			return NewBooleanLiteral(false), nil
 		}
 
@@ -761,7 +813,7 @@ func (p *TriGParser) skipWhitespaceAndComments() {
 	}
 }
 
-// matchKeyword checks if the current position matches a keyword
+// matchKeyword checks if the current position matches a keyword (case-insensitive)
 func (p *TriGParser) matchKeyword(keyword string) bool {
 	if p.pos+len(keyword) > p.length {
 		return false
@@ -769,6 +821,29 @@ func (p *TriGParser) matchKeyword(keyword string) bool {
 
 	// Check if keyword matches
 	if !strings.EqualFold(p.input[p.pos:p.pos+len(keyword)], keyword) {
+		return false
+	}
+
+	// Check that keyword is followed by whitespace or special char
+	if p.pos+len(keyword) < p.length {
+		nextCh := p.input[p.pos+len(keyword)]
+		if (nextCh >= 'a' && nextCh <= 'z') || (nextCh >= 'A' && nextCh <= 'Z') || (nextCh >= '0' && nextCh <= '9') {
+			return false
+		}
+	}
+
+	p.pos += len(keyword)
+	return true
+}
+
+// matchExactKeyword checks if the current position matches a keyword (case-sensitive)
+func (p *TriGParser) matchExactKeyword(keyword string) bool {
+	if p.pos+len(keyword) > p.length {
+		return false
+	}
+
+	// Check if keyword matches exactly (case-sensitive)
+	if p.input[p.pos:p.pos+len(keyword)] != keyword {
 		return false
 	}
 
