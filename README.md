@@ -89,9 +89,9 @@ ts.InsertTriple(triple)
 Validated against official W3C test suites:
 
 ### RDF Parsers
-- **RDF N-Triples:** 94.3% (66/70 tests) ✅
+- **RDF N-Triples:** 100% (70/70 tests) ✅
 - **RDF N-Quads:** 100% (87/87 tests) ✅
-- **RDF Turtle:** 99.3% (294/296 tests) ✅
+- **RDF Turtle:** 100% (296/296 tests) ✅
 - **RDF TriG:** 100% (335/335 tests) ✅
 - **RDF/XML:** 75.9% (126/166 tests) ✅
 
