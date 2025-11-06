@@ -1412,16 +1412,16 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 		// Only allow: PN_CHARS, ':', '.', and digits
 		// Reject special characters that need escaping (like ~, !, $, etc.)
 		if r == '~' || r == '!' || r == '$' || r == '&' || r == '\'' ||
-			r == '(' || r == '*' || r == '+' ||
+			r == '*' || r == '+' ||
 			r == '=' || r == '/' || r == '?' || r == '@' {
 			return nil, fmt.Errorf("character %c must be escaped in prefixed name at position %d", r, p.pos)
 		}
 
 		// Break on whitespace, punctuation that ends a triple, comments, or special Turtle syntax
-		// Also break on ')' which can be a collection terminator
+		// Also break on '(' and ')' which are collection delimiters
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
 			r == '>' || r == '<' || r == '"' ||
-			r == ';' || r == ',' || r == '#' || r == ')' {
+			r == ';' || r == ',' || r == '#' || r == '(' || r == ')' {
 			break
 		}
 

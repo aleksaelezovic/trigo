@@ -52,8 +52,13 @@ func (p *TriGParser) Parse() ([]*Quad, error) {
 
 		// Check for BASE directive
 		// @base must be lowercase (case-sensitive), BASE can be any case (case-insensitive)
-		if p.matchExactKeyword("@base") || p.matchKeyword("BASE") {
-			if err := p.parseBase(); err != nil {
+		turtleStyle := p.matchExactKeyword("@base")
+		sparqlStyle := false
+		if !turtleStyle {
+			sparqlStyle = p.matchKeyword("BASE")
+		}
+		if turtleStyle || sparqlStyle {
+			if err := p.parseBase(turtleStyle); err != nil {
 				return nil, err
 			}
 			continue
@@ -853,8 +858,9 @@ func (p *TriGParser) parsePrefix() error {
 	return nil
 }
 
-// parseBase parses a BASE directive: BASE <iri>
-func (p *TriGParser) parseBase() error {
+// parseBase parses a BASE directive: @base <iri> . or BASE <iri>
+// turtleStyle indicates if this is @base (true) or BASE (false)
+func (p *TriGParser) parseBase(turtleStyle bool) error {
 	p.skipWhitespaceAndComments()
 
 	// Parse IRI
@@ -865,10 +871,19 @@ func (p *TriGParser) parseBase() error {
 
 	p.base = iri.IRI
 
-	// Skip optional '.'
 	p.skipWhitespaceAndComments()
-	if p.pos < p.length && p.input[p.pos] == '.' {
-		p.pos++
+
+	if turtleStyle {
+		// Turtle-style @base requires trailing '.'
+		if p.pos >= p.length || p.input[p.pos] != '.' {
+			return fmt.Errorf("@base directive must end with '.'")
+		}
+		p.pos++ // consume '.'
+	} else {
+		// SPARQL-style BASE must NOT have trailing '.'
+		if p.pos < p.length && p.input[p.pos] == '.' {
+			return fmt.Errorf("SPARQL-style BASE directive must not have a trailing '.'")
+		}
 	}
 
 	return nil
