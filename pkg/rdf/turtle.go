@@ -1432,7 +1432,11 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	localPartStr := localPart.String()
 
 	// Remove trailing dots (PN_LOCAL cannot end with '.')
+	// Also backtrack the position for each trailing dot removed
+	originalLen := len(localPartStr)
 	localPartStr = strings.TrimRight(localPartStr, ".")
+	trailingDots := originalLen - len(localPartStr)
+	p.pos -= trailingDots
 
 	// Expand prefix
 	baseIRI, ok := p.prefixes[prefix]
