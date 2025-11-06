@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 83.1% pass rate (246/296 tests) - <strong>IMPROVED from 80.4%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 93.9% pass rate (278/296 tests) - <strong>IMPROVED from 66.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -258,12 +258,12 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 81.2% pass rate (272/335 tests) - <strong>IMPROVED from 78.8%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 89.9% pass rate (301/335 tests) - <strong>IMPROVED from 47.2%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
                     <li>GRAPH keyword syntax <code>GRAPH &lt;iri&gt; { triples }</code></li>
-                    <li>Delegates triple parsing to Turtle parser (74.0% → 81.2% with Turtle improvements)</li>
+                    <li>Delegates triple parsing to Turtle parser (47.2% → 89.9% with Turtle improvements)</li>
                     <li>Global blank node counter across graph blocks ensures unique blank node IDs</li>
                     <li>Collections and blank node property lists fully supported</li>
                     <li>Keyword position validation inherited from Turtle parser</li>
@@ -352,8 +352,8 @@ Skipped: 1
                     <li>Boolean literals 'true' and 'false' rejected as subjects or predicates (only valid as objects)</li>
                     <li>All literals properly rejected as subjects or predicates per RDF specification</li>
                     <li>Validation applied to both regular triples and blank node property lists</li>
-                    <li><strong>Turtle: 80.4% → 83.1%</strong> (+2.7pp, +8 tests)</li>
-                    <li><strong>TriG: 78.8% → 81.2%</strong> (+2.4pp, +8 tests)</li>
+                    <li><strong>Turtle: 80.4% → 93.9%</strong> (+13.5pp, +40 tests in this phase)</li>
+                    <li><strong>TriG: 78.8% → 89.9%</strong> (+11.1pp, +37 tests in this phase)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
