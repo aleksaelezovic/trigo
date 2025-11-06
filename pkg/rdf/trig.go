@@ -26,6 +26,11 @@ func NewTriGParser(input string) *TriGParser {
 	}
 }
 
+// SetBaseURI sets the base URI for resolving relative IRIs
+func (p *TriGParser) SetBaseURI(baseURI string) {
+	p.base = baseURI
+}
+
 // Parse parses the TriG document and returns quads
 func (p *TriGParser) Parse() ([]*Quad, error) {
 	var quads []*Quad

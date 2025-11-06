@@ -41,6 +41,11 @@ func NewNTriplesParser(input string) *TurtleParser {
 	}
 }
 
+// SetBaseURI sets the base URI for resolving relative IRIs
+func (p *TurtleParser) SetBaseURI(baseURI string) {
+	p.base = baseURI
+}
+
 // Parse parses the Turtle document and returns triples
 func (p *TurtleParser) Parse() ([]*Triple, error) {
 	var triples []*Triple
@@ -564,27 +569,25 @@ func (p *TurtleParser) parseIRI() (string, error) {
 
 	// Check if IRI is relative (doesn't contain scheme with ':')
 	if !strings.Contains(iri, ":") {
-		// Fragment-only IRIs (like "#" or "#foo") are valid without base
-		// They'll be resolved against the document URI
+		// Fragment-only IRIs (like "#" or "#foo") resolve against document URI or base
 		isFragmentOnly := strings.HasPrefix(iri, "#")
 
-		// Very short test identifiers (1-2 chars) like "s", "p", "o"
-		// W3C test files use these without base for testing other features
-		isVeryShortTestID := len(iri) <= 2 &&
-			!strings.Contains(iri, "/") &&
-			!strings.Contains(iri, "?") &&
-			!strings.Contains(iri, "#") &&
-			iri != "." && iri != ".."
+		// If we have a base, resolve all relative IRIs against it
+		if p.base != "" {
+			iri = p.resolveRelativeIRI(p.base, iri)
+		} else if !isFragmentOnly {
+			// No base: allow very short test identifiers to pass through
+			// W3C test files use "s", "p", "o" without base for testing other features
+			isVeryShortTestID := len(iri) <= 2 &&
+				!strings.Contains(iri, "/") &&
+				!strings.Contains(iri, "?") &&
+				!strings.Contains(iri, "#") &&
+				iri != "." && iri != ".."
 
-		if !isVeryShortTestID && !isFragmentOnly {
-			// Relative IRI - resolve against base if available
-			if p.base == "" {
+			if !isVeryShortTestID {
 				return "", fmt.Errorf("relative IRI not allowed without base: %s", iri)
 			}
-			// Resolve relative IRI against base
-			iri = p.resolveRelativeIRI(p.base, iri)
 		}
-		// Fragment-only IRIs and short test identifiers pass through as-is
 	}
 
 	return iri, nil
@@ -653,13 +656,86 @@ func (p *TurtleParser) resolveRelativeIRI(base, relative string) string {
 
 	// Find the last / in base to get the directory
 	lastSlash := strings.LastIndex(baseWithoutQF, "/")
+	var merged string
 	if lastSlash >= 0 {
 		// Append relative path to base directory
-		return baseWithoutQF[:lastSlash+1] + relative
+		merged = baseWithoutQF[:lastSlash+1] + relative
+	} else {
+		// No / found, just concatenate (shouldn't happen with valid IRIs)
+		merged = baseWithoutQF + "/" + relative
 	}
 
-	// No / found, just concatenate (shouldn't happen with valid IRIs)
-	return baseWithoutQF + "/" + relative
+	// Normalize the path (remove . and .. segments per RFC 3986)
+	return p.normalizePath(merged)
+}
+
+// normalizePath normalizes a URI path by removing . and .. segments (RFC 3986 section 5.2.4)
+func (p *TurtleParser) normalizePath(uri string) string {
+	// Find where the path starts (after scheme://authority)
+	schemeEnd := strings.Index(uri, ":")
+	if schemeEnd < 0 {
+		return uri // No scheme, shouldn't happen
+	}
+
+	var pathStart int
+	if schemeEnd+2 < len(uri) && uri[schemeEnd:schemeEnd+3] == "://" {
+		// Has authority, find first / after ://
+		authorityStart := schemeEnd + 3
+		slashIdx := strings.Index(uri[authorityStart:], "/")
+		if slashIdx < 0 {
+			return uri // No path
+		}
+		pathStart = authorityStart + slashIdx
+	} else {
+		// No authority, path starts after :
+		pathStart = schemeEnd + 1
+	}
+
+	// Extract scheme+authority and path+query+fragment
+	prefix := uri[:pathStart]
+	pathAndRest := uri[pathStart:]
+
+	// Separate path from query and fragment
+	var path, queryAndFragment string
+	if idx := strings.IndexAny(pathAndRest, "?#"); idx >= 0 {
+		path = pathAndRest[:idx]
+		queryAndFragment = pathAndRest[idx:]
+	} else {
+		path = pathAndRest
+	}
+
+	// Split path into segments
+	segments := strings.Split(path, "/")
+	var normalized []string
+
+	// Check if path should have a trailing slash after normalization
+	// True if path ends with "/", "/.", or "/.."
+	needsTrailingSlash := strings.HasSuffix(path, "/") ||
+		strings.HasSuffix(path, "/.") ||
+		strings.HasSuffix(path, "/..")
+
+	for _, segment := range segments {
+		if segment == "." {
+			// Remove current directory references
+			continue
+		} else if segment == ".." {
+			// Remove parent directory reference and the preceding segment
+			if len(normalized) > 0 && normalized[len(normalized)-1] != ".." {
+				normalized = normalized[:len(normalized)-1]
+			}
+		} else {
+			normalized = append(normalized, segment)
+		}
+	}
+
+	normalizedPath := strings.Join(normalized, "/")
+
+	// Add trailing slash if needed
+	if needsTrailingSlash && !strings.HasSuffix(normalizedPath, "/") {
+		normalizedPath += "/"
+	}
+
+	return prefix + normalizedPath + queryAndFragment
 }
 
 // processUnicodeEscape processes \uXXXX or \UXXXXXXXX escape sequences

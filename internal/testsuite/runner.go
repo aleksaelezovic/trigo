@@ -812,6 +812,11 @@ func (r *TestRunner) parseRDFData(data string, format string, filePath string) (
 	switch format {
 	case "turtle":
 		parser := rdf.NewTurtleParser(data)
+		// Set base URI from file path if provided
+		if filePath != "" {
+			baseURI := r.filePathToURI(filePath)
+			parser.SetBaseURI(baseURI)
+		}
 		return parser.Parse()
 	case "ntriples":
 		parser := rdf.NewNTriplesParser(data) // Use strict N-Triples parser
@@ -830,6 +835,11 @@ func (r *TestRunner) parseRDFData(data string, format string, filePath string) (
 		return triples, nil
 	case "trig":
 		parser := rdf.NewTriGParser(data)
+		// Set base URI from file path if provided
+		if filePath != "" {
+			baseURI := r.filePathToURI(filePath)
+			parser.SetBaseURI(baseURI)
+		}
 		quads, err := parser.Parse()
 		if err != nil {
 			return nil, err
