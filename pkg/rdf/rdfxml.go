@@ -57,6 +57,7 @@ var forbiddenNodeElements = map[string]bool{
 	"datatype":        true,
 	"aboutEach":       true, // Removed from RDF 1.1
 	"aboutEachPrefix": true, // Removed from RDF 1.1
+	"li":              true, // rdf:li cannot be used as typed node element
 }
 
 // Forbidden RDF names that cannot be used as property elements
@@ -199,17 +200,23 @@ func (p *RDFXMLParser) resolveID(id string) (string, error) {
 		return "", fmt.Errorf("rdf:ID value '%s' is not a valid XML NCName (must not contain colons)", id)
 	}
 
-	// Check for duplicate ID within the document
-	if p.usedIDs[id] {
+	// Resolve the ID to a full URI
+	base := p.getCurrentBase()
+	var resolvedURI string
+	if base != "" {
+		resolvedURI = base + "#" + id
+	} else {
+		resolvedURI = "#" + id
+	}
+
+	// Check for duplicate resolved URI within the document
+	// (same ID with different xml:base contexts should be allowed)
+	if p.usedIDs[resolvedURI] {
 		return "", fmt.Errorf("rdf:ID value '%s' is not unique within the document", id)
 	}
-	p.usedIDs[id] = true
+	p.usedIDs[resolvedURI] = true
 
-	base := p.getCurrentBase()
-	if base != "" {
-		return base + "#" + id, nil
-	}
-	return "#" + id, nil
+	return resolvedURI, nil
 }
 
 // isContainer checks if an element is an RDF container
@@ -246,6 +253,7 @@ func validateAttributes(elem xml.StartElement) error {
 	hasID := getAttr(elem.Attr, rdfNS, "ID") != ""
 	hasResource := getAttr(elem.Attr, rdfNS, "resource") != ""
 	hasNodeID := getAttr(elem.Attr, rdfNS, "nodeID") != ""
+	parseType := getAttr(elem.Attr, rdfNS, "parseType")
 
 	// Can't have both rdf:about and rdf:ID
 	if hasAbout && hasID {
@@ -265,6 +273,11 @@ func validateAttributes(elem xml.StartElement) error {
 	// Can't have both rdf:ID and rdf:resource
 	if hasID && hasResource {
 		return fmt.Errorf("element cannot have both rdf:ID and rdf:resource")
+	}
+
+	// Can't have rdf:parseType with rdf:resource
+	if parseType != "" && hasResource {
+		return fmt.Errorf("rdf:parseType and rdf:resource cannot be used together")
 	}
 
 	// Check for rdf:li as an attribute (containers error)
@@ -378,8 +391,21 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// Get rdf:about, rdf:ID, or create blank node
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
-				if aboutAttr != "" {
-					currentSubject = NewNamedNode(p.resolveURI(aboutAttr))
+				// Check if rdf:about attribute exists (even if empty)
+				hasAboutAttr := false
+				for _, attr := range elem.Attr {
+					if attr.Name.Space == rdfNS && attr.Name.Local == "about" {
+						hasAboutAttr = true
+						break
+					}
+				}
+				if hasAboutAttr {
+					// Empty rdf:about="" resolves to current base URI
+					if aboutAttr == "" {
+						currentSubject = NewNamedNode(p.getCurrentBase())
+					} else {
+						currentSubject = NewNamedNode(p.resolveURI(aboutAttr))
+					}
 				} else if idAttr != "" {
 					resolvedID, err := p.resolveID(idAttr)
 					if err != nil {
@@ -426,7 +452,15 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			// Check if this is a typed node (not rdf:Description but has rdf:about/ID)
 			aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 			idAttr := getAttr(elem.Attr, rdfNS, "ID")
-			if aboutAttr != "" || idAttr != "" || currentSubject == nil {
+			// Check if rdf:about attribute exists (even if empty)
+			hasAboutAttr := false
+			for _, attr := range elem.Attr {
+				if attr.Name.Space == rdfNS && attr.Name.Local == "about" {
+					hasAboutAttr = true
+					break
+				}
+			}
+			if hasAboutAttr || idAttr != "" || currentSubject == nil {
 				// Validate this is not a forbidden node element
 				if err := validateNodeElement(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
@@ -439,8 +473,13 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 				// This is a typed node (implicit rdf:type)
 				var subject Term
-				if aboutAttr != "" {
-					subject = NewNamedNode(p.resolveURI(aboutAttr))
+				if hasAboutAttr {
+					// Empty rdf:about="" resolves to current base URI
+					if aboutAttr == "" {
+						subject = NewNamedNode(p.getCurrentBase())
+					} else {
+						subject = NewNamedNode(p.resolveURI(aboutAttr))
+					}
 				} else if idAttr != "" {
 					resolvedID, err := p.resolveID(idAttr)
 					if err != nil {
@@ -474,7 +513,113 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 				}
 
+				// Validate attributes (for illegal combinations)
+				if err := validateAttributes(elem); err != nil {
+					return nil, err
+				}
+
 				predicate := elem.Name.Space + elem.Name.Local
+
+				// Check for rdf:parseType (highest priority)
+				parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
+				if parseTypeAttr != "" {
+					// Use parsePropertyContent to handle parseType
+					object, nestedQuads, err := p.parsePropertyContent(decoder, elem, &blankNodeCounter)
+					if err != nil {
+						return nil, err
+					}
+
+					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
+					quads = append(quads, quad)
+					quads = append(quads, nestedQuads...)
+
+					// Check for rdf:ID on property element (triggers reification)
+					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+						statementID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, reificationQuads...)
+					}
+
+					continue
+				}
+
+				// Check for rdf:resource attribute (second priority)
+				resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
+				if resourceAttr != "" {
+					object := NewNamedNode(p.resolveURI(resourceAttr))
+
+					// Check for non-RDF property attributes - these apply to the resource IRI
+					hasPropertyAttrs := false
+					for _, attr := range elem.Attr {
+						// Skip RDF-specific and XML-specific attributes
+						if attr.Name.Space == rdfNS {
+							continue
+						}
+						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+							strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+							(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+							continue
+						}
+						if attr.Name.Space == "" {
+							continue
+						}
+						hasPropertyAttrs = true
+						break
+					}
+
+					if hasPropertyAttrs {
+						// Create triples for property attributes on the resource
+						for _, attr := range elem.Attr {
+							// Skip RDF-specific and XML-specific attributes
+							if attr.Name.Space == rdfNS {
+								continue
+							}
+							if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+								strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+								(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+								continue
+							}
+							if attr.Name.Space == "" {
+								continue
+							}
+
+							attrPredicate := attr.Name.Space + attr.Name.Local
+							attrObject := NewLiteral(attr.Value)
+							attrQuad := NewQuad(object, NewNamedNode(attrPredicate), attrObject, NewDefaultGraph())
+							quads = append(quads, attrQuad)
+						}
+					}
+
+					// Create main triple
+					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
+					quads = append(quads, quad)
+
+					// Check for rdf:ID on property element (triggers reification)
+					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+						statementID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, reificationQuads...)
+					}
+
+					// Consume the end element
+					for {
+						token, err := decoder.Token()
+						if err != nil {
+							return nil, fmt.Errorf("error reading property content: %w", err)
+						}
+						if _, ok := token.(xml.EndElement); ok {
+							break
+						}
+					}
+
+					continue
+				}
 
 				// Check for non-RDF property attributes (these create a blank node with additional properties)
 				hasPropertyAttrs := false
@@ -483,7 +628,6 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					if attr.Name.Space == rdfNS {
 						continue
 					}
-					// Skip xml: namespace attributes (xml:lang, xml:base, xml:space, etc.)
 					if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 						strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 						(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -521,7 +665,6 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						if attr.Name.Space == rdfNS {
 							continue
 						}
-						// Skip xml: namespace attributes
 						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 							strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 							(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -551,30 +694,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					continue
 				}
 
-				// Check for rdf:resource attribute (object is IRI)
-				resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
-				if resourceAttr != "" {
-					object := NewNamedNode(p.resolveURI(resourceAttr))
-					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
-					quads = append(quads, quad)
-
-					// Check for rdf:ID on property element (triggers reification)
-					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
-						statementID, err := p.resolveID(idAttr)
-						if err != nil {
-							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
-						}
-						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
-						quads = append(quads, reificationQuads...)
-					}
-
-					continue
-				}
-
-				// Check for rdf:datatype attribute
+				// No special attributes - read the text content or check for empty element
 				datatypeAttr := getAttr(elem.Attr, rdfNS, "datatype")
-
-				// Check for xml:lang attribute
 				langAttr := getAttrAny(elem.Attr, "lang")
 
 				// Read the text content
@@ -826,6 +947,11 @@ func (p *RDFXMLParser) parseTypedNode(decoder *xml.Decoder, subject Term, liCoun
 // parsePropertyContent parses the content of a property element and returns the object
 // It also returns any additional quads generated (e.g., for parseType="Resource")
 func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.StartElement, blankNodeCounter *int) (Term, []*Quad, error) {
+	// Validate attributes for illegal combinations
+	if err := validateAttributes(elem); err != nil {
+		return nil, nil, err
+	}
+
 	// Check for rdf:parseType attribute
 	parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
 	if parseTypeAttr == "Resource" {
@@ -995,6 +1121,11 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 
 		switch elem := token.(type) {
 		case xml.StartElement:
+			// Validate attributes for illegal combinations
+			if err := validateAttributes(elem); err != nil {
+				return nil, err
+			}
+
 			// Property element
 			predicate := elem.Name.Space + elem.Name.Local
 
