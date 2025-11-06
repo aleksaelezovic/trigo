@@ -313,28 +313,61 @@ func (p *TriGParser) ensureProperTermination(content string) string {
 		return content
 	}
 
-	// Find the last '.' that's not in a comment or string
-	// Scan forward and track the last '.' we see outside comments
+	// Find the last '.' that's not in a comment, string, or IRI
+	// Scan forward and track the last '.' we see outside these contexts
 	lastDotPos := -1
 	inComment := false
 	inString := false
+	inLongString := false
+	inIRI := false
 	stringChar := byte(0)
 
 	for i := 0; i < len(trimmed); i++ {
 		ch := trimmed[i]
 
-		// Handle escape sequences in strings
+		// Handle escape sequences in strings (both regular and long)
 		if inString && ch == '\\' && i+1 < len(trimmed) {
 			i++ // Skip next character
 			continue
 		}
 
-		// Track string state
-		if !inComment && (ch == '"' || ch == '\'') {
+		// Track IRI state (angle brackets)
+		if !inComment && !inString && !inLongString {
+			if ch == '<' {
+				inIRI = true
+				continue
+			} else if ch == '>' {
+				inIRI = false
+				continue
+			}
+		}
+
+		// Track string state (both regular and long strings)
+		if !inComment && !inIRI && (ch == '"' || ch == '\'') {
+			// Check for triple-quoted long string
+			if i+2 < len(trimmed) && trimmed[i+1] == ch && trimmed[i+2] == ch {
+				if !inString {
+					// Start of long string
+					inString = true
+					inLongString = true
+					stringChar = ch
+					i += 2 // Skip the next two quotes
+					continue
+				} else if inLongString && ch == stringChar {
+					// End of long string
+					inString = false
+					inLongString = false
+					stringChar = 0
+					i += 2 // Skip the next two quotes
+					continue
+				}
+			}
+
+			// Regular string
 			if !inString {
 				inString = true
 				stringChar = ch
-			} else if ch == stringChar {
+			} else if !inLongString && ch == stringChar {
 				inString = false
 				stringChar = 0
 			}
@@ -342,7 +375,7 @@ func (p *TriGParser) ensureProperTermination(content string) string {
 		}
 
 		// Track comment state (# starts a comment until end of line)
-		if !inString && ch == '#' {
+		if !inString && !inLongString && !inIRI && ch == '#' {
 			inComment = true
 			continue
 		}
@@ -353,8 +386,8 @@ func (p *TriGParser) ensureProperTermination(content string) string {
 			continue
 		}
 
-		// Record '.' positions that are not in comments or strings
-		if !inComment && !inString && ch == '.' {
+		// Record '.' positions that are not in comments, strings, or IRIs
+		if !inComment && !inString && !inLongString && !inIRI && ch == '.' {
 			lastDotPos = i
 		}
 	}
