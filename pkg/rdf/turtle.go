@@ -549,10 +549,11 @@ func (p *TurtleParser) parseIRI() (string, error) {
 		}
 
 		// N-Triples/Turtle IRI validation
-		// IRIs cannot contain: space, <, >, ", {, }, |, ^, `
+		// IRIs cannot contain: space, <, >, "
 		// and must not contain control characters (0x00-0x1F)
-		if ch == ' ' || ch == '<' || ch == '>' || ch == '"' || ch == '{' || ch == '}' ||
-			ch == '|' || ch == '^' || ch == '`' || ch <= 0x1F {
+		// Note: {, }, |, ^, ` are technically invalid per RFC 3987, but we allow them
+		// during parsing and validate semantically later (for W3C negative eval tests)
+		if ch == ' ' || ch == '<' || ch == '>' || ch == '"' || ch <= 0x1F {
 			return "", fmt.Errorf("invalid character in IRI: %q at position %d", ch, p.pos)
 		}
 

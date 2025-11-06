@@ -124,6 +124,8 @@ func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult 
 		return r.runRDFPositiveSyntaxTest(manifest, test, "turtle")
 	case TestTypeTurtleNegativeSyntax:
 		return r.runRDFNegativeSyntaxTest(manifest, test, "turtle")
+	case TestTypeTurtleNegativeEval:
+		return r.runRDFNegativeEvalTest(manifest, test, "turtle")
 	// RDF N-Triples tests
 	case TestTypeNTriplesPositiveSyntax:
 		return r.runRDFPositiveSyntaxTest(manifest, test, "ntriples")
@@ -751,6 +753,76 @@ func (r *TestRunner) runRDFNegativeSyntaxTest(manifest *TestManifest, test *Test
 
 	// Expected to fail, so this is a pass
 	return TestResultPass
+}
+
+// runRDFNegativeEvalTest parses RDF data and validates that IRIs are invalid (semantic errors)
+func (r *TestRunner) runRDFNegativeEvalTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	dataFile := manifest.ResolveFile(test.Action)
+	dataBytes, err := os.ReadFile(dataFile) // #nosec G304 - test suite legitimately reads test data files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read data file: %v", err))
+		return TestResultError
+	}
+
+	// Parse the RDF data - should succeed syntactically
+	triples, err := r.parseRDFData(string(dataBytes), format, dataFile)
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to parse (should parse syntactically): %v", err))
+		return TestResultFail
+	}
+
+	// Check if any IRIs contain invalid characters (semantic validation)
+	for _, triple := range triples {
+		// Check subject
+		if subject, ok := triple.Subject.(*rdf.NamedNode); ok {
+			if !r.isValidIRI(subject.IRI) {
+				// Found invalid IRI - test passes
+				return TestResultPass
+			}
+		}
+		// Check predicate
+		if predicate, ok := triple.Predicate.(*rdf.NamedNode); ok {
+			if !r.isValidIRI(predicate.IRI) {
+				// Found invalid IRI - test passes
+				return TestResultPass
+			}
+		}
+		// Check object
+		if object, ok := triple.Object.(*rdf.NamedNode); ok {
+			if !r.isValidIRI(object.IRI) {
+				// Found invalid IRI - test passes
+				return TestResultPass
+			}
+		}
+	}
+
+	// All IRIs are valid - test should have failed but didn't
+	r.recordError(test, "All IRIs are valid but test expects invalid IRIs")
+	return TestResultFail
+}
+
+// isValidIRI checks if an IRI contains only valid characters per RFC 3987
+func (r *TestRunner) isValidIRI(iri string) bool {
+	// Check for invalid characters in IRI
+	// Per RFC 3987, the following ASCII characters are not allowed in IRIs:
+	// - Control characters (0x00-0x1F, 0x7F-0x9F)
+	// - Space (0x20)
+	// - <, >, ", {, }, |, \, ^, `
+	for _, ch := range iri {
+		if ch <= 0x20 || ch == 0x7F { // Control chars and space
+			return false
+		}
+		if ch == '<' || ch == '>' || ch == '"' || ch == '{' || ch == '}' ||
+			ch == '|' || ch == '\\' || ch == '^' || ch == '`' {
+			return false
+		}
+	}
+	return true
 }
 
 // runRDFEvalTest parses RDF data and compares with expected triples

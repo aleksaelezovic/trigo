@@ -59,6 +59,7 @@ const (
 	TestTypeTurtleEval           TestType = "TestTurtleEval"
 	TestTypeTurtlePositiveSyntax TestType = "TestTurtlePositiveSyntax"
 	TestTypeTurtleNegativeSyntax TestType = "TestTurtleNegativeSyntax"
+	TestTypeTurtleNegativeEval   TestType = "TestTurtleNegativeEval"
 
 	// RDF N-Triples tests
 	TestTypeNTriplesPositiveSyntax TestType = "TestNTriplesPositiveSyntax"
@@ -150,6 +151,8 @@ func ParseManifest(path string) (*TestManifest, error) {
 			} else if strings.Contains(line, "QueryEvaluationTest") {
 				currentTest.Type = TestTypeQueryEvaluation
 				// RDF Turtle tests
+			} else if strings.Contains(line, "TestTurtleNegativeEval") {
+				currentTest.Type = TestTypeTurtleNegativeEval
 			} else if strings.Contains(line, "TestTurtleEval") {
 				currentTest.Type = TestTypeTurtleEval
 			} else if strings.Contains(line, "TestTurtlePositiveSyntax") {
