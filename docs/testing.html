@@ -227,7 +227,7 @@ Skipped: 1
 
         <h4>Test Results</h4>
         <ul>
-            <li><strong>rdf11/rdf-turtle</strong>: 97.0% pass rate (287/296 tests) - <strong>IMPROVED from 66.2%</strong>
+            <li><strong>rdf11/rdf-turtle</strong>: 98.6% pass rate (292/296 tests) - <strong>IMPROVED from 66.2%</strong>
                 <ul>
                     <li>Basic triples, PREFIX/BASE, property lists, Unicode escapes</li>
                     <li>Single/double/triple-quote literals, numeric literals, boolean literals</li>
@@ -258,7 +258,7 @@ Skipped: 1
                     <li>All negative syntax tests passing</li>
                 </ul>
             </li>
-            <li><strong>rdf11/rdf-trig</strong>: 89.9% pass rate (301/335 tests) - <strong>IMPROVED from 47.2%</strong>
+            <li><strong>rdf11/rdf-trig</strong>: 94.0% pass rate (315/335 tests) - <strong>IMPROVED from 47.2%</strong>
                 <ul>
                     <li>Anonymous graph blocks <code>{ triples }</code></li>
                     <li>Named graph blocks <code>&lt;iri&gt; { triples }</code> and <code>_:bnode { triples }</code></li>
@@ -364,6 +364,18 @@ Skipped: 1
                     <li>Added fragment-only IRI support (#, #foo) without requiring base URI</li>
                     <li>Improved prefixed name parsing: break on comments (#) and collection terminators ()</li>
                     <li><strong>Turtle: 93.9% → 97.0%</strong> (+3.1pp, +9 tests in this phase)</li>
+                </ul>
+            </li>
+            <li><strong>RFC 3986 IRI Resolution:</strong>
+                <ul>
+                    <li>Implemented full RFC 3986 path normalization (remove . and .. segments)</li>
+                    <li>Added SetBaseURI() method to Turtle and TriG parsers for document base URI</li>
+                    <li>Fixed relative IRI resolution to always use base when available</li>
+                    <li>Fragment-only prefixes (@prefix : &lt;#&gt;) now resolve against document URI</li>
+                    <li>Proper handling of . (current directory) and .. (parent directory) with trailing slashes</li>
+                    <li>Query and fragment components preserved during path normalization</li>
+                    <li><strong>Turtle: 97.0% → 98.6%</strong> (+1.6pp, +5 tests in this phase)</li>
+                    <li><strong>TriG: 89.9% → 94.0%</strong> (+4.1pp, +14 tests in this phase)</li>
                 </ul>
             </li>
             <li><strong>Graph Isomorphism for Blank Nodes:</strong>
