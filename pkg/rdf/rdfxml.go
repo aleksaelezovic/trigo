@@ -437,6 +437,33 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				quad := NewQuad(containerNode, NewNamedNode(rdfNS+"type"), NewNamedNode(containerType), NewDefaultGraph())
 				quads = append(quads, quad)
 
+				// Process property attributes on container element
+				for _, attr := range elem.Attr {
+					// Skip RDF-specific attributes (these have special meaning)
+					// Skip structural RDF attributes (these have special meaning)
+					if attr.Name.Space == rdfNS {
+						// Skip structural attributes but allow rdf:_N, rdf:value, and other RDF properties
+						switch attr.Name.Local {
+						case "about", "ID", "nodeID", "resource", "parseType", "type", "datatype", "bagID":
+							continue
+						}
+					}
+					// Skip XML-specific attributes
+					if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+						strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+						(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+						continue
+					}
+					if attr.Name.Space == "" {
+						continue
+					}
+
+					attrPredicate := attr.Name.Space + attr.Name.Local
+					attrObject := NewLiteral(attr.Value)
+					attrQuad := NewQuad(containerNode, NewNamedNode(attrPredicate), attrObject, NewDefaultGraph())
+					quads = append(quads, attrQuad)
+				}
+
 				// Parse container contents
 				liCounter = 0 // Reset counter for this container
 				containerQuads, err := p.parseContainer(decoder, containerNode, &liCounter, &blankNodeCounter)
