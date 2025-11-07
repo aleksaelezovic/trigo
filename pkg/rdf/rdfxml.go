@@ -117,6 +117,12 @@ func (p *RDFXMLParser) resolveURI(uri string) string {
 		return uri
 	}
 
+	// If URI is already absolute, return as-is to preserve original encoding
+	// (whether it has Unicode characters or percent-encoding)
+	if isAbsoluteURI(uri) {
+		return uri
+	}
+
 	// Parse the base URI
 	baseURL, err := url.Parse(base)
 	if err != nil {
@@ -133,70 +139,48 @@ func (p *RDFXMLParser) resolveURI(uri string) string {
 
 	// Resolve the reference against the base
 	resolved := baseURL.ResolveReference(refURL)
+	resolvedStr := resolved.String()
 
-	// Convert URL to IRI (preserve Unicode characters, don't percent-encode)
-	return urlToIRI(resolved)
+	// Decode percent-encoded UTF-8 sequences to preserve Unicode characters
+	// This handles the case where XML entities (like &#xFC;) were decoded to Unicode
+	// by the XML parser, but then got percent-encoded during URL resolution
+	if decoded, err := url.PathUnescape(resolvedStr); err == nil {
+		return decoded
+	}
+	return resolvedStr
 }
 
-// urlToIRI converts a url.URL to an IRI string, preserving Unicode characters
-// Unlike URL.String(), this doesn't percent-encode non-ASCII characters
+// isAbsoluteURI checks if a URI is absolute (has a scheme)
+func isAbsoluteURI(uri string) bool {
+	// Quick check: absolute URIs have scheme:
+	// Must start with alpha and contain ':'
+	if len(uri) == 0 {
+		return false
+	}
+
+	// Find the first ':' or invalid character
+	for i, c := range uri {
+		if c == ':' {
+			return i > 0 // Has scheme if ':' is not first character
+		}
+		// Stop at first character that can't be in a scheme
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(i > 0 && ((c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.'))) {
+			return false
+		}
+	}
+	return false
+}
+
+// urlToIRI converts a url.URL to an IRI string
+// According to RDF specs, we should preserve the original encoding:
+// - If input had percent-encoding, keep it
+// - If input had Unicode, keep it
+// Go's url.Parse() decodes percent-encoding, so we need to reconstruct with proper encoding
 func urlToIRI(u *url.URL) string {
-	// Build the IRI manually to avoid percent-encoding
-	var result strings.Builder
-
-	if u.Scheme != "" {
-		result.WriteString(u.Scheme)
-		result.WriteString(":")
-	}
-
-	if u.Opaque != "" {
-		result.WriteString(u.Opaque)
-	} else {
-		if u.Scheme != "" || u.Host != "" || u.User != nil {
-			if u.Host != "" || u.Path != "" || u.User != nil {
-				result.WriteString("//")
-			}
-			if ui := u.User; ui != nil {
-				result.WriteString(ui.String())
-				result.WriteString("@")
-			}
-			if h := u.Host; h != "" {
-				result.WriteString(h)
-			}
-		}
-		// Path is already decoded by url.Parse
-		path := u.Path
-		if path != "" {
-			// Unescape the path to preserve Unicode characters
-			if unescaped, err := url.PathUnescape(path); err == nil {
-				result.WriteString(unescaped)
-			} else {
-				result.WriteString(path)
-			}
-		}
-	}
-
-	if u.RawQuery != "" {
-		result.WriteString("?")
-		// Unescape query to preserve Unicode
-		if unescaped, err := url.QueryUnescape(u.RawQuery); err == nil {
-			result.WriteString(unescaped)
-		} else {
-			result.WriteString(u.RawQuery)
-		}
-	}
-
-	if u.Fragment != "" {
-		result.WriteString("#")
-		// Unescape fragment to preserve Unicode
-		if unescaped, err := url.QueryUnescape(u.Fragment); err == nil {
-			result.WriteString(unescaped)
-		} else {
-			result.WriteString(u.Fragment)
-		}
-	}
-
-	return result.String()
+	// Use url.String() which properly handles percent-encoding
+	// This preserves whatever encoding was in the original input
+	return u.String()
 }
 
 // isXMLNCNameStartChar checks if a rune can start an XML NCName (Name without colons)
