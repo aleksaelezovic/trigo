@@ -71,6 +71,7 @@ var forbiddenPropertyElements = map[string]bool{
 	"RDF":             true,
 	"ID":              true,
 	"about":           true,
+	"bagID":           true, // Removed from RDF 1.1
 	"parseType":       true,
 	"resource":        true,
 	"nodeID":          true,
@@ -344,7 +345,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 	var quads []*Quad
 	var currentSubject Term
 	var blankNodeCounter int
-	var liCounter int // Counter for rdf:li elements within current container
+	var liCounter int    // Counter for rdf:li elements within current container
+	var seenRootRDF bool // Track if we've seen the root rdf:RDF element
 
 	// Stack to track element depth and whether each element has xml:base
 	type elementInfo struct {
@@ -381,15 +383,17 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			// The root rdf:RDF is expected and should be skipped
 			// But nested rdf:RDF elements are forbidden as node elements
 			if elem.Name.Local == "RDF" && elem.Name.Space == rdfNS {
-				// If we have no subject and no elements yet, this is likely the root - skip it
-				// Otherwise, it's a nested rdf:RDF which is forbidden
-				if currentSubject == nil && len(quads) == 0 {
-					continue // Root rdf:RDF - skip
+				if !seenRootRDF {
+					// First rdf:RDF - this is the root, skip it
+					seenRootRDF = true
+					continue
 				}
 				// Nested rdf:RDF - this is forbidden, validate it to get the error
 				if err := validateNodeElement(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 				}
+				// Validation passed but nested rdf:RDF should always fail - this shouldn't happen
+				return nil, fmt.Errorf("invalid RDF/XML: nested rdf:RDF is forbidden")
 			}
 
 			// Check if this is an RDF container (rdf:Bag, rdf:Seq, rdf:Alt)
@@ -444,7 +448,7 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 			}
 
 			// Check if this is rdf:Description (subject)
-			if elem.Name.Local == "Description" && elem.Name.Space == rdfNS {
+			if elem.Name.Local == "Description" && elem.Name.Space == rdfNS && currentSubject == nil {
 				// Validate attributes
 				if err := validateAttributes(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
