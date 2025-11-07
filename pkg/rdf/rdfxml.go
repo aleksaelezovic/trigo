@@ -1538,6 +1538,7 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 // parseNestedDescription parses a nested rdf:Description element
 func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term, blankNodeCounter *int) ([]*Quad, error) {
 	var quads []*Quad
+	var liCounter int // Each Description has its own rdf:li counter
 
 	for {
 		token, err := decoder.Token()
@@ -1552,8 +1553,14 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 				return nil, err
 			}
 
-			// Property element
-			predicate := elem.Name.Space + elem.Name.Local
+			// Handle rdf:li specially - it auto-numbers to rdf:_N
+			var predicate string
+			if elem.Name.Local == "li" && elem.Name.Space == rdfNS {
+				liCounter++
+				predicate = fmt.Sprintf("%s_%d", rdfNS, liCounter)
+			} else {
+				predicate = elem.Name.Space + elem.Name.Local
+			}
 
 			// Capture rdf:ID early for reification
 			propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
