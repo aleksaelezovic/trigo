@@ -1632,6 +1632,29 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 				continue
 			}
 
+			// Check for rdf:nodeID attribute (blank node object)
+			nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
+			if nodeIDAttr != "" {
+				object, err := p.getOrCreateNodeID(nodeIDAttr, blankNodeCounter)
+				if err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
+				quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
+				quads = append(quads, quad)
+
+				// Check for rdf:ID on property element (triggers reification)
+				if propertyIDAttr != "" {
+					statementID, err := p.resolveID(propertyIDAttr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(predicate), object)
+					quads = append(quads, reificationQuads...)
+				}
+
+				continue
+			}
+
 			// Read text content
 			var textContent strings.Builder
 			done := false
