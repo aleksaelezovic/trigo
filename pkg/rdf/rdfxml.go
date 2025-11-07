@@ -133,7 +133,70 @@ func (p *RDFXMLParser) resolveURI(uri string) string {
 
 	// Resolve the reference against the base
 	resolved := baseURL.ResolveReference(refURL)
-	return resolved.String()
+
+	// Convert URL to IRI (preserve Unicode characters, don't percent-encode)
+	return urlToIRI(resolved)
+}
+
+// urlToIRI converts a url.URL to an IRI string, preserving Unicode characters
+// Unlike URL.String(), this doesn't percent-encode non-ASCII characters
+func urlToIRI(u *url.URL) string {
+	// Build the IRI manually to avoid percent-encoding
+	var result strings.Builder
+
+	if u.Scheme != "" {
+		result.WriteString(u.Scheme)
+		result.WriteString(":")
+	}
+
+	if u.Opaque != "" {
+		result.WriteString(u.Opaque)
+	} else {
+		if u.Scheme != "" || u.Host != "" || u.User != nil {
+			if u.Host != "" || u.Path != "" || u.User != nil {
+				result.WriteString("//")
+			}
+			if ui := u.User; ui != nil {
+				result.WriteString(ui.String())
+				result.WriteString("@")
+			}
+			if h := u.Host; h != "" {
+				result.WriteString(h)
+			}
+		}
+		// Path is already decoded by url.Parse
+		path := u.Path
+		if path != "" {
+			// Unescape the path to preserve Unicode characters
+			if unescaped, err := url.PathUnescape(path); err == nil {
+				result.WriteString(unescaped)
+			} else {
+				result.WriteString(path)
+			}
+		}
+	}
+
+	if u.RawQuery != "" {
+		result.WriteString("?")
+		// Unescape query to preserve Unicode
+		if unescaped, err := url.QueryUnescape(u.RawQuery); err == nil {
+			result.WriteString(unescaped)
+		} else {
+			result.WriteString(u.RawQuery)
+		}
+	}
+
+	if u.Fragment != "" {
+		result.WriteString("#")
+		// Unescape fragment to preserve Unicode
+		if unescaped, err := url.QueryUnescape(u.Fragment); err == nil {
+			result.WriteString(unescaped)
+		} else {
+			result.WriteString(u.Fragment)
+		}
+	}
+
+	return result.String()
 }
 
 // isXMLNCNameStartChar checks if a rune can start an XML NCName (Name without colons)
