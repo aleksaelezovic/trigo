@@ -939,6 +939,16 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 								return nil, err
 							}
 							quads = append(quads, nestedQuads...)
+
+							// Check for rdf:ID on property element (triggers reification)
+							if propertyIDAttr != "" {
+								statementID, err := p.resolveID(propertyIDAttr)
+								if err != nil {
+									return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+								}
+								reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+								quads = append(quads, reificationQuads...)
+							}
 							goto propertyDone
 						}
 					}
@@ -1477,12 +1487,26 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 			// Property element
 			predicate := elem.Name.Space + elem.Name.Local
 
+			// Capture rdf:ID early for reification
+			propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
+
 			// Check for rdf:resource attribute
 			resourceAttr := getAttr(elem.Attr, rdfNS, "resource")
 			if resourceAttr != "" {
 				object := NewNamedNode(p.resolveURI(resourceAttr))
 				quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
 				quads = append(quads, quad)
+
+				// Check for rdf:ID on property element (triggers reification)
+				if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+					statementID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(predicate), object)
+					quads = append(quads, reificationQuads...)
+				}
+
 				continue
 			}
 
@@ -1502,6 +1526,16 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 					object := NewLiteral(textContent.String())
 					quad := NewQuad(subject, NewNamedNode(predicate), object, NewDefaultGraph())
 					quads = append(quads, quad)
+
+					// Check for rdf:ID on property element (triggers reification)
+					if propertyIDAttr != "" {
+						statementID, err := p.resolveID(propertyIDAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(predicate), object)
+						quads = append(quads, reificationQuads...)
+					}
 					done = true
 				}
 			}
