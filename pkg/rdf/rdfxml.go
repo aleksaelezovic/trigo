@@ -298,20 +298,20 @@ func validateAttributes(elem xml.StartElement) error {
 		return fmt.Errorf("element cannot have both rdf:about and rdf:nodeID")
 	}
 
-	// Can't have both rdf:ID and rdf:nodeID
-	if hasID && hasNodeID {
-		return fmt.Errorf("element cannot have both rdf:ID and rdf:nodeID")
-	}
+	// Can't have both rdf:ID and rdf:nodeID on NODE elements
+	// (but this combination is VALID on property elements - nodeID provides object, ID triggers reification)
+	// Since this function is also called for property elements, we skip this check here
+	// and let the RDF/XML spec rules handle it naturally
 
 	// Can't have both rdf:ID and rdf:resource on NODE elements
 	// (but this combination is VALID on property elements - it creates a triple AND reifies it)
 	// Since this function is also called for property elements, we skip this check here
 	// and let the RDF/XML spec rules handle it naturally
 
-	// Can't have both rdf:nodeID and rdf:resource
-	if hasNodeID && hasResource {
-		return fmt.Errorf("element cannot have both rdf:nodeID and rdf:resource")
-	}
+	// Can't have both rdf:nodeID and rdf:resource on NODE elements
+	// (but this combination is VALID on property elements - both specify the object)
+	// Since this function is also called for property elements, we skip this check here
+	// and let the RDF/XML spec rules handle it naturally
 
 	// Can't have rdf:parseType with rdf:resource
 	if parseType != "" && hasResource {
@@ -702,6 +702,42 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 							attrQuad := NewQuad(object, NewNamedNode(attrPredicate), attrObject, NewDefaultGraph())
 							quads = append(quads, attrQuad)
 						}
+					}
+
+					// Create main triple
+					quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
+					quads = append(quads, quad)
+
+					// Check for rdf:ID on property element (triggers reification)
+					if idAttr := getAttr(elem.Attr, rdfNS, "ID"); idAttr != "" {
+						statementID, err := p.resolveID(idAttr)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, reificationQuads...)
+					}
+
+					// Consume the end element
+					for {
+						token, err := decoder.Token()
+						if err != nil {
+							return nil, fmt.Errorf("error reading property content: %w", err)
+						}
+						if _, ok := token.(xml.EndElement); ok {
+							break
+						}
+					}
+
+					continue
+				}
+
+				// Check for rdf:nodeID attribute (third priority - similar to rdf:resource but for blank nodes)
+				nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
+				if nodeIDAttr != "" {
+					object, err := p.getOrCreateNodeID(nodeIDAttr, &blankNodeCounter)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
 					}
 
 					// Create main triple
