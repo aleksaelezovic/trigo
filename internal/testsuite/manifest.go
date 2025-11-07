@@ -87,6 +87,23 @@ const (
 // ParseManifest parses a Turtle manifest file (simplified parser)
 // This is a basic implementation - a full parser would use a proper Turtle library
 func ParseManifest(path string) (*TestManifest, error) {
+	return parseManifestWithVisited(path, make(map[string]bool))
+}
+
+// parseManifestWithVisited parses a manifest and tracks visited files to prevent infinite loops
+func parseManifestWithVisited(path string, visited map[string]bool) (*TestManifest, error) {
+	// Get absolute path to avoid parsing the same file multiple times
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+
+	// Check if we've already visited this manifest
+	if visited[absPath] {
+		return &TestManifest{BaseURI: filepath.Dir(path)}, nil
+	}
+	visited[absPath] = true
+
 	file, err := os.Open(path) // #nosec G304 - test suite legitimately reads test manifest files
 	if err != nil {
 		return nil, fmt.Errorf("failed to open manifest: %w", err)
@@ -100,6 +117,8 @@ func ParseManifest(path string) (*TestManifest, error) {
 	scanner := bufio.NewScanner(file)
 	var currentTest *TestCase
 	var inTest bool
+	var inInclude bool
+	var includeFiles []string
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -109,10 +128,44 @@ func ParseManifest(path string) (*TestManifest, error) {
 			continue
 		}
 
-		// Start of new test (test definition can be <#testname> or :testname)
+		// Handle mf:include statements (RDF 1.2 manifests)
+		if strings.Contains(line, "mf:include") {
+			inInclude = true
+			continue
+		}
+
+		// Collect included manifest files
+		if inInclude {
+			// Extract file paths between < and >
+			if strings.Contains(line, "<") && strings.Contains(line, ">") {
+				parts := strings.Split(line, "<")
+				for _, part := range parts[1:] {
+					if idx := strings.Index(part, ">"); idx != -1 {
+						includeFile := part[:idx]
+						// Skip if it's not a manifest file
+						if strings.HasSuffix(includeFile, ".ttl") {
+							includeFiles = append(includeFiles, includeFile)
+						}
+					}
+				}
+			}
+			// Check if we've reached the end of the include list
+			if strings.Contains(line, ")") && strings.Contains(line, ".") {
+				inInclude = false
+			}
+			continue
+		}
+
+		// Start of new test (test definition can be <#testname>, :testname, or prefix:testname like trs:test-1)
 		// Handles both "rdf:type" and shorthand "a rdft:" or "a mf:"
-		isTestStart := (strings.HasPrefix(line, "<#") || strings.HasPrefix(line, ":")) &&
-			(strings.Contains(line, "rdf:type") || strings.Contains(line, " a "))
+		// Check if line contains "rdf:type" or " a " AND starts with a test identifier
+		hasTestType := strings.Contains(line, "rdf:type") || strings.Contains(line, " a ")
+		// Match lines like: <#test> rdf:type ..., :test rdf:type ..., or trs:test rdf:type ...
+		startsWithTestID := strings.HasPrefix(line, "<#") ||
+			strings.HasPrefix(line, ":") ||
+			(len(line) > 0 && line[0] != ' ' && line[0] != '#' && strings.Contains(line, ":") &&
+				strings.Index(line, ":") < strings.Index(line, " "))
+		isTestStart := startsWithTestID && hasTestType
 
 		if isTestStart {
 			if currentTest != nil {
@@ -239,6 +292,55 @@ func ParseManifest(path string) (*TestManifest, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading manifest: %w", err)
+	}
+
+	// Process included manifests
+	for _, includeFile := range includeFiles {
+		includePath := filepath.Join(manifest.BaseURI, includeFile)
+		includedManifest, err := parseManifestWithVisited(includePath, visited)
+		if err != nil {
+			// Log error but continue with other includes
+			fmt.Fprintf(os.Stderr, "Warning: failed to load included manifest %s: %v\n", includePath, err)
+			continue
+		}
+		// Resolve file paths in included tests to absolute paths
+		for i := range includedManifest.Tests {
+			test := &includedManifest.Tests[i]
+			// Resolve action path
+			if test.Action != "" && !filepath.IsAbs(test.Action) {
+				absPath, err := filepath.Abs(filepath.Join(includedManifest.BaseURI, test.Action))
+				if err == nil {
+					test.Action = absPath
+				}
+			}
+			// Resolve result path
+			if test.Result != "" && !filepath.IsAbs(test.Result) {
+				absPath, err := filepath.Abs(filepath.Join(includedManifest.BaseURI, test.Result))
+				if err == nil {
+					test.Result = absPath
+				}
+			}
+			// Resolve data file paths
+			for j := range test.Data {
+				if !filepath.IsAbs(test.Data[j]) {
+					absPath, err := filepath.Abs(filepath.Join(includedManifest.BaseURI, test.Data[j]))
+					if err == nil {
+						test.Data[j] = absPath
+					}
+				}
+			}
+			// Resolve graph data file paths
+			for j := range test.GraphData {
+				if !filepath.IsAbs(test.GraphData[j].File) {
+					absPath, err := filepath.Abs(filepath.Join(includedManifest.BaseURI, test.GraphData[j].File))
+					if err == nil {
+						test.GraphData[j].File = absPath
+					}
+				}
+			}
+		}
+		// Merge tests from included manifest
+		manifest.Tests = append(manifest.Tests, includedManifest.Tests...)
 	}
 
 	// Post-process tests to detect TSV result format tests
