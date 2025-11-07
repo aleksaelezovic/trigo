@@ -1327,6 +1327,60 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		return node, nil, nil
 	}
 
+	// Check for non-RDF property attributes (these create a blank node with additional properties)
+	hasPropertyAttrs := false
+	for _, attr := range elem.Attr {
+		// Skip RDF-specific and XML-specific attributes
+		if attr.Name.Space == rdfNS {
+			continue
+		}
+		if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+			strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+			(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+			continue
+		}
+		if attr.Name.Space == "" {
+			continue
+		}
+		hasPropertyAttrs = true
+		break
+	}
+
+	if hasPropertyAttrs {
+		// Create blank node as object
+		*blankNodeCounter++
+		blankNode := NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+
+		// Create triples for property attributes
+		var quads []*Quad
+		for _, attr := range elem.Attr {
+			// Skip RDF-specific and XML-specific attributes
+			if attr.Name.Space == rdfNS {
+				continue
+			}
+			if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
+				strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
+				(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
+				continue
+			}
+			if attr.Name.Space == "" {
+				continue
+			}
+
+			attrPredicate := attr.Name.Space + attr.Name.Local
+			attrObject := NewLiteral(attr.Value)
+			attrQuad := NewQuad(blankNode, NewNamedNode(attrPredicate), attrObject, NewDefaultGraph())
+			quads = append(quads, attrQuad)
+		}
+
+		// Consume the end element
+		_, err := decoder.Token()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return blankNode, quads, nil
+	}
 	// Check for rdf:datatype attribute
 	datatypeAttr := getAttr(elem.Attr, rdfNS, "datatype")
 
