@@ -485,6 +485,12 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				aboutAttr := getAttr(elem.Attr, rdfNS, "about")
 				idAttr := getAttr(elem.Attr, rdfNS, "ID")
 				nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
+
+				// Validate that we don't have conflicting subject specifiers
+				if idAttr != "" && nodeIDAttr != "" {
+					return nil, fmt.Errorf("invalid RDF/XML: element cannot have both rdf:ID and rdf:nodeID")
+				}
+
 				// Check if rdf:about attribute exists (even if empty)
 				hasAboutAttr := false
 				for _, attr := range elem.Attr {
@@ -682,6 +688,11 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					}
 
 					continue
+				}
+
+				// Validate that rdf:resource and rdf:nodeID aren't both present
+				if getAttr(elem.Attr, rdfNS, "resource") != "" && getAttr(elem.Attr, rdfNS, "nodeID") != "" {
+					return nil, fmt.Errorf("invalid RDF/XML: element cannot have both rdf:resource and rdf:nodeID")
 				}
 
 				// Check for rdf:resource attribute (second priority)
