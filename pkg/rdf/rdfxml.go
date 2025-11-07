@@ -301,10 +301,10 @@ func validateAttributes(elem xml.StartElement) error {
 		return fmt.Errorf("element cannot have both rdf:ID and rdf:nodeID")
 	}
 
-	// Can't have both rdf:ID and rdf:resource
-	if hasID && hasResource {
-		return fmt.Errorf("element cannot have both rdf:ID and rdf:resource")
-	}
+	// Can't have both rdf:ID and rdf:resource on NODE elements
+	// (but this combination is VALID on property elements - it creates a triple AND reifies it)
+	// Since this function is also called for property elements, we skip this check here
+	// and let the RDF/XML spec rules handle it naturally
 
 	// Can't have both rdf:nodeID and rdf:resource
 	if hasNodeID && hasResource {
@@ -541,7 +541,9 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					break
 				}
 			}
-			if hasAboutAttr || idAttr != "" || nodeIDAttr != "" || currentSubject == nil {
+			// Treat as node element ONLY if: has rdf:about, OR currentSubject is nil, OR (has rdf:ID/nodeID and currentSubject is nil)
+			// rdf:ID/nodeID on property elements (when currentSubject != nil) trigger reification, not node elements
+			if hasAboutAttr || currentSubject == nil {
 				// Validate this is not a forbidden node element
 				if err := validateNodeElement(elem); err != nil {
 					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
@@ -793,6 +795,11 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				langAttr := getAttrAny(elem.Attr, "lang")
 				// Capture rdf:ID early before entering nested loops (elem.Attr may not be accessible later)
 				propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
+
+				// DEBUG
+				if propertyIDAttr != "" {
+					fmt.Printf("DEBUG: Found rdf:ID='%s' on property %s\n", propertyIDAttr, predicate)
+				}
 
 				// Read the text content
 				var textContent strings.Builder
@@ -1252,6 +1259,21 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 			return nil, nil, err
 		}
 		return NewNamedNode(p.resolveURI(resourceAttr)), nil, nil
+	}
+
+	// Check for rdf:nodeID attribute (object is blank node)
+	nodeIDAttr := getAttr(elem.Attr, rdfNS, "nodeID")
+	if nodeIDAttr != "" {
+		// Consume the end element
+		_, err := decoder.Token()
+		if err != nil {
+			return nil, nil, err
+		}
+		node, err := p.getOrCreateNodeID(nodeIDAttr, blankNodeCounter)
+		if err != nil {
+			return nil, nil, err
+		}
+		return node, nil, nil
 	}
 
 	// Check for rdf:datatype attribute
