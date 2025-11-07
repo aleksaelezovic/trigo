@@ -1171,6 +1171,16 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 				quads = append(quads, quad)
 				quads = append(quads, nestedQuads...)
 
+				// Check for rdf:ID on nested property element (triggers reification)
+				if idAttr := getAttr(t.Attr, rdfNS, "ID"); idAttr != "" {
+					statementID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					reificationQuads := generateReificationQuads(statementID, blankNode, NewNamedNode(predicate), object)
+					quads = append(quads, reificationQuads...)
+				}
+
 			case xml.EndElement:
 				// End of parseType="Resource" element
 				return blankNode, quads, nil
