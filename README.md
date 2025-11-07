@@ -93,7 +93,7 @@ Validated against official W3C test suites:
 - **RDF N-Quads:** 100% (87/87 tests) ✅
 - **RDF Turtle:** 100% (296/296 tests) ✅
 - **RDF TriG:** 100% (335/335 tests) ✅
-- **RDF/XML:** 96.4% (160/166 tests) ✅
+- **RDF/XML:** 100% (166/166 tests) ✅
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)

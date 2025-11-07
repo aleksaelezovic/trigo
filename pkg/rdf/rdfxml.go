@@ -27,13 +27,15 @@ type RDFXMLParser struct {
 	documentBase string                // Document base URI (file location)
 	usedIDs      map[string]bool       // Track used rdf:ID values to detect duplicates
 	nodeIDMap    map[string]*BlankNode // Track rdf:nodeID to blank node mappings
+	namespaces   map[string]string     // Track in-scope namespace declarations (prefix -> URI)
 }
 
 // NewRDFXMLParser creates a new RDF/XML parser
 func NewRDFXMLParser() *RDFXMLParser {
 	return &RDFXMLParser{
-		usedIDs:   make(map[string]bool),
-		nodeIDMap: make(map[string]*BlankNode),
+		usedIDs:    make(map[string]bool),
+		nodeIDMap:  make(map[string]*BlankNode),
+		namespaces: make(map[string]string),
 	}
 }
 
@@ -170,17 +172,6 @@ func isAbsoluteURI(uri string) bool {
 		}
 	}
 	return false
-}
-
-// urlToIRI converts a url.URL to an IRI string
-// According to RDF specs, we should preserve the original encoding:
-// - If input had percent-encoding, keep it
-// - If input had Unicode, keep it
-// Go's url.Parse() decodes percent-encoding, so we need to reconstruct with proper encoding
-func urlToIRI(u *url.URL) string {
-	// Use url.String() which properly handles percent-encoding
-	// This preserves whatever encoding was in the original input
-	return u.String()
 }
 
 // isXMLNCNameStartChar checks if a rune can start an XML NCName (Name without colons)
@@ -413,6 +404,17 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 
 		switch elem := token.(type) {
 		case xml.StartElement:
+			// Capture namespace declarations for XML Literals (C14N requirement)
+			for _, attr := range elem.Attr {
+				if attr.Name.Space == "xmlns" {
+					// xmlns:prefix="uri"
+					p.namespaces[attr.Name.Local] = attr.Value
+				} else if attr.Name.Space == "" && attr.Name.Local == "xmlns" {
+					// xmlns="uri" (default namespace)
+					p.namespaces[""] = attr.Value
+				}
+			}
+
 			// Check for xml:base attribute and push to stack
 			xmlBase := getAttrAny(elem.Attr, "base")
 			hasBase := xmlBase != ""
@@ -932,11 +934,6 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// Capture rdf:ID early before entering nested loops (elem.Attr may not be accessible later)
 				propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
 
-				// DEBUG
-				if propertyIDAttr != "" {
-					fmt.Printf("DEBUG: Found rdf:ID='%s' on property %s\n", propertyIDAttr, predicate)
-				}
-
 				// Read the text content
 				var textContent strings.Builder
 				for {
@@ -1268,10 +1265,30 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 			}
 		}
 	} else if parseTypeAttr == "Literal" {
-		// Parse content as XML literal
-		// Collect all tokens until the matching end element
+		// Parse content as XML literal with C14N
+		// According to RDF/XML spec, we need to include in-scope namespace declarations
 		var content strings.Builder
 		depth := 1
+		firstElement := true // Track if this is the first element to add namespace declarations
+
+		// Use in-scope namespaces from the parser (captured during parsing)
+		// This includes namespaces declared on ancestor elements like <rdf:RDF>
+		nsDecls := make(map[string]string)
+		for prefix, uri := range p.namespaces {
+			nsDecls[prefix] = uri
+		}
+
+		// Also add any namespace declarations directly on the property element
+		for _, attr := range elem.Attr {
+			if attr.Name.Space == "xmlns" {
+				// xmlns:prefix="uri"
+				nsDecls[attr.Name.Local] = attr.Value
+			} else if attr.Name.Space == "" && attr.Name.Local == "xmlns" {
+				// xmlns="uri" (default namespace)
+				nsDecls[""] = attr.Value
+			}
+		}
+
 		for {
 			token, err := decoder.Token()
 			if err != nil {
@@ -1282,16 +1299,40 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 			case xml.StartElement:
 				// Serialize start element
 				content.WriteString("<")
-				if t.Name.Space != "" {
-					// Find prefix for namespace (simplified - just use namespace)
-					content.WriteString(t.Name.Local)
-					content.WriteString(" xmlns=\"")
-					content.WriteString(t.Name.Space)
-					content.WriteString("\"")
-				} else {
-					content.WriteString(t.Name.Local)
+				content.WriteString(t.Name.Local)
+
+				// Add in-scope namespace declarations to first element (C14N requirement)
+				if firstElement {
+					// Write namespace declarations in sorted order for consistency
+					prefixes := make([]string, 0, len(nsDecls))
+					for prefix := range nsDecls {
+						prefixes = append(prefixes, prefix)
+					}
+					// Simple sort
+					for i := 0; i < len(prefixes); i++ {
+						for j := i + 1; j < len(prefixes); j++ {
+							if prefixes[i] < prefixes[j] {
+								prefixes[i], prefixes[j] = prefixes[j], prefixes[i]
+							}
+						}
+					}
+					for _, prefix := range prefixes {
+						if prefix == "" {
+							content.WriteString(" xmlns=\"")
+							content.WriteString(nsDecls[prefix])
+							content.WriteString("\"")
+						} else {
+							content.WriteString(" xmlns:")
+							content.WriteString(prefix)
+							content.WriteString("=\"")
+							content.WriteString(nsDecls[prefix])
+							content.WriteString("\"")
+						}
+					}
+					firstElement = false
 				}
-				// Add attributes
+
+				// Add element's own attributes
 				for _, attr := range t.Attr {
 					content.WriteString(" ")
 					if attr.Name.Space != "" {
