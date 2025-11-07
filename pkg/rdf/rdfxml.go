@@ -55,6 +55,7 @@ var forbiddenNodeElements = map[string]bool{
 	"RDF":             true,
 	"ID":              true,
 	"about":           true,
+	"bagID":           true, // Removed from RDF 1.1
 	"parseType":       true,
 	"resource":        true,
 	"nodeID":          true,
@@ -376,9 +377,19 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				hasBase: hasBase,
 			})
 
-			// Check if this is rdf:RDF (root element) - skip it
+			// Check if this is rdf:RDF element
+			// The root rdf:RDF is expected and should be skipped
+			// But nested rdf:RDF elements are forbidden as node elements
 			if elem.Name.Local == "RDF" && elem.Name.Space == rdfNS {
-				continue
+				// If we have no subject and no elements yet, this is likely the root - skip it
+				// Otherwise, it's a nested rdf:RDF which is forbidden
+				if currentSubject == nil && len(quads) == 0 {
+					continue // Root rdf:RDF - skip
+				}
+				// Nested rdf:RDF - this is forbidden, validate it to get the error
+				if err := validateNodeElement(elem); err != nil {
+					return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+				}
 			}
 
 			// Check if this is an RDF container (rdf:Bag, rdf:Seq, rdf:Alt)
