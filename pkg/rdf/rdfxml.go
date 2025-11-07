@@ -938,9 +938,32 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					case xml.StartElement:
 						// Nested element (blank node or another Description)
 						if t.Name.Local == "Description" && t.Name.Space == rdfNS {
-							// Nested blank node
-							blankNodeCounter++
-							object := NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
+							// Check for rdf:about, rdf:ID, or rdf:nodeID on nested Description
+							aboutAttr := getAttr(t.Attr, rdfNS, "about")
+							idAttr := getAttr(t.Attr, rdfNS, "ID")
+							nodeIDAttr := getAttr(t.Attr, rdfNS, "nodeID")
+
+							var object Term
+							if aboutAttr != "" {
+								object = NewNamedNode(p.resolveURI(aboutAttr))
+							} else if idAttr != "" {
+								resolvedID, err := p.resolveID(idAttr)
+								if err != nil {
+									return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+								}
+								object = NewNamedNode(resolvedID)
+							} else if nodeIDAttr != "" {
+								node, err := p.getOrCreateNodeID(nodeIDAttr, &blankNodeCounter)
+								if err != nil {
+									return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+								}
+								object = node
+							} else {
+								// Nested blank node without attributes
+								blankNodeCounter++
+								object = NewBlankNode(fmt.Sprintf("b%d", blankNodeCounter))
+							}
+
 							quad := NewQuad(currentSubject, NewNamedNode(predicate), object, NewDefaultGraph())
 							quads = append(quads, quad)
 
@@ -1480,9 +1503,33 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		case xml.StartElement:
 			// Nested element (blank node or another Description)
 			if t.Name.Local == "Description" && t.Name.Space == rdfNS {
-				// Nested blank node
-				*blankNodeCounter++
-				return NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter)), nil, nil
+				// Check for rdf:about, rdf:ID, or rdf:nodeID
+				aboutAttr := getAttr(t.Attr, rdfNS, "about")
+				idAttr := getAttr(t.Attr, rdfNS, "ID")
+				nodeIDAttr := getAttr(t.Attr, rdfNS, "nodeID")
+
+				var subject Term
+				if aboutAttr != "" {
+					subject = NewNamedNode(p.resolveURI(aboutAttr))
+				} else if idAttr != "" {
+					resolvedID, err := p.resolveID(idAttr)
+					if err != nil {
+						return nil, nil, err
+					}
+					subject = NewNamedNode(resolvedID)
+				} else if nodeIDAttr != "" {
+					node, err := p.getOrCreateNodeID(nodeIDAttr, blankNodeCounter)
+					if err != nil {
+						return nil, nil, err
+					}
+					subject = node
+				} else {
+					// Nested blank node without attributes
+					*blankNodeCounter++
+					subject = NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+				}
+
+				return subject, nil, nil
 			}
 		}
 	}
