@@ -358,8 +358,12 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 
 	ch := p.input[p.pos]
 
-	// IRI in angle brackets
+	// IRI in angle brackets or quoted triple (RDF 1.2)
 	if ch == '<' {
+		// Check for << which indicates quoted triple (RDF 1.2 Turtle/TriG)
+		if strings.HasPrefix(p.input[p.pos:], "<<") {
+			return p.parseQuotedTriple()
+		}
 		iri, err := p.parseIRI()
 		if err != nil {
 			return nil, err
@@ -1099,14 +1103,32 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 	// Check for language tag or datatype
 	p.skipWhitespaceAndComments()
 	if p.pos < p.length && p.input[p.pos] == '@' {
-		// Language tag
+		// Language tag (with optional direction for RDF 1.2)
 		p.pos++ // skip '@'
 		langStart := p.pos
 		for p.pos < p.length && ((p.input[p.pos] >= 'a' && p.input[p.pos] <= 'z') || (p.input[p.pos] >= 'A' && p.input[p.pos] <= 'Z') || p.input[p.pos] == '-') {
 			p.pos++
 		}
-		lang := p.input[langStart:p.pos]
-		return NewLiteralWithLanguage(value.String(), lang), nil
+		langTag := p.input[langStart:p.pos]
+
+		// Check for direction suffix: --ltr or --rtl (RDF 1.2)
+		if strings.Contains(langTag, "--") {
+			idx := strings.Index(langTag, "--")
+			lang := langTag[:idx]
+			dir := langTag[idx+2:]
+
+			// Validate direction
+			if dir != "ltr" && dir != "rtl" {
+				return nil, fmt.Errorf("invalid direction in language tag: %q (must be 'ltr' or 'rtl')", dir)
+			}
+			if lang == "" {
+				return nil, fmt.Errorf("missing language tag before '--' in language tag")
+			}
+
+			return NewLiteralWithLanguageAndDirection(value.String(), lang, dir), nil
+		}
+
+		return NewLiteralWithLanguage(value.String(), langTag), nil
 	}
 
 	if p.pos+1 < p.length && p.input[p.pos] == '^' && p.input[p.pos+1] == '^' {
@@ -1191,14 +1213,32 @@ func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 	// Check for language tag or datatype
 	p.skipWhitespaceAndComments()
 	if p.pos < p.length && p.input[p.pos] == '@' {
-		// Language tag
+		// Language tag (with optional direction for RDF 1.2)
 		p.pos++ // skip '@'
 		langStart := p.pos
 		for p.pos < p.length && ((p.input[p.pos] >= 'a' && p.input[p.pos] <= 'z') || (p.input[p.pos] >= 'A' && p.input[p.pos] <= 'Z') || p.input[p.pos] == '-') {
 			p.pos++
 		}
-		lang := p.input[langStart:p.pos]
-		return NewLiteralWithLanguage(value.String(), lang), nil
+		langTag := p.input[langStart:p.pos]
+
+		// Check for direction suffix: --ltr or --rtl (RDF 1.2)
+		if strings.Contains(langTag, "--") {
+			idx := strings.Index(langTag, "--")
+			lang := langTag[:idx]
+			dir := langTag[idx+2:]
+
+			// Validate direction
+			if dir != "ltr" && dir != "rtl" {
+				return nil, fmt.Errorf("invalid direction in language tag: %q (must be 'ltr' or 'rtl')", dir)
+			}
+			if lang == "" {
+				return nil, fmt.Errorf("missing language tag before '--' in language tag")
+			}
+
+			return NewLiteralWithLanguageAndDirection(value.String(), lang, dir), nil
+		}
+
+		return NewLiteralWithLanguage(value.String(), langTag), nil
 	}
 
 	if p.pos+1 < p.length && p.input[p.pos] == '^' && p.input[p.pos+1] == '^' {
@@ -1451,4 +1491,63 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 
 	fullIRI := baseIRI + localPartStr
 	return NewNamedNode(fullIRI), nil
+}
+
+// parseQuotedTriple parses an RDF 1.2 Turtle quoted triple: << subject predicate object >>
+func (p *TurtleParser) parseQuotedTriple() (*QuotedTriple, error) {
+	// Expect '<<'
+	if !strings.HasPrefix(p.input[p.pos:], "<<") {
+		return nil, fmt.Errorf("expected '<<' at start of quoted triple")
+	}
+	p.pos += 2 // skip '<<'
+
+	p.skipWhitespaceAndComments()
+
+	// Parse subject (can be IRI, blank node, or nested quoted triple)
+	subject, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple subject: %w", err)
+	}
+
+	// Validate: subject cannot be literal
+	if _, ok := subject.(*Literal); ok {
+		return nil, fmt.Errorf("quoted triple subject cannot be a literal")
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Parse predicate (must be IRI)
+	predicate, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple predicate: %w", err)
+	}
+
+	// Validate: predicate must be IRI (not blank node, literal, or quoted triple)
+	if _, ok := predicate.(*NamedNode); !ok {
+		return nil, fmt.Errorf("quoted triple predicate must be an IRI, got %T", predicate)
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Parse object (can be any term including quoted triple)
+	object, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple object: %w", err)
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Expect '>>'
+	if !strings.HasPrefix(p.input[p.pos:], ">>") {
+		return nil, fmt.Errorf("expected '>>' at end of quoted triple")
+	}
+	p.pos += 2 // skip '>>'
+
+	// Create quoted triple
+	qt, err := NewQuotedTriple(subject, predicate, object)
+	if err != nil {
+		return nil, fmt.Errorf("error creating quoted triple: %w", err)
+	}
+
+	return qt, nil
 }
