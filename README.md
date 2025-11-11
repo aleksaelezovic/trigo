@@ -88,12 +88,19 @@ ts.InsertTriple(triple)
 
 Validated against official W3C test suites:
 
-### RDF Parsers
+### RDF 1.1 Parsers
 - **RDF N-Triples:** 100% (70/70 tests) ✅
 - **RDF N-Quads:** 100% (87/87 tests) ✅
-- **RDF Turtle:** 100% (296/296 tests) ✅
-- **RDF TriG:** 100% (335/335 tests) ✅
+- **RDF Turtle:** 95.0% (303/319 tests) ✅
+- **RDF TriG:** 91.6% (337/368 tests) ✅
 - **RDF/XML:** 100% (166/166 tests) ✅
+
+### RDF 1.2 Parsers (Quoted Triples & Language Direction)
+- **RDF 1.2 N-Triples:** 60.0% (87/145 tests) - Language direction ✅, Quoted triples partial
+- **RDF 1.2 N-Quads:** 64.6% (106/164 tests) - Language direction ✅, Quoted triples partial
+- **RDF 1.2 Turtle:** 79.5% (329/414 tests) - Quoted triples ✅, Language direction ✅
+- **RDF 1.2 TriG:** 80.6% (348/432 tests) - Quoted triples ✅, Language direction ✅
+- **RDF 1.2 XML:** 79.5% baseline (163/205 tests)
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)
