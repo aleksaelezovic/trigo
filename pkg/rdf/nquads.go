@@ -239,12 +239,17 @@ func (p *NQuadsParser) parseQuad() (*Quad, error) {
 	return quad, nil
 }
 
-// parseTerm parses an RDF term (IRI, blank node, or literal)
+// parseTerm parses an RDF term (IRI, blank node, literal, or quoted triple)
 func (p *NQuadsParser) parseTerm() (Term, error) {
 	ch := p.input[p.pos]
 
 	switch ch {
 	case '<':
+		// Could be IRI or quoted triple
+		// Check for <<( which indicates quoted triple (RDF 1.2 N-Triples)
+		if strings.HasPrefix(p.input[p.pos:], "<<(") {
+			return p.parseQuotedTriple()
+		}
 		// IRI
 		iri, err := p.parseIRI()
 		if err != nil {
@@ -420,7 +425,7 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 	p.skipWhitespaceAndComments()
 	if p.pos < p.length {
 		if p.input[p.pos] == '@' {
-			// Language tag
+			// Language tag (with optional direction suffix for RDF 1.2)
 			p.pos++ // skip '@'
 			start := p.pos
 			if p.pos >= p.length {
@@ -438,8 +443,33 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 				}
 				p.pos++
 			}
-			lang := p.input[start:p.pos]
-			return NewLiteralWithLanguage(value.String(), lang), nil
+			langTag := p.input[start:p.pos]
+
+			// Check for direction suffix: --ltr or --rtl (RDF 1.2)
+			if strings.Contains(langTag, "--") {
+				idx := strings.Index(langTag, "--")
+				lang := langTag[:idx]
+				dir := langTag[idx+2:]
+
+				// Direction must be present after --
+				if dir == "" {
+					return nil, fmt.Errorf("missing direction after '--' in language tag")
+				}
+
+				// Language tag must be present before --
+				if lang == "" {
+					return nil, fmt.Errorf("missing language tag before '--' in language tag")
+				}
+
+				// Direction must be exactly "ltr" or "rtl" (lowercase only)
+				if dir != "ltr" && dir != "rtl" {
+					return nil, fmt.Errorf("invalid direction in language tag: %q (must be 'ltr' or 'rtl', lowercase)", dir)
+				}
+
+				return NewLiteralWithLanguageAndDirection(value.String(), lang, dir), nil
+			}
+
+			return NewLiteralWithLanguage(value.String(), langTag), nil
 		} else if p.input[p.pos] == '^' && p.pos+1 < p.length && p.input[p.pos+1] == '^' {
 			// Datatype
 			p.pos += 2 // skip '^^'
@@ -454,6 +484,73 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 
 	// Plain literal
 	return NewLiteral(value.String()), nil
+}
+
+// parseQuotedTriple parses an RDF 1.2 N-Triples quoted triple: <<( subject predicate object )>>
+func (p *NQuadsParser) parseQuotedTriple() (*QuotedTriple, error) {
+	// Expect '<<('
+	if p.pos+2 >= p.length || p.input[p.pos:p.pos+3] != "<<(" {
+		return nil, fmt.Errorf("expected '<<(' at start of quoted triple")
+	}
+	p.pos += 3 // skip '<<('
+
+	p.skipWhitespaceAndComments()
+
+	// Parse subject (can be IRI, blank node, or nested quoted triple)
+	subject, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple subject: %w", err)
+	}
+
+	// Validate: subject cannot be literal
+	if _, ok := subject.(*Literal); ok {
+		return nil, fmt.Errorf("quoted triple subject cannot be a literal")
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Parse predicate (must be IRI)
+	predicate, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple predicate: %w", err)
+	}
+
+	// Validate: predicate must be IRI (not blank node, literal, or quoted triple)
+	if _, ok := predicate.(*NamedNode); !ok {
+		return nil, fmt.Errorf("quoted triple predicate must be an IRI, got %T", predicate)
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Parse object (can be any term including quoted triple)
+	object, err := p.parseTerm()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing quoted triple object: %w", err)
+	}
+
+	p.skipWhitespaceAndComments()
+
+	// Expect ')>>'
+	if p.pos+2 >= p.length || p.input[p.pos:p.pos+3] != ")>>" {
+		return nil, fmt.Errorf("expected ')>>' at end of quoted triple, got: %q", p.input[p.pos:min(p.pos+3, p.length)])
+	}
+	p.pos += 3 // skip ')>>'
+
+	// Create quoted triple
+	qt, err := NewQuotedTriple(subject, predicate, object)
+	if err != nil {
+		return nil, fmt.Errorf("error creating quoted triple: %w", err)
+	}
+
+	return qt, nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // processUnicodeEscape processes \uXXXX or \UXXXXXXXX escape sequences
