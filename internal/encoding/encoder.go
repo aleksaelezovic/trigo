@@ -54,6 +54,8 @@ func (e *TermEncoder) EncodeTerm(term rdf.Term) (store.EncodedTerm, *string, err
 		return e.encodeLiteral(t)
 	case *rdf.DefaultGraph:
 		return e.encodeDefaultGraph()
+	case *rdf.QuotedTriple:
+		return e.encodeQuotedTriple(t)
 	default:
 		return encoded, nil, fmt.Errorf("unknown term type: %T", term)
 	}
@@ -145,8 +147,11 @@ func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (store.EncodedTe
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeLangStringLiteral)
 
-	// Combine value and language tag for hashing
+	// Combine value, language tag, and direction (RDF 1.2) for hashing
 	combined := lit.Value + "@" + lit.Language
+	if lit.Direction != "" {
+		combined += "--" + lit.Direction
+	}
 	hash := e.Hash128(combined)
 	copy(encoded[1:], hash[:])
 
@@ -282,6 +287,22 @@ func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (store.EncodedTerm, *s
 	}
 
 	return encoded, nil, nil
+}
+
+func (e *TermEncoder) encodeQuotedTriple(qt *rdf.QuotedTriple) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
+	encoded[0] = byte(rdf.TermTypeQuotedTriple)
+
+	// Serialize the quoted triple to canonical string form for hashing
+	// Format: << subject predicate object >>
+	serialized := qt.String()
+
+	// Hash the serialized form (128-bit xxhash3)
+	hash := e.Hash128(serialized)
+	copy(encoded[1:], hash[:])
+
+	// Store serialized form in id2str table for reconstruction
+	return encoded, &serialized, nil
 }
 
 func (e *TermEncoder) encodeDefaultGraph() (store.EncodedTerm, *string, error) {

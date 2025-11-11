@@ -56,12 +56,20 @@ func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string)
 		if stringValue == nil {
 			return nil, fmt.Errorf("string value required for language-tagged literal")
 		}
-		// Split value@language
+		// Split value@language[--direction]
 		for i := len(*stringValue) - 1; i >= 0; i-- {
 			if (*stringValue)[i] == '@' {
 				value := (*stringValue)[:i]
-				lang := (*stringValue)[i+1:]
-				return rdf.NewLiteralWithLanguage(value, lang), nil
+				langDir := (*stringValue)[i+1:]
+
+				// Check for direction suffix (RDF 1.2: @lang--dir)
+				if idx := findDirectionSeparator(langDir); idx != -1 {
+					lang := langDir[:idx]
+					dir := langDir[idx+2:] // Skip "--"
+					return rdf.NewLiteralWithLanguageAndDirection(value, lang, dir), nil
+				}
+
+				return rdf.NewLiteralWithLanguage(value, langDir), nil
 			}
 		}
 		return rdf.NewLiteral(*stringValue), nil
@@ -97,7 +105,34 @@ func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string)
 	case rdf.TermTypeDefaultGraph:
 		return rdf.NewDefaultGraph(), nil
 
+	case rdf.TermTypeQuotedTriple:
+		if stringValue == nil {
+			return nil, fmt.Errorf("string value required for quoted triple")
+		}
+		// Parse the serialized quoted triple string
+		return parseQuotedTripleString(*stringValue)
+
 	default:
 		return nil, fmt.Errorf("unknown term type: %d", termType)
 	}
+}
+
+// findDirectionSeparator finds the "--" separator in language tag
+// Returns -1 if not found, or index of first '-' in "--"
+func findDirectionSeparator(langDir string) int {
+	for i := 0; i < len(langDir)-1; i++ {
+		if langDir[i] == '-' && langDir[i+1] == '-' {
+			return i
+		}
+	}
+	return -1
+}
+
+// parseQuotedTripleString parses a quoted triple from its string representation
+// Format: << subject predicate object >>
+func parseQuotedTripleString(s string) (*rdf.QuotedTriple, error) {
+	// This is a simplified parser for the stored string representation
+	// The actual parsing logic will be in the RDF parsers
+	// For now, we'll return an error indicating this needs proper parser integration
+	return nil, fmt.Errorf("quoted triple parsing from string requires integration with RDF parser: %s", s)
 }

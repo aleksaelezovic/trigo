@@ -17,6 +17,7 @@ const (
 	TermTypeBlankNode
 	TermTypeLiteral
 	TermTypeDefaultGraph
+	TermTypeQuotedTriple // RDF 1.2: Triple terms
 
 	// Literal subtypes
 	TermTypeStringLiteral
@@ -88,9 +89,10 @@ func (b *BlankNode) Equals(other Term) bool {
 
 // Literal represents an RDF literal
 type Literal struct {
-	Value    string
-	Language string     // for language-tagged strings
-	Datatype *NamedNode // for typed literals
+	Value     string
+	Language  string     // for language-tagged strings
+	Direction string     // RDF 1.2: text direction ("ltr", "rtl", or "")
+	Datatype  *NamedNode // for typed literals
 }
 
 func NewLiteral(value string) *Literal {
@@ -99,6 +101,11 @@ func NewLiteral(value string) *Literal {
 
 func NewLiteralWithLanguage(value, language string) *Literal {
 	return &Literal{Value: value, Language: language}
+}
+
+// NewLiteralWithLanguageAndDirection creates a literal with language and direction (RDF 1.2)
+func NewLiteralWithLanguageAndDirection(value, language, direction string) *Literal {
+	return &Literal{Value: value, Language: language, Direction: direction}
 }
 
 func NewLiteralWithDatatype(value string, datatype *NamedNode) *Literal {
@@ -113,6 +120,10 @@ func (l *Literal) String() string {
 	result := fmt.Sprintf(`"%s"`, l.Value)
 	if l.Language != "" {
 		result += "@" + l.Language
+		// RDF 1.2: Add direction if present
+		if l.Direction != "" {
+			result += "--" + l.Direction
+		}
 	} else if l.Datatype != nil {
 		result += "^^" + l.Datatype.String()
 	}
@@ -125,6 +136,10 @@ func (l *Literal) Equals(other Term) bool {
 			return false
 		}
 		if l.Language != ol.Language {
+			return false
+		}
+		// RDF 1.2: Compare direction
+		if l.Direction != ol.Direction {
 			return false
 		}
 		if l.Datatype == nil && ol.Datatype == nil {
@@ -156,6 +171,59 @@ func (d *DefaultGraph) String() string {
 func (d *DefaultGraph) Equals(other Term) bool {
 	_, ok := other.(*DefaultGraph)
 	return ok
+}
+
+// QuotedTriple represents an RDF 1.2 quoted triple (triple term)
+// Can be used as subject or object in other triples
+type QuotedTriple struct {
+	Subject   Term
+	Predicate Term
+	Object    Term
+}
+
+// NewQuotedTriple creates a new quoted triple with validation
+func NewQuotedTriple(subject, predicate, object Term) (*QuotedTriple, error) {
+	// Validate subject: must be IRI, BlankNode, or QuotedTriple
+	switch subject.(type) {
+	case *NamedNode, *BlankNode, *QuotedTriple:
+		// Valid
+	default:
+		return nil, fmt.Errorf("quoted triple subject must be IRI, blank node, or quoted triple, got %T", subject)
+	}
+
+	// Validate predicate: must be IRI (no QuotedTriple allowed)
+	if _, ok := predicate.(*NamedNode); !ok {
+		return nil, fmt.Errorf("quoted triple predicate must be IRI, got %T", predicate)
+	}
+
+	// Object can be any term (IRI, BlankNode, Literal, or QuotedTriple)
+
+	return &QuotedTriple{
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
+	}, nil
+}
+
+func (q *QuotedTriple) Type() TermType {
+	return TermTypeQuotedTriple
+}
+
+func (q *QuotedTriple) String() string {
+	// Use compact notation without the outer angle brackets for the terms
+	subj := q.Subject.String()
+	pred := q.Predicate.String()
+	obj := q.Object.String()
+	return fmt.Sprintf("<< %s %s %s >>", subj, pred, obj)
+}
+
+func (q *QuotedTriple) Equals(other Term) bool {
+	if oq, ok := other.(*QuotedTriple); ok {
+		return q.Subject.Equals(oq.Subject) &&
+			q.Predicate.Equals(oq.Predicate) &&
+			q.Object.Equals(oq.Object)
+	}
+	return false
 }
 
 // Triple represents an RDF triple (subject, predicate, object)
@@ -209,6 +277,12 @@ var (
 	XSDDate     = NewNamedNode("http://www.w3.org/2001/XMLSchema#date")
 	XSDTime     = NewNamedNode("http://www.w3.org/2001/XMLSchema#time")
 	XSDDuration = NewNamedNode("http://www.w3.org/2001/XMLSchema#duration")
+)
+
+// RDF 1.2 vocabulary constants
+var (
+	RDFDirLangString = NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString")
+	RDFReifies       = NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
 )
 
 func NewIntegerLiteral(value int64) *Literal {
