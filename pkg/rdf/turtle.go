@@ -9,14 +9,15 @@ import (
 
 // TurtleParser is a simple Turtle/N-Triples parser for loading test data
 type TurtleParser struct {
-	input            string
-	pos              int
-	length           int
-	prefixes         map[string]string
-	base             string
-	blankNodeCounter int
-	strictNTriples   bool      // When true, enforce strict N-Triples syntax
-	extraTriples     []*Triple // Triples generated during term parsing (collections, blank node property lists)
+	input                   string
+	pos                     int
+	length                  int
+	prefixes                map[string]string
+	base                    string
+	blankNodeCounter        int
+	strictNTriples          bool      // When true, enforce strict N-Triples syntax
+	extraTriples            []*Triple // Triples generated during term parsing (collections, blank node property lists)
+	lastTermWasPropertyList bool      // True if the last parsed term was a blank node property list
 }
 
 // NewTurtleParser creates a new Turtle parser
@@ -252,9 +253,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	p.extraTriples = nil
 
 	// Check if this is a sole blank node property list: [ <p> <o> ] .
-	// If the subject is a blank node with generated triples and next char is '.', we're done
+	// This is ONLY valid for blank node property lists, NOT for collections
 	p.skipWhitespaceAndComments()
-	if _, isBlankNode := subject.(*BlankNode); isBlankNode && len(triples) > 0 {
+	if p.lastTermWasPropertyList {
 		if p.pos < p.length && p.input[p.pos] == '.' {
 			// This is a sole blank node property list with trailing dot, consume it and return
 			p.pos++ // skip '.'
@@ -355,6 +356,9 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 	if p.pos >= p.length {
 		return nil, fmt.Errorf("unexpected end of input")
 	}
+
+	// Default: clear the property list flag (will be set by parseAnonymousBlankNode if needed)
+	p.lastTermWasPropertyList = false
 
 	ch := p.input[p.pos]
 
@@ -871,6 +875,7 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 	// Check if it's just [] or has properties
 	if p.pos < p.length && p.input[p.pos] == ']' {
 		p.pos++ // skip ']'
+		// Empty blank node - flag already cleared by parseTerm
 		return blankNode, nil
 	}
 
@@ -954,6 +959,9 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 		return nil, fmt.Errorf("expected ']' at end of blank node property list")
 	}
 	p.pos++ // skip ']'
+
+	// Mark that we just parsed a blank node property list (set AFTER parsing inner terms)
+	p.lastTermWasPropertyList = true
 
 	return blankNode, nil
 }
