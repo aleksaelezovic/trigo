@@ -631,7 +631,18 @@ func (p *TurtleParser) resolveRelativeIRI(base, relative string) string {
 		return base + relative
 	}
 
-	// Absolute path (/foo) → scheme + authority + relative path
+	// Network-path reference (//authority/path) → scheme + relative
+	// RFC 3986 section 5.2.2
+	if strings.HasPrefix(relative, "//") {
+		// Extract scheme from base
+		schemeEnd := strings.Index(base, ":")
+		if schemeEnd < 0 {
+			return relative // shouldn't happen
+		}
+		return base[:schemeEnd+1] + relative
+	}
+
+	// Absolute path (/foo) → scheme + authority + relative path (normalized)
 	if strings.HasPrefix(relative, "/") {
 		// Find scheme and authority in base
 		schemeEnd := strings.Index(base, ":")
@@ -645,14 +656,18 @@ func (p *TurtleParser) resolveRelativeIRI(base, relative string) string {
 			authorityStart := schemeEnd + 3
 			pathStart := strings.Index(base[authorityStart:], "/")
 			if pathStart >= 0 {
-				return base[:authorityStart+pathStart] + relative
+				merged := base[:authorityStart+pathStart] + relative
+				// Normalize the absolute path
+				return p.normalizePath(merged)
 			}
 			// No path in base, append to authority
-			return base + relative
+			merged := base + relative
+			return p.normalizePath(merged)
 		}
 
 		// No authority, just scheme
-		return base[:schemeEnd+1] + relative
+		merged := base[:schemeEnd+1] + relative
+		return p.normalizePath(merged)
 	}
 
 	// Relative path (foo or ./foo or ../foo) → resolve against base path
@@ -730,9 +745,14 @@ func (p *TurtleParser) normalizePath(uri string) string {
 			continue
 		} else if segment == ".." {
 			// Remove parent directory reference and the preceding segment
-			if len(normalized) > 0 && normalized[len(normalized)-1] != ".." {
+			// BUT: never go above the root (don't pop the leading empty string for absolute paths)
+			if len(normalized) > 1 && normalized[len(normalized)-1] != ".." {
+				normalized = normalized[:len(normalized)-1]
+			} else if len(normalized) == 1 && normalized[0] != "" {
+				// Only pop if we're not at the root (empty string represents root)
 				normalized = normalized[:len(normalized)-1]
 			}
+			// If we're at root (normalized = [""]), just ignore the ..
 		} else {
 			normalized = append(normalized, segment)
 		}
@@ -1404,8 +1424,36 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 	// PN_LOCAL ::= (PN_CHARS_U | ':' | [0-9] | PLX) ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX))?
 	// PLX ::= PERCENT | PN_LOCAL_ESC
 	var localPart strings.Builder
+	isFirstChar := true
 	for p.pos < p.length {
 		r, size := p.peekRune()
+
+		// Check if this character terminates the local name (empty local name is valid)
+		// Break on whitespace, punctuation that ends a triple, comments, or special Turtle syntax
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
+			r == '>' || r == '<' || r == '"' ||
+			r == ';' || r == ',' || r == '#' || r == '(' || r == ')' {
+			break
+		}
+
+		// First character validation: must be PN_CHARS_U, ':', digit, or PLX (% or \)
+		if isFirstChar {
+			// Allow percent encoding or escape sequence at start
+			if r != '%' && r != '\\' {
+				// First char must be PN_CHARS_U (not just PN_CHARS), ':', or digit
+				// PN_CHARS_U excludes '-' and '.', PN_CHARS includes them
+				// So we need to check it's NOT '-' or '.'
+				if r == '-' || r == '.' {
+					// These require escaping at the start
+					return nil, fmt.Errorf("local name cannot start with '%c' at position %d (use \\%c to escape)", r, p.pos, r)
+				}
+				// Check it's a valid start character (PN_CHARS_U, ':', or digit)
+				if !isPN_CHARS_U(r) && r != ':' && !(r >= '0' && r <= '9') {
+					return nil, fmt.Errorf("invalid local name start character '%c' at position %d", r, p.pos)
+				}
+			}
+			isFirstChar = false
+		}
 
 		// Handle percent encoding (PERCENT ::= '%' HEX HEX)
 		if r == '%' {
@@ -1452,14 +1500,6 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 			r == '*' || r == '+' ||
 			r == '=' || r == '/' || r == '?' || r == '@' {
 			return nil, fmt.Errorf("character %c must be escaped in prefixed name at position %d", r, p.pos)
-		}
-
-		// Break on whitespace, punctuation that ends a triple, comments, or special Turtle syntax
-		// Also break on '(' and ')' which are collection delimiters
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
-			r == '>' || r == '<' || r == '"' ||
-			r == ';' || r == ',' || r == '#' || r == '(' || r == ')' {
-			break
 		}
 
 		// Allow PN_CHARS, ':', and '.' for local names
