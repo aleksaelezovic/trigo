@@ -238,12 +238,15 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
+	// Track if we auto-reified a quoted triple (for standalone quoted triple syntax)
+	autoReified := false
 	// If subject is a ReifiedTriple (with explicit identifier), extract the identifier
 	if rt, ok := subject.(*ReifiedTriple); ok {
 		subject = rt.Identifier
 	}
 	// If subject is a QuotedTriple (without identifier), auto-generate reification
 	if qt, ok := subject.(*QuotedTriple); ok {
+		autoReified = true
 		// Generate blank node identifier
 		reifier := p.newBlankNode()
 		// Create rdf:reifies triple with TripleTerm format
@@ -277,6 +280,7 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 	// Check if this is a sole blank node property list: [ <p> <o> ] .
 	// This is ONLY valid for blank node property lists, NOT for collections
+	// Also check for standalone quoted triple: <<s p o>> .
 	p.skipWhitespaceAndComments()
 	if p.lastTermWasPropertyList {
 		if p.pos < p.length && p.input[p.pos] == '.' {
@@ -285,9 +289,14 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			return triples, nil
 		}
 	}
-
-	// Track last predicate and object for annotation parsing
-	var lastPredicate, lastObject Term
+	// Check for standalone quoted triple (already auto-reified)
+	// Syntax: <<s p o>> .
+	if autoReified && p.pos < p.length && p.input[p.pos] == '.' {
+		// This is a standalone quoted triple assertion
+		// The reification was already done above, just consume the '.' and return
+		p.pos++ // skip '.'
+		return triples, nil
+	}
 
 	// Parse predicate-object pairs
 	for {
@@ -308,8 +317,6 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		// Collect any extra triples from predicate parsing
 		triples = append(triples, p.extraTriples...)
 		p.extraTriples = nil
-
-		lastPredicate = predicate
 
 		// Parse objects (can be multiple with comma separator)
 		for {
@@ -353,11 +360,136 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			triples = append(triples, p.extraTriples...)
 			p.extraTriples = nil
 
-			lastObject = object
-
 			triples = append(triples, NewTriple(subject, predicate, object))
 
 			p.skipWhitespaceAndComments()
+
+			// Check for annotation syntax {| ... |} (RDF 1.2) after this specific triple
+			// Annotations can appear after each triple in a property/object list
+			for p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
+				// Parse annotation block for this specific triple
+				annotationTriples, err := p.parseAnnotation(subject, predicate, object)
+				if err != nil {
+					return nil, fmt.Errorf("error parsing annotation: %w", err)
+				}
+				triples = append(triples, annotationTriples...)
+				p.skipWhitespaceAndComments()
+			}
+
+			// Check for reifier syntax ~ <identifier> (RDF 1.2 - alternate form)
+			for p.pos < p.length && p.input[p.pos] == '~' {
+				p.pos++ // skip '~'
+				p.skipWhitespaceAndComments()
+
+				// Parse the reifier identifier
+				var reifier Term
+				if p.pos < p.length && p.input[p.pos] != '.' && p.input[p.pos] != ',' && p.input[p.pos] != ';' {
+					var err error
+					reifier, err = p.parseTerm()
+					if err != nil {
+						return nil, fmt.Errorf("error parsing reifier: %w", err)
+					}
+					// Validate: reifier must be IRI or blank node
+					switch reifier.(type) {
+					case *NamedNode, *BlankNode:
+						// Valid
+					default:
+						return nil, fmt.Errorf("reifier must be IRI or blank node, got %T", reifier)
+					}
+				} else {
+					// Empty reifier ~ (generate blank node)
+					reifier = p.newBlankNode()
+				}
+
+				// Generate reification triple for this specific triple
+				tt := &TripleTerm{
+					Subject:   subject,
+					Predicate: predicate,
+					Object:    object,
+				}
+				reifiesTriple := NewTriple(
+					reifier,
+					NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"),
+					tt,
+				)
+				triples = append(triples, reifiesTriple)
+
+				p.skipWhitespaceAndComments()
+
+				// Check for annotation syntax {| ... |} after the reifier
+				// This adds properties to the reifier itself
+				for p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
+					p.pos += 2 // skip '{|'
+					p.skipWhitespaceAndComments()
+
+					// Parse annotation properties for the reifier
+					// Empty annotation {||} is allowed
+					if !strings.HasPrefix(p.input[p.pos:], "|}") {
+						for {
+							p.skipWhitespaceAndComments()
+							if strings.HasPrefix(p.input[p.pos:], "|}") {
+								break
+							}
+
+							// Parse annotation predicate
+							annotPred, err := p.parseTerm()
+							if err != nil {
+								return nil, fmt.Errorf("error parsing reifier annotation predicate: %w", err)
+							}
+
+							// Parse annotation objects (can be multiple with comma)
+							for {
+								p.skipWhitespaceAndComments()
+
+								// Parse annotation object
+								annotObj, err := p.parseTerm()
+								if err != nil {
+									return nil, fmt.Errorf("error parsing reifier annotation object: %w", err)
+								}
+
+								// Collect any extra triples
+								triples = append(triples, p.extraTriples...)
+								p.extraTriples = nil
+
+								// Create annotation triple: reifier annotPred annotObj
+								annotTriple := NewTriple(reifier, annotPred, annotObj)
+								triples = append(triples, annotTriple)
+
+								p.skipWhitespaceAndComments()
+
+								// Check for comma (more objects)
+								if p.pos < p.length && p.input[p.pos] == ',' {
+									p.pos++ // skip ','
+									continue
+								}
+								break
+							}
+
+							p.skipWhitespaceAndComments()
+
+							// Check for semicolon (more predicates)
+							if p.pos < p.length && p.input[p.pos] == ';' {
+								for p.pos < p.length && p.input[p.pos] == ';' {
+									p.pos++
+									p.skipWhitespaceAndComments()
+								}
+								if !strings.HasPrefix(p.input[p.pos:], "|}") {
+									continue
+								}
+							}
+							break
+						}
+					}
+
+					// Expect '|}'
+					if !strings.HasPrefix(p.input[p.pos:], "|}") {
+						return nil, fmt.Errorf("expected '|}' at end of reifier annotation")
+					}
+					p.pos += 2 // skip '|}'
+
+					p.skipWhitespaceAndComments()
+				}
+			}
 
 			// Check for comma (more objects with same predicate)
 			if p.pos < p.length && p.input[p.pos] == ',' {
@@ -389,64 +521,6 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		}
 
 		break
-	}
-
-	p.skipWhitespaceAndComments()
-
-	// Check for annotation syntax {| ... |} (RDF 1.2)
-	// Annotations make statements about the triple that was just parsed
-	// Each annotation block generates a blank node that reifies the triple
-	for p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
-		// Parse annotation block
-		annotationTriples, err := p.parseAnnotation(subject, lastPredicate, lastObject)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing annotation: %w", err)
-		}
-		triples = append(triples, annotationTriples...)
-
-		p.skipWhitespaceAndComments()
-	}
-
-	// Check for reifier syntax ~ <identifier> (RDF 1.2 - alternate form)
-	// This can appear alone or after annotation blocks
-	for p.pos < p.length && p.input[p.pos] == '~' {
-		p.pos++ // skip '~'
-		p.skipWhitespaceAndComments()
-
-		// Parse the reifier identifier
-		var reifier Term
-		if p.pos < p.length && p.input[p.pos] != '.' {
-			var err error
-			reifier, err = p.parseTerm()
-			if err != nil {
-				return nil, fmt.Errorf("error parsing reifier: %w", err)
-			}
-			// Validate: reifier must be IRI or blank node
-			switch reifier.(type) {
-			case *NamedNode, *BlankNode:
-				// Valid
-			default:
-				return nil, fmt.Errorf("reifier must be IRI or blank node, got %T", reifier)
-			}
-		} else {
-			// Empty reifier ~ (generate blank node)
-			reifier = p.newBlankNode()
-		}
-
-		// Generate reification triple: reifier rdf:reifies <<( subject lastPredicate lastObject )>>
-		tt := &TripleTerm{
-			Subject:   subject,
-			Predicate: lastPredicate,
-			Object:    lastObject,
-		}
-		reifiesTriple := NewTriple(
-			reifier,
-			NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"),
-			tt,
-		)
-		triples = append(triples, reifiesTriple)
-
-		p.skipWhitespaceAndComments()
 	}
 
 	// Expect '.'
