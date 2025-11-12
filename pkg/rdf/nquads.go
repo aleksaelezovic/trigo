@@ -456,6 +456,16 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 			}
 			langTag := p.input[start:p.pos]
 
+			// Validate language tag length per BCP 47
+			// Primary language tag (before first '-' or '--') must be max 8 characters
+			primaryTag := langTag
+			if idx := strings.Index(langTag, "-"); idx != -1 {
+				primaryTag = langTag[:idx]
+			}
+			if len(primaryTag) > 8 {
+				return nil, fmt.Errorf("invalid language tag: primary tag %q exceeds maximum length of 8 characters", primaryTag)
+			}
+
 			// Check for direction suffix: --ltr or --rtl (RDF 1.2)
 			if strings.Contains(langTag, "--") {
 				idx := strings.Index(langTag, "--")
@@ -488,6 +498,13 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 			datatypeIRI, err := p.parseIRI()
 			if err != nil {
 				return nil, fmt.Errorf("error parsing datatype: %w", err)
+			}
+			// RDF 1.2: rdf:langString and rdf:dirLangString require language tag syntax, not datatype syntax
+			if datatypeIRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
+				return nil, fmt.Errorf("rdf:langString requires language tag syntax (@lang), not datatype syntax (^^)")
+			}
+			if datatypeIRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" {
+				return nil, fmt.Errorf("rdf:dirLangString requires language and direction syntax (@lang--dir), not datatype syntax (^^)")
 			}
 			return NewLiteralWithDatatype(value.String(), NewNamedNode(datatypeIRI)), nil
 		}

@@ -274,6 +274,20 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
+
+	// N-Triples restrictions: quoted triples, triple terms, and reified triples cannot be subjects
+	if p.strictNTriples {
+		if _, ok := subject.(*QuotedTriple); ok {
+			return nil, fmt.Errorf("quoted triples cannot be used as subjects in N-Triples")
+		}
+		if _, ok := subject.(*TripleTerm); ok {
+			return nil, fmt.Errorf("triple terms cannot be used as subjects in N-Triples")
+		}
+		if _, ok := subject.(*ReifiedTriple); ok {
+			return nil, fmt.Errorf("reified triples cannot be used as subjects in N-Triples")
+		}
+	}
+
 	// Track if we auto-reified a quoted triple (for standalone quoted triple syntax)
 	autoReified := false
 	// If subject is a ReifiedTriple (with explicit identifier), extract the identifier
@@ -372,6 +386,20 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse object: %w", err)
 			}
+
+			// N-Triples restrictions for objects
+			if p.strictNTriples {
+				// QuotedTriple (Turtle syntax) not allowed as object
+				if _, ok := object.(*QuotedTriple); ok {
+					return nil, fmt.Errorf("quoted triples (Turtle syntax) cannot be used as objects in N-Triples")
+				}
+				// ReifiedTriple (with ~ identifier) not allowed as object
+				if _, ok := object.(*ReifiedTriple); ok {
+					return nil, fmt.Errorf("reified triples cannot be used as objects in N-Triples")
+				}
+				// TripleTerm (N-Triples syntax <<( )>>) IS allowed as object - no check needed
+			}
+
 			// If object is a ReifiedTriple (with explicit identifier), extract the identifier
 			if rt, ok := object.(*ReifiedTriple); ok {
 				object = rt.Identifier
@@ -411,17 +439,27 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 			// Check for annotation syntax {| ... |} (RDF 1.2) after this specific triple
 			// Annotations can appear after each triple in a property/object list
-			for p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
-				// Parse annotation block for this specific triple
-				annotationTriples, err := p.parseAnnotation(subject, predicate, object)
-				if err != nil {
-					return nil, fmt.Errorf("error parsing annotation: %w", err)
+			if p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
+				if p.strictNTriples {
+					return nil, fmt.Errorf("annotation syntax not allowed in N-Triples at position %d", p.pos)
 				}
-				triples = append(triples, annotationTriples...)
-				p.skipWhitespaceAndComments()
+				for p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
+					// Parse annotation block for this specific triple
+					annotationTriples, err := p.parseAnnotation(subject, predicate, object)
+					if err != nil {
+						return nil, fmt.Errorf("error parsing annotation: %w", err)
+					}
+					triples = append(triples, annotationTriples...)
+					p.skipWhitespaceAndComments()
+				}
 			}
 
 			// Check for reifier syntax ~ <identifier> (RDF 1.2 - alternate form)
+			if p.pos < p.length && p.input[p.pos] == '~' {
+				if p.strictNTriples {
+					return nil, fmt.Errorf("reifier syntax not allowed in N-Triples at position %d", p.pos)
+				}
+			}
 			for p.pos < p.length && p.input[p.pos] == '~' {
 				p.pos++ // skip '~'
 				p.skipWhitespaceAndComments()
@@ -1480,6 +1518,16 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 		}
 		langTag := p.input[langStart:p.pos]
 
+		// Validate language tag length per BCP 47
+		// Primary language tag (before first '-' or '--') must be max 8 characters
+		primaryTag := langTag
+		if idx := strings.Index(langTag, "-"); idx != -1 {
+			primaryTag = langTag[:idx]
+		}
+		if len(primaryTag) > 8 {
+			return nil, fmt.Errorf("invalid language tag: primary tag %q exceeds maximum length of 8 characters", primaryTag)
+		}
+
 		// Check for direction suffix: --ltr or --rtl (RDF 1.2)
 		if strings.Contains(langTag, "--") {
 			idx := strings.Index(langTag, "--")
@@ -1509,6 +1557,13 @@ func (p *TurtleParser) parseLiteral() (Term, error) {
 		}
 		// datatypeTerm should be a NamedNode
 		if namedNode, ok := datatypeTerm.(*NamedNode); ok {
+			// RDF 1.2: rdf:langString and rdf:dirLangString require language tag syntax, not datatype syntax
+			if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
+				return nil, fmt.Errorf("rdf:langString requires language tag syntax (@lang), not datatype syntax (^^)")
+			}
+			if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" {
+				return nil, fmt.Errorf("rdf:dirLangString requires language and direction syntax (@lang--dir), not datatype syntax (^^)")
+			}
 			return NewLiteralWithDatatype(value.String(), namedNode), nil
 		}
 		return nil, fmt.Errorf("datatype must be an IRI or prefixed name")
@@ -1590,6 +1645,16 @@ func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 		}
 		langTag := p.input[langStart:p.pos]
 
+		// Validate language tag length per BCP 47
+		// Primary language tag (before first '-' or '--') must be max 8 characters
+		primaryTag := langTag
+		if idx := strings.Index(langTag, "-"); idx != -1 {
+			primaryTag = langTag[:idx]
+		}
+		if len(primaryTag) > 8 {
+			return nil, fmt.Errorf("invalid language tag: primary tag %q exceeds maximum length of 8 characters", primaryTag)
+		}
+
 		// Check for direction suffix: --ltr or --rtl (RDF 1.2)
 		if strings.Contains(langTag, "--") {
 			idx := strings.Index(langTag, "--")
@@ -1618,6 +1683,13 @@ func (p *TurtleParser) parseLongLiteral(delimiter string) (Term, error) {
 			return nil, fmt.Errorf("failed to parse datatype: %w", err)
 		}
 		if namedNode, ok := datatypeTerm.(*NamedNode); ok {
+			// RDF 1.2: rdf:langString and rdf:dirLangString require language tag syntax, not datatype syntax
+			if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
+				return nil, fmt.Errorf("rdf:langString requires language tag syntax (@lang), not datatype syntax (^^)")
+			}
+			if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString" {
+				return nil, fmt.Errorf("rdf:dirLangString requires language and direction syntax (@lang--dir), not datatype syntax (^^)")
+			}
 			return NewLiteralWithDatatype(value.String(), namedNode), nil
 		}
 		return nil, fmt.Errorf("datatype must be an IRI or prefixed name")
