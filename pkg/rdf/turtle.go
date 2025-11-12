@@ -1438,9 +1438,11 @@ func (p *TurtleParser) parsePrefixedName() (Term, error) {
 
 		// Check if this character terminates the local name (empty local name is valid)
 		// Break on whitespace, punctuation that ends a triple, comments, or special Turtle syntax
+		// Also break on '[' and ']' which start/end blank node property lists
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' ||
 			r == '>' || r == '<' || r == '"' ||
-			r == ';' || r == ',' || r == '#' || r == '(' || r == ')' {
+			r == ';' || r == ',' || r == '#' || r == '(' || r == ')' ||
+			r == '[' || r == ']' {
 			break
 		}
 
