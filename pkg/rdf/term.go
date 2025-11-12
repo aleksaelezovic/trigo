@@ -226,6 +226,61 @@ func (q *QuotedTriple) Equals(other Term) bool {
 	return false
 }
 
+// TripleTerm represents an RDF 1.2 triple term <<( s p o )>> (N-Triples 1.2 syntax in Turtle)
+// Triple terms are NOT automatically reified when used as subjects/objects
+type TripleTerm struct {
+	Subject   Term
+	Predicate Term
+	Object    Term
+}
+
+func (t *TripleTerm) Type() TermType {
+	return TermTypeQuotedTriple // Triple terms are a form of quoted triples
+}
+
+func (t *TripleTerm) String() string {
+	return fmt.Sprintf("<<( %s %s %s )>>",
+		t.Subject.String(),
+		t.Predicate.String(),
+		t.Object.String())
+}
+
+func (t *TripleTerm) Equals(other Term) bool {
+	if ot, ok := other.(*TripleTerm); ok {
+		return t.Subject.Equals(ot.Subject) &&
+			t.Predicate.Equals(ot.Predicate) &&
+			t.Object.Equals(ot.Object)
+	}
+	return false
+}
+
+// ReifiedTriple represents a quoted triple with an explicit identifier (RDF 1.2 reification)
+// Syntax: << s p o ~ identifier >>
+// This is used internally during parsing to track that a quoted triple has an identifier
+type ReifiedTriple struct {
+	Identifier Term          // The identifier (IRI or blank node) for this reified triple
+	Triple     *QuotedTriple // The underlying quoted triple
+}
+
+func (r *ReifiedTriple) Type() TermType {
+	return TermTypeQuotedTriple // Reified triples are a form of quoted triples
+}
+
+func (r *ReifiedTriple) String() string {
+	return fmt.Sprintf("<< %s %s %s ~ %s >>",
+		r.Triple.Subject.String(),
+		r.Triple.Predicate.String(),
+		r.Triple.Object.String(),
+		r.Identifier.String())
+}
+
+func (r *ReifiedTriple) Equals(other Term) bool {
+	if or, ok := other.(*ReifiedTriple); ok {
+		return r.Identifier.Equals(or.Identifier) && r.Triple.Equals(or.Triple)
+	}
+	return false
+}
+
 // Triple represents an RDF triple (subject, predicate, object)
 type Triple struct {
 	Subject   Term
