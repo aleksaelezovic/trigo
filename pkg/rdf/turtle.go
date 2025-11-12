@@ -57,6 +57,18 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 			break
 		}
 
+		// Check for VERSION directive (RDF 1.2 Turtle)
+		// @version must be lowercase (case-sensitive), VERSION can be any case (case-insensitive)
+		if p.matchExactKeyword("@version") || p.matchKeyword("VERSION") {
+			if p.strictNTriples {
+				return nil, fmt.Errorf("VERSION directive not allowed in N-Triples")
+			}
+			if err := p.parseVersion(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
 		// Check for PREFIX directive
 		// @prefix must be lowercase (case-sensitive), PREFIX can be any case (case-insensitive)
 		if p.matchExactKeyword("@prefix") || p.matchKeyword("PREFIX") {
@@ -165,6 +177,30 @@ func (p *TurtleParser) matchExactKeyword(keyword string) bool {
 }
 
 // parsePrefix parses a PREFIX declaration
+// parseVersion parses a VERSION declaration (RDF 1.2)
+func (p *TurtleParser) parseVersion() error {
+	p.skipWhitespaceAndComments()
+
+	// Read version string (must be a quoted string literal)
+	if p.pos >= p.length || (p.input[p.pos] != '"' && p.input[p.pos] != '\'') {
+		return fmt.Errorf("expected string literal after VERSION")
+	}
+
+	// Parse the version string (we don't actually use it, just validate syntax)
+	_, err := p.parseLiteral()
+	if err != nil {
+		return fmt.Errorf("failed to parse version string: %w", err)
+	}
+
+	p.skipWhitespaceAndComments()
+	// VERSION directive can optionally end with '.' or ';'
+	if p.pos < p.length && (p.input[p.pos] == '.' || p.input[p.pos] == ';') {
+		p.pos++ // skip ending
+	}
+
+	return nil
+}
+
 func (p *TurtleParser) parsePrefix() error {
 	p.skipWhitespaceAndComments()
 
@@ -307,12 +343,21 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse predicate: %w", err)
 		}
-		// Validate predicate position: literals and blank nodes cannot be predicates
+		// Validate predicate position: literals, blank nodes, quoted triples, and triple terms cannot be predicates
 		if _, ok := predicate.(*Literal); ok {
 			return nil, fmt.Errorf("literals cannot be used as predicates")
 		}
 		if _, ok := predicate.(*BlankNode); ok {
 			return nil, fmt.Errorf("blank nodes cannot be used as predicates")
+		}
+		if _, ok := predicate.(*QuotedTriple); ok {
+			return nil, fmt.Errorf("quoted triples cannot be used as predicates")
+		}
+		if _, ok := predicate.(*TripleTerm); ok {
+			return nil, fmt.Errorf("triple terms cannot be used as predicates")
+		}
+		if _, ok := predicate.(*ReifiedTriple); ok {
+			return nil, fmt.Errorf("reified triples cannot be used as predicates")
 		}
 		// Collect any extra triples from predicate parsing
 		triples = append(triples, p.extraTriples...)
