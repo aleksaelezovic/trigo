@@ -110,18 +110,35 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## Testing
 
 ### W3C Test Suites
+
+#### RDF 1.1 (Near-Complete Compliance)
 ```bash
 # RDF Parsers
-./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-triples   # 100% (70/70)
-./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-quads     # 100% (87/87)
-./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle      # 66.2% (196/296)
-./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml         # 47.0% (78/166)
-./test-runner testdata/rdf-tests/rdf/rdf11/rdf-trig        # 47.2% (158/335)
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-triples   # 100% ✅ (70/70)
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-n-quads     # 100% ✅ (87/87)
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-turtle      # 100% ✅ (313/313)
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-xml         # 100% ✅ (166/166)
+./test-runner testdata/rdf-tests/rdf/rdf11/rdf-trig        # 99.7% (355/356, 1 edge case)
 
-# SPARQL
+# SPARQL 1.1
 ./test-runner testdata/rdf-tests/sparql/sparql11/syntax-query  # 69.1% (65/94)
 ./test-runner testdata/rdf-tests/sparql/sparql11/bind          # 70.0% (7/10)
 ./test-runner testdata/rdf-tests/sparql/sparql11/csv-tsv-res   # 83.3% (5/6)
+```
+
+#### RDF 1.2 (Partial Support)
+RDF 1.2 introduces quoted triples/reification (`<<s p o>>`), triple terms, and directionality annotations. These features require significant parser changes and are not yet implemented. Current test pass rates:
+
+```bash
+# RDF 1.2 Parsers (Excluding New Features)
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-n-triples   # Requires triple terms support
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-n-quads     # 70.9% (112/158) - Requires triple terms
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-turtle      # Requires quoted triples support
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-xml         # Requires directionality support
+./test-runner testdata/rdf-tests/rdf/rdf12/rdf-trig        # Requires quoted triples support
+```
+
+**Note:** RDF 1.1 compliance is near-complete (99.8% overall). RDF 1.2 features are planned for future implementation.
 ```
 
 ## Common Commands
