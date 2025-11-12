@@ -185,12 +185,22 @@ func (p *NQuadsParser) parseQuad() (*Quad, error) {
 		return nil, fmt.Errorf("error parsing subject: %w", err)
 	}
 
+	// RDF 1.2 N-Quads: Triple terms (quoted triples) cannot be used as subjects
+	if _, ok := subject.(*QuotedTriple); ok {
+		return nil, fmt.Errorf("triple terms cannot be used as subjects in N-Quads")
+	}
+
 	p.skipWhitespaceAndComments()
 
 	// Parse predicate
 	predicate, err := p.parseTerm()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing predicate: %w", err)
+	}
+
+	// RDF 1.2 N-Quads: Triple terms (quoted triples) cannot be used as predicates
+	if _, ok := predicate.(*QuotedTriple); ok {
+		return nil, fmt.Errorf("triple terms cannot be used as predicates in N-Quads")
 	}
 
 	p.skipWhitespaceAndComments()
@@ -200,6 +210,7 @@ func (p *NQuadsParser) parseQuad() (*Quad, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing object: %w", err)
 	}
+	// Note: Triple terms ARE allowed as objects
 
 	p.skipWhitespaceAndComments()
 
