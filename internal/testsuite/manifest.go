@@ -159,7 +159,7 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 		// Start of new test (test definition can be <#testname>, :testname, or prefix:testname like trs:test-1)
 		// Handles both "rdf:type" and shorthand "a rdft:" or "a mf:"
 		// Check if line contains "rdf:type" or " a " AND starts with a test identifier
-		hasTestType := strings.Contains(line, "rdf:type") || strings.Contains(line, " a ")
+		hasTestType := strings.Contains(line, "rdf:type") || strings.Contains(line, " a rdft:") || strings.Contains(line, " a mf:")
 		// Match lines like: <#test> rdf:type ..., :test rdf:type ..., or trs:test rdf:type ...
 		startsWithTestID := strings.HasPrefix(line, "<#") ||
 			strings.HasPrefix(line, ":") ||
