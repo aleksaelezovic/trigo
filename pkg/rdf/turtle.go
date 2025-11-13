@@ -181,9 +181,16 @@ func (p *TurtleParser) matchExactKeyword(keyword string) bool {
 func (p *TurtleParser) parseVersion() error {
 	p.skipWhitespaceAndComments()
 
-	// Read version string (must be a quoted string literal)
+	// Read version string (must be a single or double quoted string literal, NOT triple-quoted)
 	if p.pos >= p.length || (p.input[p.pos] != '"' && p.input[p.pos] != '\'') {
 		return fmt.Errorf("expected string literal after VERSION")
+	}
+
+	// Check for and reject triple-quoted strings
+	if p.pos+2 < p.length {
+		if (p.input[p.pos:p.pos+3] == `"""`) || (p.input[p.pos:p.pos+3] == `'''`) {
+			return fmt.Errorf("VERSION directive does not accept triple-quoted strings")
+		}
 	}
 
 	// Parse the version string (we don't actually use it, just validate syntax)
@@ -275,13 +282,15 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 		return nil, fmt.Errorf("failed to parse subject: %w", err)
 	}
 
-	// N-Triples restrictions: quoted triples, triple terms, and reified triples cannot be subjects
+	// RDF 1.2 restrictions: triple terms cannot be subjects (applies to both Turtle and N-Triples)
+	if _, ok := subject.(*TripleTerm); ok {
+		return nil, fmt.Errorf("triple terms cannot be used as subjects")
+	}
+
+	// N-Triples additional restrictions: quoted triples and reified triples cannot be subjects
 	if p.strictNTriples {
 		if _, ok := subject.(*QuotedTriple); ok {
 			return nil, fmt.Errorf("quoted triples cannot be used as subjects in N-Triples")
-		}
-		if _, ok := subject.(*TripleTerm); ok {
-			return nil, fmt.Errorf("triple terms cannot be used as subjects in N-Triples")
 		}
 		if _, ok := subject.(*ReifiedTriple); ok {
 			return nil, fmt.Errorf("reified triples cannot be used as subjects in N-Triples")
@@ -1966,8 +1975,10 @@ func (p *TurtleParser) parseQuotedTriple() (Term, error) {
 
 	p.skipWhitespaceAndComments()
 
-	// Check for triple term syntax <<( ... )>> (N-Triples 1.2)
+	// Check for triple term syntax <<( ... )>> (RDF 1.2)
 	// Triple terms are NOT automatically reified (unlike quoted triples)
+	// In N-Triples/N-Quads: triple terms only allowed as objects
+	// In Turtle/TriG: triple terms allowed as objects (typically with rdf:reifies)
 	isTripleTerm := false
 	if p.pos < p.length && p.input[p.pos] == '(' {
 		isTripleTerm = true
