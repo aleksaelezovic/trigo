@@ -50,6 +50,7 @@ func (p *RDFXMLParser) SetBaseURI(base string) {
 
 const (
 	rdfNS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+	itsNS = "http://www.w3.org/2005/11/its"
 )
 
 // Forbidden RDF names that cannot be used as node elements
@@ -386,10 +387,14 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 	var liCounter int    // Counter for rdf:li elements within current container
 	var seenRootRDF bool // Track if we've seen the root rdf:RDF element
 
-	// Stack to track element depth and whether each element has xml:base
+	// Stack to track element depth and inherited properties
 	type elementInfo struct {
 		name    xml.Name
 		hasBase bool
+		lang    string // xml:lang value (inherited)
+		dir     string // its:dir value (inherited)
+		hasLang bool   // whether this element defines xml:lang
+		hasDir  bool   // whether this element defines its:dir
 	}
 	var elementStack []elementInfo
 
@@ -422,10 +427,37 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				p.pushBase(xmlBase)
 			}
 
+			// Check for xml:lang attribute
+			xmlLang := getAttrAny(elem.Attr, "lang")
+			hasLang := xmlLang != ""
+
+			// Check for its:dir attribute
+			itsDir := getAttr(elem.Attr, itsNS, "dir")
+			hasDir := itsDir != ""
+
+			// Inherit lang/dir from parent if not defined on this element
+			parentLang := ""
+			parentDir := ""
+			if len(elementStack) > 0 {
+				parent := elementStack[len(elementStack)-1]
+				parentLang = parent.lang
+				parentDir = parent.dir
+			}
+			if !hasLang {
+				xmlLang = parentLang
+			}
+			if !hasDir {
+				itsDir = parentDir
+			}
+
 			// Track this element on the stack
 			elementStack = append(elementStack, elementInfo{
 				name:    elem.Name,
 				hasBase: hasBase,
+				lang:    xmlLang,
+				dir:     itsDir,
+				hasLang: hasLang,
+				hasDir:  hasDir,
 			})
 
 			// Check if this is rdf:RDF element
@@ -577,8 +609,14 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				liCounter = 0
 
 				// Process property attributes on Description element
-				// Track xml:lang for property attributes
-				xmlLang := getAttrAny(elem.Attr, "lang")
+				// Get inherited xml:lang and its:dir from element stack
+				currentLang := ""
+				currentDir := ""
+				if len(elementStack) > 0 {
+					currentElem := elementStack[len(elementStack)-1]
+					currentLang = currentElem.lang
+					currentDir = currentElem.dir
+				}
 
 				for _, attr := range elem.Attr {
 					// Skip structural RDF attributes (these have special meaning)
@@ -595,6 +633,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						// Skip xml:base and xml:lang
 						continue
 					}
+					if attr.Name.Space == itsNS {
+						// Skip ITS attributes (its:dir, its:version, etc.)
+						continue
+					}
 					if attr.Name.Space == "" {
 						// Skip attributes without namespace
 						continue
@@ -608,11 +650,12 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					if attr.Name.Space == rdfNS && attr.Name.Local == "type" {
 						// rdf:type value should be resolved as an IRI
 						object = NewNamedNode(p.resolveURI(attr.Value))
-					} else if xmlLang != "" {
-						// Language-tagged literal
+					} else if currentLang != "" {
+						// Language-tagged literal with optional direction
 						object = &Literal{
-							Value:    attr.Value,
-							Language: xmlLang,
+							Value:     attr.Value,
+							Language:  currentLang,
+							Direction: currentDir,
 						}
 					} else {
 						// Plain literal
@@ -756,6 +799,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						if attr.Name.Space == rdfNS {
 							continue
 						}
+						if attr.Name.Space == itsNS {
+							// Skip ITS namespace attributes (its:dir, its:version, etc.)
+							continue
+						}
 						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 							strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 							(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -773,6 +820,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						for _, attr := range elem.Attr {
 							// Skip RDF-specific and XML-specific attributes
 							if attr.Name.Space == rdfNS {
+								continue
+							}
+							if attr.Name.Space == itsNS {
+								// Skip ITS namespace attributes (its:dir, its:version, etc.)
 								continue
 							}
 							if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
@@ -862,6 +913,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					if attr.Name.Space == rdfNS {
 						continue
 					}
+					if attr.Name.Space == itsNS {
+						// Skip ITS namespace attributes (its:dir, its:version, etc.)
+						continue
+					}
 					if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 						strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 						(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -899,6 +954,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						if attr.Name.Space == rdfNS {
 							continue
 						}
+						if attr.Name.Space == itsNS {
+							// Skip ITS namespace attributes (its:dir, its:version, etc.)
+							continue
+						}
 						if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 							strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 							(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -931,6 +990,21 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// No special attributes - read the text content or check for empty element
 				datatypeAttr := getAttr(elem.Attr, rdfNS, "datatype")
 				langAttr := getAttrAny(elem.Attr, "lang")
+				dirAttr := getAttr(elem.Attr, itsNS, "dir")
+
+				// Inherit lang/dir from element stack if not defined locally
+				if langAttr == "" || dirAttr == "" {
+					if len(elementStack) > 0 {
+						currentElem := elementStack[len(elementStack)-1]
+						if langAttr == "" {
+							langAttr = currentElem.lang
+						}
+						if dirAttr == "" {
+							dirAttr = currentElem.dir
+						}
+					}
+				}
+
 				// Capture rdf:ID early before entering nested loops (elem.Attr may not be accessible later)
 				propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
 
@@ -955,10 +1029,11 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 								Datatype: NewNamedNode(datatypeAttr),
 							}
 						} else if langAttr != "" {
-							// Language-tagged literal
+							// Language-tagged literal with optional direction
 							object = &Literal{
-								Value:    textContent.String(),
-								Language: langAttr,
+								Value:     textContent.String(),
+								Language:  langAttr,
+								Direction: dirAttr,
 							}
 						} else {
 							// Plain literal
@@ -1503,6 +1578,10 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		if attr.Name.Space == rdfNS {
 			continue
 		}
+		if attr.Name.Space == itsNS {
+			// Skip ITS namespace attributes (its:dir, its:version, etc.)
+			continue
+		}
 		if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
 			strings.HasPrefix(attr.Name.Space, "http://www.w3.org/XML/") ||
 			(attr.Name.Space == "" && (attr.Name.Local == "lang" || attr.Name.Local == "base")) {
@@ -1525,6 +1604,10 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 		for _, attr := range elem.Attr {
 			// Skip RDF-specific and XML-specific attributes
 			if attr.Name.Space == rdfNS {
+				continue
+			}
+			if attr.Name.Space == itsNS {
+				// Skip ITS namespace attributes (its:dir, its:version, etc.)
 				continue
 			}
 			if attr.Name.Space == "http://www.w3.org/XML/1998/namespace" ||
@@ -1556,6 +1639,9 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 	// Check for xml:lang attribute
 	langAttr := getAttrAny(elem.Attr, "lang")
 
+	// Check for its:dir attribute
+	dirAttr := getAttr(elem.Attr, itsNS, "dir")
+
 	// Read the text content
 	var textContent strings.Builder
 	for {
@@ -1577,10 +1663,11 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 					Datatype: NewNamedNode(datatypeAttr),
 				}
 			} else if langAttr != "" {
-				// Language-tagged literal
+				// Language-tagged literal with optional direction
 				object = &Literal{
-					Value:    textContent.String(),
-					Language: langAttr,
+					Value:     textContent.String(),
+					Language:  langAttr,
+					Direction: dirAttr,
 				}
 			} else {
 				// Plain literal
