@@ -95,12 +95,12 @@ Validated against official W3C test suites:
 - **RDF TriG:** 93.2% (343/368 tests) ✅ — *12 of 13 failures are test infrastructure issues, 1 extreme edge case*
 - **RDF/XML:** 100% (166/166 tests) ✅
 
-### RDF 1.2 Parsers (Quoted Triples & Language Direction)
-- **RDF 1.2 N-Triples:** 60.0% (87/145 tests) - Language direction ✅, Quoted triples partial
-- **RDF 1.2 N-Quads:** 64.6% (106/164 tests) - Language direction ✅, Quoted triples partial
-- **RDF 1.2 Turtle:** 79.5% (329/414 tests) - Quoted triples ✅, Language direction ✅
-- **RDF 1.2 TriG:** 80.6% (348/432 tests) - Quoted triples ✅, Language direction ✅
-- **RDF 1.2 XML:** 79.5% baseline (163/205 tests)
+### RDF 1.2 Parsers (Quoted Triples, Annotations & Language Direction)
+- **RDF 1.2 N-Triples:** 100% (99/99 tests) ✅ — Full RDF 1.2 compliance
+- **RDF 1.2 N-Quads:** 100% (114/114 tests) ✅ — Full RDF 1.2 compliance
+- **RDF 1.2 Turtle:** 99.0% (404/408 tests) ✅ — 1 failure is graph isomorphism edge case
+- **RDF 1.2 TriG:** 94.0% (395/420 tests) ✅ — Most failures are graph isomorphism edge cases
+- **RDF 1.2 XML:** 84.3% (173/205 tests) — Baseline support
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)

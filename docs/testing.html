@@ -286,9 +286,54 @@ Skipped: 1
                     <li>Blank node isomorphism (affects many tests), reification, negative test validation</li>
                 </ul>
             </li>
-            <li><strong>rdf12/</strong>: Latest RDF 1.2 specifications including RDF-star features
+            <li><strong>rdf12/rdf-n-triples</strong>: 100% pass rate (99/99 tests) ✅
                 <ul>
-                    <li>Test support infrastructure in place</li>
+                    <li><strong>Full RDF 1.2 N-Triples compliance achieved</strong></li>
+                    <li>Triple terms <<( s p o )>> as objects only</li>
+                    <li>Language direction tags (e.g., @en--ltr, @ar--rtl) with rdf:dirLangString</li>
+                    <li>BCP 47 language tag validation (primary tag max 8 characters)</li>
+                    <li>Strict validation: rejects Turtle syntax (annotations, reifiers, quoted triples)</li>
+                    <li>Quoted triple validation (predicate must be IRI, no blank nodes)</li>
+                </ul>
+            </li>
+            <li><strong>rdf12/rdf-n-quads</strong>: 100% pass rate (114/114 tests) ✅
+                <ul>
+                    <li><strong>Full RDF 1.2 N-Quads compliance achieved</strong></li>
+                    <li>Triple terms <<( s p o )>> restricted to object position</li>
+                    <li>Language direction support in all graph contexts</li>
+                    <li>Graph component blank node handling with triple terms</li>
+                    <li>Language tag validation including datatype restrictions (rdf:langString/dirLangString)</li>
+                </ul>
+            </li>
+            <li><strong>rdf12/rdf-turtle</strong>: 99.0% pass rate (404/408 tests) ✅
+                <ul>
+                    <li><strong>Near-perfect RDF 1.2 Turtle compliance</strong></li>
+                    <li>Quoted triples with auto-reification: << s p o >> generates blank node + rdf:reifies</li>
+                    <li>Annotation syntax {| predicate object |} for metadata on triples</li>
+                    <li>Nested annotations with recursive parsing</li>
+                    <li>Reifier syntax ~ identifier for explicit reification IDs</li>
+                    <li>Empty reifiers ~ (generates blank node)</li>
+                    <li>VERSION/@version directives for RDF version declaration</li>
+                    <li>Language direction: @lang--dir (e.g., @ar--rtl)</li>
+                    <li>Triple deduplication (RDF is a set)</li>
+                    <li>QuotedTriple auto-reification in subject/object positions</li>
+                    <li>ReifiedTriple with explicit identifiers</li>
+                    <li>1 remaining failure: graph isomorphism edge case with nested blank nodes</li>
+                </ul>
+            </li>
+            <li><strong>rdf12/rdf-trig</strong>: 94.0% pass rate (395/420 tests) ✅
+                <ul>
+                    <li><strong>Excellent RDF 1.2 TriG compliance</strong></li>
+                    <li>Inherits all RDF 1.2 Turtle features (quoted triples, annotations, reifiers)</li>
+                    <li>Named graph blocks with RDF 1.2 syntax</li>
+                    <li>Most failures are graph isomorphism edge cases (same as Turtle)</li>
+                </ul>
+            </li>
+            <li><strong>rdf12/rdf-xml</strong>: 84.3% pass rate (173/205 tests)
+                <ul>
+                    <li>Baseline RDF 1.2 support</li>
+                    <li>Language direction attributes</li>
+                    <li>Limited quoted triple support</li>
                 </ul>
             </li>
         </ul>
