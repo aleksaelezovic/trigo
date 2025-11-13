@@ -193,13 +193,33 @@ func (p *TurtleParser) parseVersion() error {
 		}
 	}
 
-	// Parse the version string (we don't actually use it, just validate syntax)
-	_, err := p.parseLiteral()
-	if err != nil {
-		return fmt.Errorf("failed to parse version string: %w", err)
+	// Parse the version string manually (don't use parseLiteral as it would try to parse language tags)
+	// VERSION directive only accepts simple quoted strings with no language tag or datatype
+	quoteChar := p.input[p.pos]
+	p.pos++ // skip opening quote
+
+	// Scan to closing quote
+	for p.pos < p.length {
+		if p.input[p.pos] == quoteChar {
+			break
+		}
+		if p.input[p.pos] == '\\' {
+			// Skip escape sequence
+			p.pos++
+			if p.pos >= p.length {
+				return fmt.Errorf("unexpected end of input in version string escape sequence")
+			}
+		}
+		p.pos++
 	}
 
+	if p.pos >= p.length {
+		return fmt.Errorf("unclosed version string")
+	}
+	p.pos++ // skip closing quote
+
 	p.skipWhitespaceAndComments()
+
 	// VERSION directive can optionally end with '.' or ';'
 	if p.pos < p.length && (p.input[p.pos] == '.' || p.input[p.pos] == ';') {
 		p.pos++ // skip ending
