@@ -2009,6 +2009,12 @@ func (p *TurtleParser) parseQuotedTriple() (Term, error) {
 		return nil, fmt.Errorf("quoted triple subject cannot be a literal")
 	}
 
+	// RDF 1.2: Quoted triples cannot contain collections or blank node property lists
+	if len(p.extraTriples) > 0 {
+		p.extraTriples = nil // Clear to avoid polluting the parse
+		return nil, fmt.Errorf("quoted triples cannot contain collections or blank node property lists")
+	}
+
 	p.skipWhitespaceAndComments()
 
 	// Parse predicate (must be IRI)
@@ -2028,6 +2034,13 @@ func (p *TurtleParser) parseQuotedTriple() (Term, error) {
 	object, err := p.parseTerm()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing quoted triple object: %w", err)
+	}
+
+	// RDF 1.2: Quoted triples cannot contain collections or blank node property lists
+	// These create extraTriples (rdf:first/rdf:rest for collections, properties for blank nodes)
+	if len(p.extraTriples) > 0 {
+		p.extraTriples = nil // Clear to avoid polluting the parse
+		return nil, fmt.Errorf("quoted triples cannot contain collections or blank node property lists")
 	}
 
 	p.skipWhitespaceAndComments()
