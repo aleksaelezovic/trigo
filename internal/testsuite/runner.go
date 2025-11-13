@@ -495,6 +495,13 @@ func (r *TestRunner) compareTriples(expected, actual []*rdf.Triple) bool {
 	return rdf.AreGraphsIsomorphic(expected, actual)
 }
 
+// compareQuads compares two sets of quads for equality (order-independent, blank node isomorphism including graph names)
+func (r *TestRunner) compareQuads(expected, actual []*rdf.Quad) bool {
+	// Use quad graph isomorphism algorithm that handles blank node label differences
+	// This includes blank nodes in subject, object, AND graph positions
+	return rdf.AreQuadsIsomorphic(expected, actual)
+}
+
 // executorTermToRDFTerm converts an executor.Term to rdf.Term
 func (r *TestRunner) executorTermToRDFTerm(t executor.Term) (rdf.Term, error) {
 	switch t.Type {
@@ -842,6 +849,47 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 		return TestResultError
 	}
 
+	// Determine if this is a quad-based format that needs quad comparison
+	isQuadFormat := format == "nquads" || format == "trig"
+
+	if isQuadFormat {
+		// Parse as quads and compare with graph names
+		actualQuads, err := r.parseRDFDataAsQuads(string(dataBytes), format, dataFile)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+			return TestResultFail
+		}
+
+		// Load expected quads from result file
+		if test.Result == "" {
+			r.recordError(test, "No result file specified")
+			return TestResultError
+		}
+
+		resultFile := manifest.ResolveFile(test.Result)
+		resultBytes, err := os.ReadFile(resultFile) // #nosec G304 - test suite legitimately reads test result files
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to read result file: %v", err))
+			return TestResultError
+		}
+
+		// Expected results are in N-Quads format (quad-based tests)
+		expectedQuads, err := r.parseRDFDataAsQuads(string(resultBytes), "nquads", "")
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to parse expected results: %v", err))
+			return TestResultError
+		}
+
+		// Compare quads (order-independent, blank node isomorphism including graph names)
+		if !r.compareQuads(expectedQuads, actualQuads) {
+			r.recordError(test, fmt.Sprintf("Quads mismatch: expected %d quads, got %d quads", len(expectedQuads), len(actualQuads)))
+			return TestResultFail
+		}
+
+		return TestResultPass
+	}
+
+	// Triple-based format - use existing triple comparison logic
 	actualTriples, err := r.parseRDFData(string(dataBytes), format, dataFile)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Parser error: %v", err))
@@ -882,6 +930,38 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 }
 
 // parseRDFData parses RDF data in the specified format
+// parseRDFDataAsQuads parses RDF data and returns quads (for quad-based formats)
+func (r *TestRunner) parseRDFDataAsQuads(data string, format string, filePath string) ([]*rdf.Quad, error) {
+	switch format {
+	case "nquads":
+		parser := rdf.NewNQuadsParser(data)
+		return parser.Parse()
+	case "trig":
+		parser := rdf.NewTriGParser(data)
+		// Set base URI from file path if provided
+		if filePath != "" {
+			baseURI := r.filePathToURI(filePath)
+			parser.SetBaseURI(baseURI)
+		}
+		return parser.Parse()
+	case "rdfxml":
+		parser := rdf.NewRDFXMLParser()
+		// Set base URI from file path if provided
+		if filePath != "" {
+			baseURI := r.filePathToURI(filePath)
+			parser.SetBaseURI(baseURI)
+		}
+		reader := strings.NewReader(data)
+		return parser.Parse(reader)
+	case "jsonld":
+		parser := rdf.NewJSONLDParser()
+		reader := strings.NewReader(data)
+		return parser.Parse(reader)
+	default:
+		return nil, fmt.Errorf("unsupported quad format: %s", format)
+	}
+}
+
 func (r *TestRunner) parseRDFData(data string, format string, filePath string) ([]*rdf.Triple, error) {
 	switch format {
 	case "turtle":

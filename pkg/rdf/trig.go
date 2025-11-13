@@ -200,8 +200,8 @@ func (p *TriGParser) parseAnonymousGraphBlock() ([]*Quad, error) {
 	}
 	p.pos++ // skip '{'
 
-	// Use a blank node as the graph name
-	graphNode := NewBlankNode(fmt.Sprintf("g%d", p.pos))
+	// Anonymous graph blocks belong to the default graph (per TriG spec)
+	graphNode := NewDefaultGraph()
 
 	// Find the matching closing brace
 	braceStart := p.pos
@@ -211,7 +211,7 @@ func (p *TriGParser) parseAnonymousGraphBlock() ([]*Quad, error) {
 	}
 	p.pos = newPos
 
-	// Convert triples to quads with the graph name
+	// Convert triples to quads with the default graph
 	var quads []*Quad
 	for _, triple := range triples {
 		quads = append(quads, NewQuad(triple.Subject, triple.Predicate, triple.Object, graphNode))
