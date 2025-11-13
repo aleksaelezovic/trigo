@@ -189,27 +189,48 @@ func backtrack(expected, actual []*Triple, expectedBlanks, actualBlanks []string
 	return false
 }
 
+// isTermFullyMapped recursively checks if all blank nodes in a term are mapped
+func isTermFullyMapped(term Term, mapping map[string]string) bool {
+	switch t := term.(type) {
+	case *BlankNode:
+		_, exists := mapping[t.ID]
+		return exists
+	case *TripleTerm:
+		// Check if all blank nodes in triple term components are mapped
+		return isTermFullyMapped(t.Subject, mapping) &&
+			isTermFullyMapped(t.Predicate, mapping) &&
+			isTermFullyMapped(t.Object, mapping)
+	case *QuotedTriple:
+		// Check if all blank nodes in quoted triple components are mapped
+		return isTermFullyMapped(t.Subject, mapping) &&
+			isTermFullyMapped(t.Predicate, mapping) &&
+			isTermFullyMapped(t.Object, mapping)
+	case *ReifiedTriple:
+		// Check identifier and the underlying triple
+		if !isTermFullyMapped(t.Identifier, mapping) {
+			return false
+		}
+		if t.Triple != nil {
+			return isTermFullyMapped(t.Triple.Subject, mapping) &&
+				isTermFullyMapped(t.Triple.Predicate, mapping) &&
+				isTermFullyMapped(t.Triple.Object, mapping)
+		}
+		return true
+	default:
+		// Non-blank node terms are always "fully mapped"
+		return true
+	}
+}
+
 // isConsistentSoFar checks if the current partial mapping is consistent
 // This is an optimization to prune the search space early
 func isConsistentSoFar(expected, actual []*Triple, mapping map[string]string) bool {
 	// For each triple in expected that only contains mapped blank nodes,
 	// check if there's a corresponding triple in actual
 	for _, triple := range expected {
-		// Check if all blank nodes in this triple are mapped
-		subjectMapped := true
-		objectMapped := true
-
-		if bn, ok := triple.Subject.(*BlankNode); ok {
-			if _, exists := mapping[bn.ID]; !exists {
-				subjectMapped = false
-			}
-		}
-
-		if bn, ok := triple.Object.(*BlankNode); ok {
-			if _, exists := mapping[bn.ID]; !exists {
-				objectMapped = false
-			}
-		}
+		// Check if all blank nodes in this triple (including nested ones) are mapped
+		subjectMapped := isTermFullyMapped(triple.Subject, mapping)
+		objectMapped := isTermFullyMapped(triple.Object, mapping)
 
 		// If all blank nodes in this triple are mapped, verify it exists in actual
 		if subjectMapped && objectMapped {
@@ -432,27 +453,10 @@ func backtrackQuads(expected, actual []*Quad, expectedBlanks, actualBlanks []str
 // isConsistentSoFarQuads checks if the current partial mapping is consistent for quads
 func isConsistentSoFarQuads(expected, actual []*Quad, mapping map[string]string) bool {
 	for _, quad := range expected {
-		subjectMapped := true
-		objectMapped := true
-		graphMapped := true
-
-		if bn, ok := quad.Subject.(*BlankNode); ok {
-			if _, exists := mapping[bn.ID]; !exists {
-				subjectMapped = false
-			}
-		}
-
-		if bn, ok := quad.Object.(*BlankNode); ok {
-			if _, exists := mapping[bn.ID]; !exists {
-				objectMapped = false
-			}
-		}
-
-		if bn, ok := quad.Graph.(*BlankNode); ok {
-			if _, exists := mapping[bn.ID]; !exists {
-				graphMapped = false
-			}
-		}
+		// Check if all blank nodes in this quad (including nested ones) are mapped
+		subjectMapped := isTermFullyMapped(quad.Subject, mapping)
+		objectMapped := isTermFullyMapped(quad.Object, mapping)
+		graphMapped := isTermFullyMapped(quad.Graph, mapping)
 
 		if subjectMapped && objectMapped && graphMapped {
 			found := false
