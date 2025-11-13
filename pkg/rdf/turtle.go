@@ -475,7 +475,7 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 				// Parse the reifier identifier
 				var reifier Term
-				if p.pos < p.length && p.input[p.pos] != '.' && p.input[p.pos] != ',' && p.input[p.pos] != ';' {
+				if p.pos < p.length && p.input[p.pos] != '.' && p.input[p.pos] != ',' && p.input[p.pos] != ';' && p.input[p.pos] != '{' {
 					var err error
 					reifier, err = p.parseTerm()
 					if err != nil {
@@ -490,6 +490,7 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 					}
 				} else {
 					// Empty reifier ~ (generate blank node)
+					// Also used when ~ is directly followed by annotation block {|
 					reifier = p.newBlankNode()
 				}
 
@@ -697,6 +698,17 @@ func (p *TurtleParser) parseAnnotation(subject, predicate, object Term) ([]*Trip
 				triples = append(triples, annotTriple)
 
 				p.skipWhitespaceAndComments()
+
+				// Check for nested annotation on this annotation triple
+				if p.pos < p.length && strings.HasPrefix(p.input[p.pos:], "{|") {
+					// Recursively parse nested annotation
+					nestedAnnotTriples, err := p.parseAnnotation(reifier, annotPred, annotObj)
+					if err != nil {
+						return nil, fmt.Errorf("error parsing nested annotation: %w", err)
+					}
+					triples = append(triples, nestedAnnotTriples...)
+					p.skipWhitespaceAndComments()
+				}
 
 				// Check for comma (more objects)
 				if p.pos < p.length && p.input[p.pos] == ',' {
