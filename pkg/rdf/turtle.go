@@ -102,7 +102,19 @@ func (p *TurtleParser) Parse() ([]*Triple, error) {
 		triples = append(triples, blockTriples...)
 	}
 
-	return triples, nil
+	// Deduplicate triples (RDF is a set, so duplicate triples should be removed)
+	// This is important for cases like multiple annotations on the same triple
+	seen := make(map[string]bool)
+	uniqueTriples := make([]*Triple, 0, len(triples))
+	for _, triple := range triples {
+		key := triple.String()
+		if !seen[key] {
+			seen[key] = true
+			uniqueTriples = append(uniqueTriples, triple)
+		}
+	}
+
+	return uniqueTriples, nil
 }
 
 // skipWhitespaceAndComments skips whitespace and comments
@@ -707,6 +719,25 @@ func (p *TurtleParser) parseAnnotation(subject, predicate, object Term) ([]*Trip
 				// If object is a ReifiedTriple, extract identifier
 				if rt, ok := annotObj.(*ReifiedTriple); ok {
 					annotObj = rt.Identifier
+				}
+				// If object is a QuotedTriple (without identifier), auto-generate reification
+				if qt, ok := annotObj.(*QuotedTriple); ok {
+					// Generate blank node identifier
+					annoReifier := p.newBlankNode()
+					// Create rdf:reifies triple with TripleTerm format
+					tt := &TripleTerm{
+						Subject:   qt.Subject,
+						Predicate: qt.Predicate,
+						Object:    qt.Object,
+					}
+					reifiesTriple := NewTriple(
+						annoReifier,
+						NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"),
+						tt,
+					)
+					triples = append(triples, reifiesTriple)
+					// Use the blank node as the actual object
+					annotObj = annoReifier
 				}
 
 				// Collect any extra triples from annotation object parsing
