@@ -43,12 +43,10 @@ func AreGraphsIsomorphic(expected, actual []*Triple) bool {
 func extractBlankNodeLabels(triples []*Triple) []string {
 	blanks := make(map[string]bool)
 	for _, triple := range triples {
-		if bn, ok := triple.Subject.(*BlankNode); ok {
-			blanks[bn.ID] = true
-		}
-		if bn, ok := triple.Object.(*BlankNode); ok {
-			blanks[bn.ID] = true
-		}
+		// Extract from subject
+		extractBlanksFromTerm(triple.Subject, blanks)
+		// Extract from object
+		extractBlanksFromTerm(triple.Object, blanks)
 	}
 
 	// Convert to sorted slice for deterministic ordering
@@ -60,6 +58,60 @@ func extractBlankNodeLabels(triples []*Triple) []string {
 	return result
 }
 
+// extractBlanksFromTerm recursively extracts blank nodes from a term,
+// including those inside TripleTerms, QuotedTriples, and ReifiedTriples
+func extractBlanksFromTerm(term Term, blanks map[string]bool) {
+	switch t := term.(type) {
+	case *BlankNode:
+		blanks[t.ID] = true
+	case *TripleTerm:
+		// Recursively extract from triple term components
+		extractBlanksFromTerm(t.Subject, blanks)
+		extractBlanksFromTerm(t.Predicate, blanks)
+		extractBlanksFromTerm(t.Object, blanks)
+	case *QuotedTriple:
+		// Recursively extract from quoted triple components
+		extractBlanksFromTerm(t.Subject, blanks)
+		extractBlanksFromTerm(t.Predicate, blanks)
+		extractBlanksFromTerm(t.Object, blanks)
+	case *ReifiedTriple:
+		// Extract from identifier and the underlying triple
+		extractBlanksFromTerm(t.Identifier, blanks)
+		if t.Triple != nil {
+			extractBlanksFromTerm(t.Triple.Subject, blanks)
+			extractBlanksFromTerm(t.Triple.Predicate, blanks)
+			extractBlanksFromTerm(t.Triple.Object, blanks)
+		}
+	}
+}
+
+// countBlanksInTerm recursively counts occurrences of blank nodes in a term,
+// including those inside TripleTerms, QuotedTriples, and ReifiedTriples
+func countBlanksInTerm(term Term, degrees map[string]int) {
+	switch t := term.(type) {
+	case *BlankNode:
+		degrees[t.ID]++
+	case *TripleTerm:
+		// Recursively count in triple term components
+		countBlanksInTerm(t.Subject, degrees)
+		countBlanksInTerm(t.Predicate, degrees)
+		countBlanksInTerm(t.Object, degrees)
+	case *QuotedTriple:
+		// Recursively count in quoted triple components
+		countBlanksInTerm(t.Subject, degrees)
+		countBlanksInTerm(t.Predicate, degrees)
+		countBlanksInTerm(t.Object, degrees)
+	case *ReifiedTriple:
+		// Count in identifier and the underlying triple
+		countBlanksInTerm(t.Identifier, degrees)
+		if t.Triple != nil {
+			countBlanksInTerm(t.Triple.Subject, degrees)
+			countBlanksInTerm(t.Triple.Predicate, degrees)
+			countBlanksInTerm(t.Triple.Object, degrees)
+		}
+	}
+}
+
 // sortByDegree sorts blank nodes by their degree (number of triples they appear in)
 // This optimization helps backtracking by trying to match highly-connected nodes first
 func sortByDegree(blanks []string, triples []*Triple) []string {
@@ -69,12 +121,9 @@ func sortByDegree(blanks []string, triples []*Triple) []string {
 	}
 
 	for _, triple := range triples {
-		if bn, ok := triple.Subject.(*BlankNode); ok {
-			degrees[bn.ID]++
-		}
-		if bn, ok := triple.Object.(*BlankNode); ok {
-			degrees[bn.ID]++
-		}
+		// Recursively count blank nodes in subject and object
+		countBlanksInTerm(triple.Subject, degrees)
+		countBlanksInTerm(triple.Object, degrees)
 	}
 
 	// Sort by degree (descending)
@@ -223,14 +272,41 @@ func tripleKey(triple *Triple, mapping map[string]string) string {
 
 // termString converts a term to string, applying blank node mapping if applicable
 func termString(term Term, mapping map[string]string) string {
-	if mapping != nil {
-		if bn, ok := term.(*BlankNode); ok {
-			if mapped, exists := mapping[bn.ID]; exists {
-				return "_:" + mapped
-			}
-		}
+	if mapping == nil {
+		return term.String()
 	}
-	return term.String()
+
+	switch t := term.(type) {
+	case *BlankNode:
+		if mapped, exists := mapping[t.ID]; exists {
+			return "_:" + mapped
+		}
+		return term.String()
+	case *TripleTerm:
+		// Recursively apply mapping to triple term components
+		subj := termString(t.Subject, mapping)
+		pred := termString(t.Predicate, mapping)
+		obj := termString(t.Object, mapping)
+		return fmt.Sprintf("<<( %s %s %s )>>", subj, pred, obj)
+	case *QuotedTriple:
+		// Recursively apply mapping to quoted triple components
+		subj := termString(t.Subject, mapping)
+		pred := termString(t.Predicate, mapping)
+		obj := termString(t.Object, mapping)
+		return fmt.Sprintf("<< %s %s %s >>", subj, pred, obj)
+	case *ReifiedTriple:
+		// Recursively apply mapping to reified triple
+		id := termString(t.Identifier, mapping)
+		if t.Triple != nil {
+			subj := termString(t.Triple.Subject, mapping)
+			pred := termString(t.Triple.Predicate, mapping)
+			obj := termString(t.Triple.Object, mapping)
+			return fmt.Sprintf("<< %s %s %s ~ %s >>", subj, pred, obj, id)
+		}
+		return term.String()
+	default:
+		return term.String()
+	}
 }
 
 // AreQuadsIsomorphic checks if two sets of quads are isomorphic,
@@ -269,15 +345,10 @@ func AreQuadsIsomorphic(expected, actual []*Quad) bool {
 func extractBlankNodeLabelsFromQuads(quads []*Quad) []string {
 	blanks := make(map[string]bool)
 	for _, quad := range quads {
-		if bn, ok := quad.Subject.(*BlankNode); ok {
-			blanks[bn.ID] = true
-		}
-		if bn, ok := quad.Object.(*BlankNode); ok {
-			blanks[bn.ID] = true
-		}
-		if bn, ok := quad.Graph.(*BlankNode); ok {
-			blanks[bn.ID] = true
-		}
+		// Recursively extract from subject, object, and graph
+		extractBlanksFromTerm(quad.Subject, blanks)
+		extractBlanksFromTerm(quad.Object, blanks)
+		extractBlanksFromTerm(quad.Graph, blanks)
 	}
 
 	result := make([]string, 0, len(blanks))
@@ -296,15 +367,10 @@ func sortByDegreeQuads(blanks []string, quads []*Quad) []string {
 	}
 
 	for _, quad := range quads {
-		if bn, ok := quad.Subject.(*BlankNode); ok {
-			degrees[bn.ID]++
-		}
-		if bn, ok := quad.Object.(*BlankNode); ok {
-			degrees[bn.ID]++
-		}
-		if bn, ok := quad.Graph.(*BlankNode); ok {
-			degrees[bn.ID]++
-		}
+		// Recursively count blank nodes in subject, object, and graph
+		countBlanksInTerm(quad.Subject, degrees)
+		countBlanksInTerm(quad.Object, degrees)
+		countBlanksInTerm(quad.Graph, degrees)
 	}
 
 	sort.Slice(blanks, func(i, j int) bool {
