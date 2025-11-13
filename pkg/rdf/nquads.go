@@ -515,24 +515,24 @@ func (p *NQuadsParser) parseLiteral() (Term, error) {
 }
 
 // parseQuotedTriple parses an RDF 1.2 N-Triples quoted triple: <<( subject predicate object )>>
-func (p *NQuadsParser) parseQuotedTriple() (*QuotedTriple, error) {
+func (p *NQuadsParser) parseQuotedTriple() (Term, error) {
 	// Expect '<<('
 	if p.pos+2 >= p.length || p.input[p.pos:p.pos+3] != "<<(" {
-		return nil, fmt.Errorf("expected '<<(' at start of quoted triple")
+		return nil, fmt.Errorf("expected '<<(' at start of triple term")
 	}
 	p.pos += 3 // skip '<<('
 
 	p.skipWhitespaceAndComments()
 
-	// Parse subject (can be IRI, blank node, or nested quoted triple)
+	// Parse subject (can be IRI, blank node, or nested triple term)
 	subject, err := p.parseTerm()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing quoted triple subject: %w", err)
+		return nil, fmt.Errorf("error parsing triple term subject: %w", err)
 	}
 
 	// Validate: subject cannot be literal
 	if _, ok := subject.(*Literal); ok {
-		return nil, fmt.Errorf("quoted triple subject cannot be a literal")
+		return nil, fmt.Errorf("triple term subject cannot be a literal")
 	}
 
 	p.skipWhitespaceAndComments()
@@ -540,37 +540,37 @@ func (p *NQuadsParser) parseQuotedTriple() (*QuotedTriple, error) {
 	// Parse predicate (must be IRI)
 	predicate, err := p.parseTerm()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing quoted triple predicate: %w", err)
+		return nil, fmt.Errorf("error parsing triple term predicate: %w", err)
 	}
 
-	// Validate: predicate must be IRI (not blank node, literal, or quoted triple)
+	// Validate: predicate must be IRI (not blank node, literal, or triple term)
 	if _, ok := predicate.(*NamedNode); !ok {
-		return nil, fmt.Errorf("quoted triple predicate must be an IRI, got %T", predicate)
+		return nil, fmt.Errorf("triple term predicate must be an IRI, got %T", predicate)
 	}
 
 	p.skipWhitespaceAndComments()
 
-	// Parse object (can be any term including quoted triple)
+	// Parse object (can be any term including nested triple term)
 	object, err := p.parseTerm()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing quoted triple object: %w", err)
+		return nil, fmt.Errorf("error parsing triple term object: %w", err)
 	}
 
 	p.skipWhitespaceAndComments()
 
 	// Expect ')>>'
 	if p.pos+2 >= p.length || p.input[p.pos:p.pos+3] != ")>>" {
-		return nil, fmt.Errorf("expected ')>>' at end of quoted triple, got: %q", p.input[p.pos:min(p.pos+3, p.length)])
+		return nil, fmt.Errorf("expected ')>>' at end of triple term, got: %q", p.input[p.pos:min(p.pos+3, p.length)])
 	}
 	p.pos += 3 // skip ')>>'
 
-	// Create quoted triple
-	qt, err := NewQuotedTriple(subject, predicate, object)
-	if err != nil {
-		return nil, fmt.Errorf("error creating quoted triple: %w", err)
-	}
-
-	return qt, nil
+	// RDF 1.2: <<( s p o )>> is a TripleTerm, not a QuotedTriple
+	// TripleTerms are used in object position of rdf:reifies statements
+	return &TripleTerm{
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
+	}, nil
 }
 
 // min returns the minimum of two integers
