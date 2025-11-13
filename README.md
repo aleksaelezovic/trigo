@@ -98,9 +98,9 @@ Validated against official W3C test suites:
 ### RDF 1.2 Parsers (Quoted Triples, Annotations & Language Direction)
 - **RDF 1.2 N-Triples:** 100% (99/99 tests) ✅ — Full RDF 1.2 compliance
 - **RDF 1.2 N-Quads:** 100% (114/114 tests) ✅ — Full RDF 1.2 compliance
-- **RDF 1.2 Turtle:** 99.0% (404/408 tests) ✅ — 1 failure is graph isomorphism edge case
-- **RDF 1.2 TriG:** 94.0% (395/420 tests) ✅ — Most failures are graph isomorphism edge cases
-- **RDF 1.2 XML:** 84.3% (173/205 tests) — Baseline support
+- **RDF 1.2 Turtle:** 99.3% (405/408 tests) ✅ — All functional tests passing (3 skipped: C14N)
+- **RDF 1.2 TriG:** 94.0% (395/420 tests) ✅ — Graph isomorphism for nested structures
+- **RDF 1.2 XML:** 86.4% (171/198 tests) ✅ — Language direction support (5/6 tests passing)
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)
