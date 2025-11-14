@@ -769,6 +769,29 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				// Check for rdf:parseType (highest priority)
 				parseTypeAttr := getAttr(elem.Attr, rdfNS, "parseType")
 				if parseTypeAttr != "" {
+					// Special handling for parseType="Triple" in RDF 1.1 mode (ignore it)
+					if parseTypeAttr == "Triple" {
+						elementVersion := getAttr(elem.Attr, rdfNS, "version")
+						if p.rdfVersion != "1.2" && elementVersion != "1.2" {
+							// In RDF 1.1 mode, parseType="Triple" is ignored - skip this property
+							// Consume the content until end element
+							depth := 1
+							for depth > 0 {
+								token, err := decoder.Token()
+								if err != nil {
+									return nil, err
+								}
+								switch token.(type) {
+								case xml.StartElement:
+									depth++
+								case xml.EndElement:
+									depth--
+								}
+							}
+							continue
+						}
+					}
+
 					// Use parsePropertyContent to handle parseType
 					object, nestedQuads, err := p.parsePropertyContent(decoder, elem, &blankNodeCounter)
 					if err != nil {
@@ -1466,6 +1489,137 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 				content.Write(t)
 			}
 		}
+	} else if parseTypeAttr == "Triple" {
+		// RDF 1.2: Parse content as a triple term
+		// Version check is done before calling this function
+
+		// Expect exactly one nested element (rdf:Description)
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Skip any whitespace/comments
+		for {
+			if charData, ok := token.(xml.CharData); ok {
+				// Check if it's only whitespace
+				if strings.TrimSpace(string(charData)) == "" {
+					token, err = decoder.Token()
+					if err != nil {
+						return nil, nil, err
+					}
+					continue
+				}
+				return nil, nil, fmt.Errorf("unexpected text content in rdf:parseType=\"Triple\"")
+			}
+			break
+		}
+
+		startElem, ok := token.(xml.StartElement)
+		if !ok {
+			return nil, nil, fmt.Errorf("expected rdf:Description in rdf:parseType=\"Triple\"")
+		}
+
+		// Parse the Description to get subject
+		var ttSubject Term
+		aboutAttr := getAttr(startElem.Attr, rdfNS, "about")
+		idAttr := getAttr(startElem.Attr, rdfNS, "ID")
+		nodeIDAttr := getAttr(startElem.Attr, rdfNS, "nodeID")
+
+		if aboutAttr != "" {
+			ttSubject = NewNamedNode(p.resolveURI(aboutAttr))
+		} else if idAttr != "" {
+			resolvedID, err := p.resolveID(idAttr)
+			if err != nil {
+				return nil, nil, err
+			}
+			ttSubject = NewNamedNode(resolvedID)
+		} else if nodeIDAttr != "" {
+			ttSubject, err = p.getOrCreateNodeID(nodeIDAttr, blankNodeCounter)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else {
+			// Blank node
+			*blankNodeCounter++
+			ttSubject = NewBlankNode(fmt.Sprintf("b%d", *blankNodeCounter))
+		}
+
+		// Check for property attributes on the Description (e.g., rdf:type)
+		var ttPredicate, ttObject Term
+		foundProperty := false
+
+		// Handle rdf:type or other property attributes on Description
+		for _, attr := range startElem.Attr {
+			if attr.Name.Space == rdfNS {
+				if attr.Name.Local == "type" {
+					// rdf:type as attribute
+					foundProperty = true
+					ttPredicate = NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+					ttObject = NewNamedNode(p.resolveURI(attr.Value))
+					break
+				}
+			}
+		}
+
+		// If no property attribute found, look for property element
+		if !foundProperty {
+			for {
+				token, err := decoder.Token()
+				if err != nil {
+					return nil, nil, err
+				}
+
+				switch t := token.(type) {
+				case xml.StartElement:
+					if foundProperty {
+						return nil, nil, fmt.Errorf("rdf:parseType=\"Triple\" requires exactly one property")
+					}
+					foundProperty = true
+
+					// This is the predicate
+					ttPredicate = NewNamedNode(t.Name.Space + t.Name.Local)
+
+					// Parse the object using parsePropertyContent to handle nested parseType="Triple"
+					objParsed, _, err := p.parsePropertyContent(decoder, t, blankNodeCounter)
+					if err != nil {
+						return nil, nil, err
+					}
+					ttObject = objParsed
+					// Note: nested quads are not used in triple terms (triple terms are atomic)
+
+				case xml.EndElement:
+					// End of Description
+					if !foundProperty {
+						return nil, nil, fmt.Errorf("rdf:parseType=\"Triple\" requires exactly one property")
+					}
+					goto descriptionDone
+				}
+			}
+		}
+	descriptionDone:
+
+		// Consume the end of the Description if we handled property attribute
+		if foundProperty {
+			_, err := decoder.Token()
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+
+		// Consume the end of the parseType="Triple" element
+		_, err = decoder.Token()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Create TripleTerm
+		tripleTerm := &TripleTerm{
+			Subject:   ttSubject,
+			Predicate: ttPredicate,
+			Object:    ttObject,
+		}
+		return tripleTerm, nil, nil
 	} else if parseTypeAttr == "Collection" {
 		// Parse content as a collection (linked list)
 		// Create a chain of blank nodes with rdf:first/rdf:rest
