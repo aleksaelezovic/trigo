@@ -27,6 +27,7 @@ const (
 type SelectQuery struct {
 	Variables []*Variable       // Variables to select (* for all)
 	Distinct  bool              // DISTINCT modifier
+	Reduced   bool              // REDUCED modifier
 	Where     *GraphPattern     // WHERE clause
 	GroupBy   []*GroupCondition // GROUP BY clause
 	Having    []*Filter         // HAVING clause

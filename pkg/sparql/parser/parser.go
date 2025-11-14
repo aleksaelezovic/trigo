@@ -113,9 +113,11 @@ func (p *Parser) parseQueryType() (QueryType, error) {
 func (p *Parser) parseSelect() (*SelectQuery, error) {
 	query := &SelectQuery{}
 
-	// Parse DISTINCT (optional)
+	// Parse DISTINCT or REDUCED (optional, mutually exclusive)
 	if p.matchKeyword("DISTINCT") {
 		query.Distinct = true
+	} else if p.matchKeyword("REDUCED") {
+		query.Reduced = true
 	}
 
 	// Parse variables or *

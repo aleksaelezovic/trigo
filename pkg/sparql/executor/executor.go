@@ -109,6 +109,11 @@ func (e *Executor) executeSelect(query *optimizer.OptimizedQuery) (*SelectResult
 		bindings = applyDistinct(bindings)
 	}
 
+	// Apply REDUCED if specified (relaxed de-duplication)
+	if query.Original.Select.Reduced {
+		bindings = applyReduced(bindings)
+	}
+
 	return &SelectResult{
 		Variables: variables,
 		Bindings:  bindings,
@@ -134,6 +139,15 @@ func applyDistinct(bindings []*store.Binding) []*store.Binding {
 	}
 
 	return unique
+}
+
+// applyReduced is a hint that duplicates MAY be removed but are not required to be removed.
+// Per SPARQL spec, REDUCED permits but does not require elimination of duplicates.
+// For simplicity and correctness, we keep all duplicates (no-op).
+func applyReduced(bindings []*store.Binding) []*store.Binding {
+	// REDUCED is a hint to the query engine that it MAY eliminate duplicates
+	// but is not required to. To ensure test compatibility, we don't remove any.
+	return bindings
 }
 
 // bindingSignature creates a unique string representation of a binding
