@@ -491,6 +491,19 @@ func (p *TriGParser) findTripleBlockEnd(start int) int {
 				// Found the end, return position after the '.'
 				return pos + 1
 			}
+			// Check for annotation block {| ... |}
+			if ch == '{' && pos+1 < p.length && p.input[pos+1] == '|' {
+				// Skip to end of annotation block
+				pos += 2 // skip '{|'
+				for pos < p.length {
+					if pos+1 < p.length && p.input[pos] == '|' && p.input[pos+1] == '}' {
+						pos += 2 // skip '|}'
+						break
+					}
+					pos++
+				}
+				continue
+			}
 			// Check if we hit a graph block or directive (means we went too far)
 			if ch == '{' || ch == '}' {
 				return -1

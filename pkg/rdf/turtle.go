@@ -614,6 +614,9 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 
 					p.skipWhitespaceAndComments()
 				}
+
+				// Skip whitespace before checking for another reifier
+				p.skipWhitespaceAndComments()
 			}
 
 			// Check for comma (more objects with same predicate)
