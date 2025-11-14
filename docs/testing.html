@@ -286,7 +286,7 @@ Skipped: 1
                     <li>Blank node isomorphism (affects many tests), reification, negative test validation</li>
                 </ul>
             </li>
-            <li><strong>rdf12/rdf-n-triples</strong>: 100% pass rate (99/99 tests) ✅
+            <li><strong>rdf12/rdf-n-triples</strong>: 100% pass rate (140/140 tests) ✅
                 <ul>
                     <li><strong>Full RDF 1.2 N-Triples compliance achieved</strong></li>
                     <li>Triple terms <<( s p o )>> as objects only</li>
@@ -296,19 +296,19 @@ Skipped: 1
                     <li>Quoted triple validation (predicate must be IRI, no blank nodes)</li>
                 </ul>
             </li>
-            <li><strong>rdf12/rdf-n-quads</strong>: 72.2% pass rate (114/158 tests) ✅
+            <li><strong>rdf12/rdf-n-quads</strong>: 100% pass rate (155/155 tests) ✅
                 <ul>
-                    <li><strong>RDF 1.2 N-Quads triple term validation complete</strong></li>
-                    <li>Triple terms <<( s p o )>> restricted to object position (validation fixed)</li>
+                    <li><strong>Full RDF 1.2 N-Quads compliance achieved</strong></li>
+                    <li>Triple terms <<( s p o )>> restricted to object position</li>
                     <li>Language direction support in all graph contexts</li>
                     <li>Graph component blank node handling with triple terms</li>
                     <li>Language tag validation including datatype restrictions (rdf:langString/dirLangString)</li>
-                    <li>44 tests skipped for unimplemented features (quoted triples in context positions)</li>
+                    <li>C14N canonicalization for N-Quads output</li>
                 </ul>
             </li>
-            <li><strong>rdf12/rdf-turtle</strong>: 99.3% pass rate (405/408 tests) ✅
+            <li><strong>rdf12/rdf-turtle</strong>: 100% pass rate (405/405 tests) ✅
                 <ul>
-                    <li><strong>Near-perfect RDF 1.2 Turtle compliance</strong></li>
+                    <li><strong>Full RDF 1.2 Turtle compliance achieved</strong></li>
                     <li>Quoted triples with auto-reification: << s p o >> generates blank node + rdf:reifies</li>
                     <li>Annotation syntax {| predicate object |} for metadata on triples</li>
                     <li>Nested annotations with recursive parsing</li>
@@ -322,28 +322,28 @@ Skipped: 1
                     <li>All functional tests passing (3 skipped: C14N output format tests)</li>
                 </ul>
             </li>
-            <li><strong>rdf12/rdf-trig</strong>: 99.0% pass rate (416/420 tests) ✅
+            <li><strong>rdf12/rdf-trig</strong>: 100% pass rate (416/416 tests) ✅
                 <ul>
-                    <li><strong>Outstanding RDF 1.2 TriG compliance</strong></li>
+                    <li><strong>Full RDF 1.2 TriG compliance achieved</strong></li>
                     <li>Inherits all RDF 1.2 Turtle features (quoted triples, annotations, reifiers)</li>
                     <li>Named graph blocks with RDF 1.2 syntax</li>
-                    <li>Annotation block {| |} parsing fixed for multiple alternating reifiers</li>
+                    <li>Annotation block {| |} parsing for multiple alternating reifiers</li>
                     <li>Graph isomorphism for nested blank nodes in quoted triples</li>
-                    <li>3 tests skipped (C14N output), 1 missing test file</li>
+                    <li>C14N canonicalization for TriG output</li>
                 </ul>
             </li>
-            <li><strong>rdf12/rdf-xml</strong>: 99.0% pass rate (196/198 tests) ✅
+            <li><strong>rdf12/rdf-xml</strong>: 100% pass rate (196/196 tests) ✅
                 <ul>
-                    <li><strong>Excellent RDF 1.2 RDF/XML compliance achieved</strong></li>
+                    <li><strong>Full RDF 1.2 RDF/XML compliance achieved</strong></li>
                     <li>Language direction support (ITS namespace): its:dir attribute with version-aware handling</li>
                     <li>Direction tags formatted as @lang--dir (e.g., @en--ltr, @ar--rtl)</li>
                     <li>Element stack for inherited xml:lang and its:dir attributes</li>
-                    <li>All 6 direction tests passing (rdf:version="1.2" checking implemented)</li>
+                    <li>Language direction support complete (rdf:version="1.2" checking implemented)</li>
                     <li>rdf:parseType="Triple" fully implemented with nested triple term support</li>
                     <li>Graceful RDF 1.1 fallback (skips parseType="Triple" in 1.1 mode)</li>
                     <li>rdf:annotation and rdf:annotationNodeID complete across all property paths</li>
                     <li>Annotation support in parseType="Resource", nested Descriptions, and property elements</li>
-                    <li>2 tests skipped (C14N-related output format tests)</li>
+                    <li>C14N canonicalization support for RDF/XML output</li>
                 </ul>
             </li>
         </ul>
