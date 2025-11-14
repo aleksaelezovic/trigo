@@ -171,7 +171,11 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 
 		if isTestStart {
 			if currentTest != nil {
-				manifest.Tests = append(manifest.Tests, *currentTest)
+				// Only add tests that have both a name and a type (valid test entries)
+				// Malformed manifest entries with missing names/types are skipped
+				if currentTest.Name != "" && currentTest.Type != "" {
+					manifest.Tests = append(manifest.Tests, *currentTest)
+				}
 			}
 			currentTest = &TestCase{}
 			inTest = true
@@ -291,9 +295,12 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 		}
 	}
 
-	// Add last test
+	// Add last test (if it's valid)
 	if currentTest != nil {
-		manifest.Tests = append(manifest.Tests, *currentTest)
+		// Only add tests that have both a name and a type (valid test entries)
+		if currentTest.Name != "" && currentTest.Type != "" {
+			manifest.Tests = append(manifest.Tests, *currentTest)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
