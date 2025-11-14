@@ -186,7 +186,7 @@ func (p *NQuadsParser) parseQuad() (*Quad, error) {
 	}
 
 	// RDF 1.2 N-Quads: Triple terms (quoted triples) cannot be used as subjects
-	if _, ok := subject.(*QuotedTriple); ok {
+	if _, ok := subject.(*TripleTerm); ok {
 		return nil, fmt.Errorf("triple terms cannot be used as subjects in N-Quads")
 	}
 
@@ -199,7 +199,7 @@ func (p *NQuadsParser) parseQuad() (*Quad, error) {
 	}
 
 	// RDF 1.2 N-Quads: Triple terms (quoted triples) cannot be used as predicates
-	if _, ok := predicate.(*QuotedTriple); ok {
+	if _, ok := predicate.(*TripleTerm); ok {
 		return nil, fmt.Errorf("triple terms cannot be used as predicates in N-Quads")
 	}
 
