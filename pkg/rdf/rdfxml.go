@@ -245,6 +245,18 @@ func generateReificationQuads(statementID string, subject, predicate, object Ter
 	}
 }
 
+// generateAnnotationQuad generates the annotation quad (RDF 1.2)
+// reifier rdf:reifies <<(s p o)>>
+func generateAnnotationQuad(reifier Term, subject, predicate, object Term) *Quad {
+	tripleTerm := &TripleTerm{
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
+	}
+	rdfReifies := NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies")
+	return NewQuad(reifier, rdfReifies, tripleTerm, NewDefaultGraph())
+}
+
 // resolveID resolves an rdf:ID value against the current base
 // It also validates that the ID is a valid XML NCName (no colons) and checks for duplicates
 func (p *RDFXMLParser) resolveID(id string) (string, error) {
@@ -812,6 +824,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						quads = append(quads, reificationQuads...)
 					}
 
+					// Check for rdf:annotation (RDF 1.2 annotations)
+					if annotationAttr := getAttr(elem.Attr, rdfNS, "annotation"); annotationAttr != "" {
+						reifier := NewNamedNode(p.resolveURI(annotationAttr))
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
+					}
+
+					// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+					if annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+						reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
+					}
+
 					continue
 				}
 
@@ -889,6 +918,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						quads = append(quads, reificationQuads...)
 					}
 
+					// Check for rdf:annotation (RDF 1.2 annotations)
+					if annotationAttr := getAttr(elem.Attr, rdfNS, "annotation"); annotationAttr != "" {
+						reifier := NewNamedNode(p.resolveURI(annotationAttr))
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
+					}
+
+					// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+					if annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+						reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
+					}
+
 					// Consume the end element
 					for {
 						token, err := decoder.Token()
@@ -923,6 +969,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						}
 						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
 						quads = append(quads, reificationQuads...)
+					}
+
+					// Check for rdf:annotation (RDF 1.2 annotations)
+					if annotationAttr := getAttr(elem.Attr, rdfNS, "annotation"); annotationAttr != "" {
+						reifier := NewNamedNode(p.resolveURI(annotationAttr))
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
+					}
+
+					// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+					if annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+						reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+						quads = append(quads, annotationQuad)
 					}
 
 					// Consume the end element
@@ -979,6 +1042,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						}
 						reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), blankNode)
 						quads = append(quads, reificationQuads...)
+					}
+
+					// Check for rdf:annotation (RDF 1.2 annotations)
+					if annotationAttr := getAttr(elem.Attr, rdfNS, "annotation"); annotationAttr != "" {
+						reifier := NewNamedNode(p.resolveURI(annotationAttr))
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), blankNode)
+						quads = append(quads, annotationQuad)
+					}
+
+					// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+					if annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+						reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+						if err != nil {
+							return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+						}
+						annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), blankNode)
+						quads = append(quads, annotationQuad)
 					}
 
 					// Create triples for property attributes
@@ -1042,8 +1122,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 					}
 				}
 
-				// Capture rdf:ID early before entering nested loops (elem.Attr may not be accessible later)
+				// Capture rdf:ID and annotation attrs early before entering nested loops (elem.Attr may not be accessible later)
 				propertyIDAttr := getAttr(elem.Attr, rdfNS, "ID")
+				annotationAttr := getAttr(elem.Attr, rdfNS, "annotation")
+				annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID")
 
 				// Read the text content
 				var textContent strings.Builder
@@ -1097,6 +1179,23 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 							quads = append(quads, reificationQuads...)
 						}
 
+						// Check for rdf:annotation (RDF 1.2 annotations)
+						if annotationAttr != "" {
+							reifier := NewNamedNode(p.resolveURI(annotationAttr))
+							annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+							quads = append(quads, annotationQuad)
+						}
+
+						// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+						if annotationNodeIDAttr != "" {
+							reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+							if err != nil {
+								return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+							}
+							annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+							quads = append(quads, annotationQuad)
+						}
+
 						goto propertyDone
 					case xml.StartElement:
 						// Nested element (blank node or another Description)
@@ -1146,6 +1245,24 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 								reificationQuads := generateReificationQuads(statementID, currentSubject, NewNamedNode(predicate), object)
 								quads = append(quads, reificationQuads...)
 							}
+
+							// Check for rdf:annotation (RDF 1.2 annotations)
+							if annotationAttr != "" {
+								reifier := NewNamedNode(p.resolveURI(annotationAttr))
+								annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+								quads = append(quads, annotationQuad)
+							}
+
+							// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+							if annotationNodeIDAttr != "" {
+								reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, &blankNodeCounter)
+								if err != nil {
+									return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+								}
+								annotationQuad := generateAnnotationQuad(reifier, currentSubject, NewNamedNode(predicate), object)
+								quads = append(quads, annotationQuad)
+							}
+
 							goto propertyDone
 						}
 					}
@@ -1376,6 +1493,23 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 					}
 					reificationQuads := generateReificationQuads(statementID, blankNode, NewNamedNode(predicate), object)
 					quads = append(quads, reificationQuads...)
+				}
+
+				// Check for rdf:annotation (RDF 1.2 annotations)
+				if annotationAttr := getAttr(t.Attr, rdfNS, "annotation"); annotationAttr != "" {
+					reifier := NewNamedNode(p.resolveURI(annotationAttr))
+					annotationQuad := generateAnnotationQuad(reifier, blankNode, NewNamedNode(predicate), object)
+					quads = append(quads, annotationQuad)
+				}
+
+				// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+				if annotationNodeIDAttr := getAttr(t.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+					reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, blankNodeCounter)
+					if err != nil {
+						return nil, nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					annotationQuad := generateAnnotationQuad(reifier, blankNode, NewNamedNode(predicate), object)
+					quads = append(quads, annotationQuad)
 				}
 
 			case xml.EndElement:
@@ -1941,6 +2075,23 @@ func (p *RDFXMLParser) parseNestedDescription(decoder *xml.Decoder, subject Term
 					}
 					reificationQuads := generateReificationQuads(statementID, subject, NewNamedNode(predicate), object)
 					quads = append(quads, reificationQuads...)
+				}
+
+				// Check for rdf:annotation (RDF 1.2 annotations)
+				if annotationAttr := getAttr(elem.Attr, rdfNS, "annotation"); annotationAttr != "" {
+					reifier := NewNamedNode(p.resolveURI(annotationAttr))
+					annotationQuad := generateAnnotationQuad(reifier, subject, NewNamedNode(predicate), object)
+					quads = append(quads, annotationQuad)
+				}
+
+				// Check for rdf:annotationNodeID (RDF 1.2 annotations with blank node)
+				if annotationNodeIDAttr := getAttr(elem.Attr, rdfNS, "annotationNodeID"); annotationNodeIDAttr != "" {
+					reifier, err := p.getOrCreateNodeID(annotationNodeIDAttr, blankNodeCounter)
+					if err != nil {
+						return nil, fmt.Errorf("invalid RDF/XML: %w", err)
+					}
+					annotationQuad := generateAnnotationQuad(reifier, subject, NewNamedNode(predicate), object)
+					quads = append(quads, annotationQuad)
 				}
 
 				continue
