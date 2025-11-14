@@ -28,6 +28,7 @@ type RDFXMLParser struct {
 	usedIDs      map[string]bool       // Track used rdf:ID values to detect duplicates
 	nodeIDMap    map[string]*BlankNode // Track rdf:nodeID to blank node mappings
 	namespaces   map[string]string     // Track in-scope namespace declarations (prefix -> URI)
+	rdfVersion   string                // RDF version from rdf:version attribute (e.g., "1.2")
 }
 
 // NewRDFXMLParser creates a new RDF/XML parser
@@ -467,6 +468,8 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				if !seenRootRDF {
 					// First rdf:RDF - this is the root, skip it
 					seenRootRDF = true
+					// Check for rdf:version attribute to determine RDF version
+					p.rdfVersion = getAttr(elem.Attr, rdfNS, "version")
 					continue
 				}
 				// Nested rdf:RDF - this is forbidden, validate it to get the error
@@ -651,11 +654,18 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 						// rdf:type value should be resolved as an IRI
 						object = NewNamedNode(p.resolveURI(attr.Value))
 					} else if currentLang != "" {
-						// Language-tagged literal with optional direction
-						object = &Literal{
-							Value:     attr.Value,
-							Language:  currentLang,
-							Direction: currentDir,
+						// Language-tagged literal with optional direction (RDF 1.2 only)
+						if p.rdfVersion == "1.2" && currentDir != "" {
+							object = &Literal{
+								Value:     attr.Value,
+								Language:  currentLang,
+								Direction: currentDir,
+							}
+						} else {
+							object = &Literal{
+								Value:    attr.Value,
+								Language: currentLang,
+							}
 						}
 					} else {
 						// Plain literal
@@ -992,6 +1002,10 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 				langAttr := getAttrAny(elem.Attr, "lang")
 				dirAttr := getAttr(elem.Attr, itsNS, "dir")
 
+				// Check for rdf:version on this property element (can override document-level version)
+				elementVersion := getAttr(elem.Attr, rdfNS, "version")
+				useDirection := (p.rdfVersion == "1.2" || elementVersion == "1.2")
+
 				// Inherit lang/dir from element stack if not defined locally
 				if langAttr == "" || dirAttr == "" {
 					if len(elementStack) > 0 {
@@ -1029,11 +1043,18 @@ func (p *RDFXMLParser) Parse(reader io.Reader) ([]*Quad, error) {
 								Datatype: NewNamedNode(datatypeAttr),
 							}
 						} else if langAttr != "" {
-							// Language-tagged literal with optional direction
-							object = &Literal{
-								Value:     textContent.String(),
-								Language:  langAttr,
-								Direction: dirAttr,
+							// Language-tagged literal with optional direction (RDF 1.2 only)
+							if useDirection && dirAttr != "" {
+								object = &Literal{
+									Value:     textContent.String(),
+									Language:  langAttr,
+									Direction: dirAttr,
+								}
+							} else {
+								object = &Literal{
+									Value:    textContent.String(),
+									Language: langAttr,
+								}
 							}
 						} else {
 							// Plain literal
@@ -1642,6 +1663,10 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 	// Check for its:dir attribute
 	dirAttr := getAttr(elem.Attr, itsNS, "dir")
 
+	// Check for rdf:version on this element (can override document-level version)
+	elementVersion := getAttr(elem.Attr, rdfNS, "version")
+	useDirection := (p.rdfVersion == "1.2" || elementVersion == "1.2")
+
 	// Read the text content
 	var textContent strings.Builder
 	for {
@@ -1663,11 +1688,18 @@ func (p *RDFXMLParser) parsePropertyContent(decoder *xml.Decoder, elem xml.Start
 					Datatype: NewNamedNode(datatypeAttr),
 				}
 			} else if langAttr != "" {
-				// Language-tagged literal with optional direction
-				object = &Literal{
-					Value:     textContent.String(),
-					Language:  langAttr,
-					Direction: dirAttr,
+				// Language-tagged literal with optional direction (RDF 1.2 only)
+				if useDirection && dirAttr != "" {
+					object = &Literal{
+						Value:     textContent.String(),
+						Language:  langAttr,
+						Direction: dirAttr,
+					}
+				} else {
+					object = &Literal{
+						Value:    textContent.String(),
+						Language: langAttr,
+					}
 				}
 			} else {
 				// Plain literal
