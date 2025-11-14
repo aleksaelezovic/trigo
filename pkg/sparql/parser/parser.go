@@ -913,22 +913,27 @@ func (p *Parser) parseFilter() (*Filter, error) {
 		// If not EXISTS, fall through to normal expression parsing
 	}
 
-	if p.peek() != '(' {
-		return nil, fmt.Errorf("expected '(' after FILTER")
-	}
-	p.advance() // skip '('
-
 	// Parse the expression
+	// SPARQL allows both FILTER (expr) and FILTER funcCall(...)
+	// If there's a '(', it's FILTER (expr) and we need to consume the outer parens
+	// Otherwise, the expression itself (like a function call) provides delimiters
+	needsOuterParens := p.peek() == '('
+	if needsOuterParens {
+		p.advance() // skip '('
+	}
+
 	expr, err := p.parseExpression()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing FILTER expression: %w", err)
 	}
 
-	p.skipWhitespace()
-	if p.peek() != ')' {
-		return nil, fmt.Errorf("expected ')' after FILTER expression")
+	if needsOuterParens {
+		p.skipWhitespace()
+		if p.peek() != ')' {
+			return nil, fmt.Errorf("expected ')' after FILTER expression")
+		}
+		p.advance() // skip ')'
 	}
-	p.advance() // skip ')'
 
 	return &Filter{Expression: expr}, nil
 }
@@ -1727,13 +1732,27 @@ func (p *Parser) parsePrimaryExpression() (Expression, error) {
 func (p *Parser) parseFunctionCall() (Expression, error) {
 	p.skipWhitespace()
 
-	// Read function name
+	// Read function name (can be identifier or prefixed name like xsd:string)
 	funcName := p.readWhile(func(c byte) bool {
-		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == ':'
 	})
 
 	if funcName == "" {
 		return nil, fmt.Errorf("expected function name")
+	}
+
+	// Expand prefixed name to full IRI if it contains a colon
+	if strings.Contains(funcName, ":") {
+		// This is a prefixed name - expand it using current prefixes
+		parts := strings.SplitN(funcName, ":", 2)
+		if len(parts) == 2 {
+			prefix := parts[0]
+			localName := parts[1]
+			if ns, ok := p.prefixes[prefix]; ok {
+				funcName = ns + localName
+			}
+			// If prefix not found, keep as-is (may be built-in like xsd:string)
+		}
 	}
 
 	p.skipWhitespace()

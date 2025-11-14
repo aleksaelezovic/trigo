@@ -2,6 +2,8 @@ package executor
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/evaluator"
@@ -102,10 +104,68 @@ func (e *Executor) executeSelect(query *optimizer.OptimizedQuery) (*SelectResult
 		variables = extractVariablesFromGraphPattern(query.Original.Select.Where)
 	}
 
+	// Apply DISTINCT if specified
+	if query.Original.Select.Distinct {
+		bindings = applyDistinct(bindings)
+	}
+
 	return &SelectResult{
 		Variables: variables,
 		Bindings:  bindings,
 	}, nil
+}
+
+// applyDistinct removes duplicate bindings
+func applyDistinct(bindings []*store.Binding) []*store.Binding {
+	if len(bindings) == 0 {
+		return bindings
+	}
+
+	seen := make(map[string]bool)
+	var unique []*store.Binding
+
+	for _, binding := range bindings {
+		// Create a signature for this binding
+		sig := bindingSignature(binding)
+		if !seen[sig] {
+			seen[sig] = true
+			unique = append(unique, binding)
+		}
+	}
+
+	return unique
+}
+
+// bindingSignature creates a unique string representation of a binding
+func bindingSignature(binding *store.Binding) string {
+	var parts []string
+	for varName, term := range binding.Vars {
+		parts = append(parts, varName+"="+termSignature(term))
+	}
+	// Sort to ensure consistent ordering
+	sort.Strings(parts)
+	return strings.Join(parts, ";")
+}
+
+// termSignature creates a unique string representation of an RDF term
+func termSignature(term rdf.Term) string {
+	switch t := term.(type) {
+	case *rdf.NamedNode:
+		return "iri:" + t.IRI
+	case *rdf.BlankNode:
+		return "blank:" + t.ID
+	case *rdf.Literal:
+		sig := "lit:" + t.Value
+		if t.Language != "" {
+			sig += "@" + t.Language
+		}
+		if t.Datatype != nil {
+			sig += "^^" + t.Datatype.IRI
+		}
+		return sig
+	default:
+		return "unknown:" + fmt.Sprintf("%v", term)
+	}
 }
 
 // executeAsk executes an ASK query

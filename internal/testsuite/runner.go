@@ -1,6 +1,7 @@
 package testsuite
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -398,6 +399,7 @@ func (r *TestRunner) clearStore() error {
 
 // loadTestData loads test data files into the store
 func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error {
+	// Load default graph data
 	for _, dataFile := range test.Data {
 		dataPath := manifest.ResolveFile(dataFile)
 		dataBytes, err := os.ReadFile(dataPath) // #nosec G304 - test suite legitimately reads test data files
@@ -412,10 +414,43 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 			return fmt.Errorf("failed to parse Turtle data in %s: %w", dataFile, err)
 		}
 
-		// Insert triples
+		// Insert triples into default graph
 		for _, triple := range triples {
 			if err := r.store.InsertTriple(triple); err != nil {
 				return fmt.Errorf("failed to insert triple: %w", err)
+			}
+		}
+	}
+
+	// Load named graph data
+	for _, graphData := range test.GraphData {
+		dataPath := manifest.ResolveFile(graphData.File)
+		dataBytes, err := os.ReadFile(dataPath) // #nosec G304 - test suite legitimately reads test data files
+		if err != nil {
+			return fmt.Errorf("failed to read graph data file %s: %w", graphData.File, err)
+		}
+
+		// Parse Turtle data
+		turtleParser := rdf.NewTurtleParser(string(dataBytes))
+		triples, err := turtleParser.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse Turtle data in %s: %w", graphData.File, err)
+		}
+
+		// Convert file path to IRI (W3C test suite convention)
+		// The graph name is the file's IRI
+		graphIRI := manifest.fileToIRI(graphData.File)
+
+		// Insert triples into named graph
+		for _, triple := range triples {
+			quad := &rdf.Quad{
+				Subject:   triple.Subject,
+				Predicate: triple.Predicate,
+				Object:    triple.Object,
+				Graph:     rdf.NewNamedNode(graphIRI),
+			}
+			if err := r.store.InsertQuad(quad); err != nil {
+				return fmt.Errorf("failed to insert quad into graph %s: %w", graphIRI, err)
 			}
 		}
 	}
@@ -441,13 +476,55 @@ func (r *TestRunner) resultsToBindings(results *executor.SelectResult) ([]map[st
 // loadExpectedResults loads expected results from file
 func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase) ([]map[string]rdf.Term, error) {
 	resultPath := manifest.ResolveFile(test.Result)
+
+	// Determine format based on file extension
+	if strings.HasSuffix(resultPath, ".ttl") {
+		// Parse Turtle result set format
+		resultBytes, err := os.ReadFile(resultPath) // #nosec G304 - test suite legitimately reads test result files
+		if err != nil {
+			return nil, fmt.Errorf("failed to read result file: %w", err)
+		}
+
+		// Set base URI for the result file (needed for relative IRIs)
+		baseURI := r.filePathToURI(resultPath)
+		return ParseTurtleResultsWithBase(string(resultBytes), baseURI)
+	}
+
+	if strings.HasSuffix(resultPath, ".rdf") {
+		// Parse RDF/XML result set format (uses same rs:ResultSet vocabulary)
+		resultBytes, err := os.ReadFile(resultPath) // #nosec G304 - test suite legitimately reads test result files
+		if err != nil {
+			return nil, fmt.Errorf("failed to read result file: %w", err)
+		}
+
+		// Parse as RDF/XML to get quads
+		parser := rdf.NewRDFXMLParser()
+		quads, err := parser.Parse(bytes.NewReader(resultBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse RDF/XML: %w", err)
+		}
+
+		// Convert quads to triples (result sets don't use named graphs)
+		triples := make([]*rdf.Triple, len(quads))
+		for i, quad := range quads {
+			triples[i] = &rdf.Triple{
+				Subject:   quad.Subject,
+				Predicate: quad.Predicate,
+				Object:    quad.Object,
+			}
+		}
+
+		// Convert triples to result set (same logic as Turtle results)
+		return parseResultSetFromTriples(triples)
+	}
+
+	// Parse SPARQL XML results (.srx format)
 	resultFile, err := os.Open(resultPath) // #nosec G304 - test suite legitimately reads test result files
 	if err != nil {
 		return nil, fmt.Errorf("failed to open result file: %w", err)
 	}
 	defer resultFile.Close()
 
-	// Parse SPARQL XML results
 	xmlResults, err := results.ParseXMLResults(resultFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse XML results: %w", err)

@@ -265,10 +265,33 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 		}
 
 		// Parse data files
-		if strings.Contains(line, "qt:data") {
-			if parts := strings.Split(line, "<"); len(parts) >= 2 {
-				if parts2 := strings.Split(parts[1], ">"); len(parts2) >= 1 {
-					currentTest.Data = append(currentTest.Data, parts2[0])
+		if strings.Contains(line, "qt:data") && !strings.Contains(line, "qt:graphData") {
+			// Find qt:data in the line and extract the <> value after it
+			if idx := strings.Index(line, "qt:data"); idx != -1 {
+				remaining := line[idx+7:] // Skip past "qt:data"
+				if parts := strings.Split(remaining, "<"); len(parts) >= 2 {
+					if parts2 := strings.Split(parts[1], ">"); len(parts2) >= 1 {
+						currentTest.Data = append(currentTest.Data, parts2[0])
+					}
+				}
+			}
+		}
+
+		// Parse named graph data files
+		if strings.Contains(line, "qt:graphData") {
+			// Find qt:graphData in the line and extract the <> value after it
+			if idx := strings.Index(line, "qt:graphData"); idx != -1 {
+				remaining := line[idx+12:] // Skip past "qt:graphData"
+				if parts := strings.Split(remaining, "<"); len(parts) >= 2 {
+					if parts2 := strings.Split(parts[1], ">"); len(parts2) >= 1 {
+						// For now, use the file path as both name and file
+						// The actual graph name will be the file's IRI
+						graphFile := parts2[0]
+						currentTest.GraphData = append(currentTest.GraphData, GraphData{
+							Name: graphFile, // Will be converted to IRI later
+							File: graphFile,
+						})
+					}
 				}
 			}
 		}
@@ -374,4 +397,17 @@ func (m *TestManifest) ResolveFile(relPath string) string {
 		return relPath
 	}
 	return filepath.Join(m.BaseURI, relPath)
+}
+
+// fileToIRI converts a file path to an IRI following W3C test suite conventions
+func (m *TestManifest) fileToIRI(relPath string) string {
+	// Get the absolute path
+	absPath := m.ResolveFile(relPath)
+	// Convert file path to file:// IRI
+	// Replace backslashes with forward slashes for Windows compatibility
+	absPath = filepath.ToSlash(absPath)
+	if !strings.HasPrefix(absPath, "/") {
+		absPath = "/" + absPath
+	}
+	return "file://" + absPath
 }

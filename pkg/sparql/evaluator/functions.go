@@ -3,6 +3,7 @@ package evaluator
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
@@ -52,6 +53,12 @@ func (e *Evaluator) evaluateFunctionCall(expr *parser.FunctionCallExpression, bi
 		return e.evaluateStrStarts(expr.Arguments, binding)
 	case "STRENDS":
 		return e.evaluateStrEnds(expr.Arguments, binding)
+	case "REGEX":
+		return e.evaluateRegex(expr.Arguments, binding)
+	case "LANGMATCHES":
+		return e.evaluateLangMatches(expr.Arguments, binding)
+	case "SAMETERM":
+		return e.evaluateSameTerm(expr.Arguments, binding)
 
 	// Numeric functions
 	case "ABS":
@@ -64,6 +71,11 @@ func (e *Evaluator) evaluateFunctionCall(expr *parser.FunctionCallExpression, bi
 		return e.evaluateRound(expr.Arguments, binding)
 
 	default:
+		// Check if it's a type casting function (IRI-based)
+		if strings.HasPrefix(funcName, "HTTP://WWW.W3.ORG/2001/XMLSCHEMA#") {
+			datatype := funcName // Full IRI
+			return e.evaluateTypeCast(expr.Arguments, binding, datatype)
+		}
 		return nil, fmt.Errorf("unsupported function: %s", funcName)
 	}
 }
@@ -497,6 +509,224 @@ func (e *Evaluator) evaluateRound(args []parser.Expression, binding *store.Bindi
 	}
 
 	return rdf.NewIntegerLiteral(int64(math.Round(val))), nil
+}
+
+func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Binding) (rdf.Term, error) {
+	// REGEX(text, pattern) or REGEX(text, pattern, flags)
+	if len(args) < 2 || len(args) > 3 {
+		return nil, fmt.Errorf("REGEX requires 2 or 3 arguments")
+	}
+
+	// Evaluate text argument
+	textTerm, err := e.Evaluate(args[0], binding)
+	if err != nil {
+		return nil, err
+	}
+	text, err := e.extractString(textTerm)
+	if err != nil {
+		return nil, fmt.Errorf("REGEX text argument: %w", err)
+	}
+
+	// Evaluate pattern argument
+	patternTerm, err := e.Evaluate(args[1], binding)
+	if err != nil {
+		return nil, err
+	}
+	pattern, err := e.extractString(patternTerm)
+	if err != nil {
+		return nil, fmt.Errorf("REGEX pattern argument: %w", err)
+	}
+
+	// Evaluate flags argument (optional)
+	var flags string
+	if len(args) == 3 {
+		flagsTerm, err := e.Evaluate(args[2], binding)
+		if err != nil {
+			return nil, err
+		}
+		flags, err = e.extractString(flagsTerm)
+		if err != nil {
+			return nil, fmt.Errorf("REGEX flags argument: %w", err)
+		}
+	}
+
+	// Process flags
+	// SPARQL flags: i (case-insensitive), m (multiline), s (dotall), x (extended/ignore whitespace)
+	// Go regexp uses different syntax:
+	//   - i: prepend (?i) to pattern
+	//   - m: prepend (?m) to pattern (changes ^ and $ behavior)
+	//   - s: prepend (?s) to pattern (. matches newlines)
+	//   - x: prepend (?x) to pattern (ignore whitespace and allow comments)
+	var flagPrefix string
+	if flags != "" {
+		flagPrefix = "(?"
+		for _, flag := range flags {
+			switch flag {
+			case 'i', 'm', 's', 'x':
+				flagPrefix += string(flag)
+			case 'q':
+				// q is not standard in Go regexp, treat as no-op
+				// In some regex engines, 'q' means literal/quote mode
+				// For now, ignore it
+			default:
+				return nil, fmt.Errorf("unsupported REGEX flag: %c", flag)
+			}
+		}
+		flagPrefix += ")"
+		pattern = flagPrefix + pattern
+	}
+
+	// Compile and match
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid regex pattern: %w", err)
+	}
+
+	matched := re.MatchString(text)
+	return rdf.NewBooleanLiteral(matched), nil
+}
+
+func (e *Evaluator) evaluateLangMatches(args []parser.Expression, binding *store.Binding) (rdf.Term, error) {
+	// langMatches(language-tag, language-range)
+	if len(args) != 2 {
+		return nil, fmt.Errorf("langMatches requires exactly 2 arguments")
+	}
+
+	// Evaluate language tag argument
+	tagTerm, err := e.Evaluate(args[0], binding)
+	if err != nil {
+		return nil, err
+	}
+	tag, err := e.extractString(tagTerm)
+	if err != nil {
+		return nil, fmt.Errorf("langMatches tag argument: %w", err)
+	}
+
+	// Evaluate language range argument
+	rangeTerm, err := e.Evaluate(args[1], binding)
+	if err != nil {
+		return nil, err
+	}
+	langRange, err := e.extractString(rangeTerm)
+	if err != nil {
+		return nil, fmt.Errorf("langMatches range argument: %w", err)
+	}
+
+	// Simplified language matching per SPARQL spec:
+	// - "*" matches any non-empty tag
+	// - Exact match (case-insensitive)
+	// - Prefix match: "de" matches "de-DE", "de-CH", etc.
+	tag = strings.ToLower(tag)
+	langRange = strings.ToLower(langRange)
+
+	// "*" matches any non-empty language tag
+	if langRange == "*" {
+		return rdf.NewBooleanLiteral(tag != ""), nil
+	}
+
+	// Exact match
+	if tag == langRange {
+		return rdf.NewBooleanLiteral(true), nil
+	}
+
+	// Prefix match: range must be followed by "-"
+	// e.g., "de" matches "de-DE" but not "deu"
+	if strings.HasPrefix(tag, langRange+"-") {
+		return rdf.NewBooleanLiteral(true), nil
+	}
+
+	return rdf.NewBooleanLiteral(false), nil
+}
+
+func (e *Evaluator) evaluateSameTerm(args []parser.Expression, binding *store.Binding) (rdf.Term, error) {
+	// sameTerm(term1, term2) - strict equality (no type coercion)
+	if len(args) != 2 {
+		return nil, fmt.Errorf("sameTerm requires exactly 2 arguments")
+	}
+
+	term1, err := e.Evaluate(args[0], binding)
+	if err != nil {
+		return nil, err
+	}
+
+	term2, err := e.Evaluate(args[1], binding)
+	if err != nil {
+		return nil, err
+	}
+
+	// sameTerm is true only if the terms are exactly the same
+	// (same type, same value, same language tag, same datatype)
+	result := e.termsEqual(term1, term2)
+	return rdf.NewBooleanLiteral(result), nil
+}
+
+func (e *Evaluator) evaluateTypeCast(args []parser.Expression, binding *store.Binding, datatypeIRI string) (rdf.Term, error) {
+	// Type casting: xsd:type(value)
+	if len(args) != 1 {
+		return nil, fmt.Errorf("type cast requires exactly 1 argument")
+	}
+
+	term, err := e.Evaluate(args[0], binding)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract the value to cast
+	var value string
+	switch t := term.(type) {
+	case *rdf.Literal:
+		value = t.Value
+	case *rdf.NamedNode:
+		value = t.IRI
+	case *rdf.BlankNode:
+		return nil, fmt.Errorf("cannot cast blank node to %s", datatypeIRI)
+	default:
+		return nil, fmt.Errorf("cannot cast term type %T to %s", term, datatypeIRI)
+	}
+
+	// Create a new literal with the target datatype
+	// The value string is kept as-is (SPARQL spec allows this for type casting)
+	return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+}
+
+// termsEqual checks strict RDF term equality
+func (e *Evaluator) termsEqual(t1, t2 rdf.Term) bool {
+	// Compare types first
+	if t1.Type() != t2.Type() {
+		return false
+	}
+
+	switch v1 := t1.(type) {
+	case *rdf.NamedNode:
+		v2 := t2.(*rdf.NamedNode)
+		return v1.IRI == v2.IRI
+
+	case *rdf.BlankNode:
+		v2 := t2.(*rdf.BlankNode)
+		return v1.ID == v2.ID
+
+	case *rdf.Literal:
+		v2 := t2.(*rdf.Literal)
+		// Value must match
+		if v1.Value != v2.Value {
+			return false
+		}
+		// Language tag must match
+		if v1.Language != v2.Language {
+			return false
+		}
+		// Datatype must match
+		if v1.Datatype == nil && v2.Datatype == nil {
+			return true
+		}
+		if v1.Datatype == nil || v2.Datatype == nil {
+			return false
+		}
+		return v1.Datatype.IRI == v2.Datatype.IRI
+
+	default:
+		return false
+	}
 }
 
 // Helper function
