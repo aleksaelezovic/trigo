@@ -363,7 +363,9 @@ func (p *NQuadsParser) parseBlankNode() (Term, error) {
 	start := p.pos
 	for p.pos < p.length {
 		ch := p.input[p.pos]
-		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '.' || ch == '<' {
+		// Stop at whitespace, statement terminator, or special delimiters
+		// ')' is needed for triple terms: <<(_:label ...)>>
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '.' || ch == '<' || ch == ')' {
 			break
 		}
 		p.pos++

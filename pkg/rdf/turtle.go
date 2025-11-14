@@ -670,6 +670,11 @@ func (p *TurtleParser) parseAnnotation(subject, predicate, object Term) ([]*Trip
 
 	p.skipWhitespaceAndComments()
 
+	// RDF 1.2: Empty annotations are not allowed - must have at least one predicate-object pair
+	if strings.HasPrefix(p.input[p.pos:], "|}") {
+		return nil, fmt.Errorf("empty annotation blocks are not allowed")
+	}
+
 	// Generate blank node for the reifier
 	reifier := p.newBlankNode()
 
@@ -687,7 +692,6 @@ func (p *TurtleParser) parseAnnotation(subject, predicate, object Term) ([]*Trip
 	triples = append(triples, reifiesTriple)
 
 	// Parse annotation predicate-object pairs (like property list syntax)
-	// Empty annotation {||} is allowed
 	if p.pos < p.length && !strings.HasPrefix(p.input[p.pos:], "|}") {
 		for {
 			p.skipWhitespaceAndComments()
