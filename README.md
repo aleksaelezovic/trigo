@@ -98,18 +98,18 @@ Validated against official W3C test suites:
 **🎉 RDF 1.1 Total: 100% (992/992 tests) — Full W3C Compliance Achieved!**
 
 ### RDF 1.2 Parsers (Industry-Leading Support)
-- **RDF 1.2 N-Triples:** 100% (99/99 parsing tests) ✅ — 44 C14N tests skipped
-- **RDF 1.2 N-Quads:** 100% (114/114 parsing tests) ✅ — 44 C14N tests skipped
+- **RDF 1.2 N-Triples:** 97.9% (140/143 tests) ✅ — 3 triple term tests skipped
+- **RDF 1.2 N-Quads:** 98.1% (155/158 tests) ✅ — 3 triple term tests skipped
 - **RDF 1.2 Turtle:** 99.3% (405/408 tests) ✅ — 3 non-parsing tests skipped
 - **RDF 1.2 TriG:** 99.0% (416/420 tests) ✅ — 4 non-parsing tests skipped
 - **RDF 1.2 RDF/XML:** 99.0% (196/198 tests) ✅ — 2 non-parsing tests skipped
 
-**🚀 RDF 1.2 Total: 100% parsing compliance (1,230/1,230 parsing tests) — 97 C14N/output tests skipped**
+**🚀 RDF 1.2 Total: 98.8% (1,312/1,327 tests) — 15 tests skipped (6 triple terms, 9 annotations)**
 
 ### Combined RDF Compliance
-**Overall: 100% (2,222/2,222 runnable parsing tests) — ZERO failures across all RDF tests! 🎉**
+**Overall: 99.3% (2,304/2,319 tests) — ZERO test failures! 🎉**
 
-*Note: 97 skipped tests are C14N (canonicalization) tests that validate output formatting rather than parsing capability. All parsing functionality is fully compliant.*
+*Note: 15 skipped tests require features under development: triple terms (RDF-star quoted triples) and annotation properties. All other RDF 1.1/1.2 functionality including C14N canonicalization is fully compliant.*
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)

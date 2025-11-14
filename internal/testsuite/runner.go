@@ -131,11 +131,15 @@ func (r *TestRunner) runTest(manifest *TestManifest, test *TestCase) TestResult 
 		return r.runRDFPositiveSyntaxTest(manifest, test, "ntriples")
 	case TestTypeNTriplesNegativeSyntax:
 		return r.runRDFNegativeSyntaxTest(manifest, test, "ntriples")
+	case TestTypeNTriplesPositiveC14N:
+		return r.runC14NTest(manifest, test, "ntriples")
 	// RDF N-Quads tests
 	case TestTypeNQuadsPositiveSyntax:
 		return r.runRDFPositiveSyntaxTest(manifest, test, "nquads")
 	case TestTypeNQuadsNegativeSyntax:
 		return r.runRDFNegativeSyntaxTest(manifest, test, "nquads")
+	case TestTypeNQuadsPositiveC14N:
+		return r.runC14NTest(manifest, test, "nquads")
 	// RDF TriG tests
 	case TestTypeTrigEval:
 		return r.runRDFEvalTest(manifest, test, "trig")
@@ -943,6 +947,75 @@ func (r *TestRunner) runRDFEvalTest(manifest *TestManifest, test *TestCase, form
 	// Compare triples (order-independent, blank node isomorphism)
 	if !r.compareTriples(expectedTriples, actualTriples) {
 		r.recordError(test, fmt.Sprintf("Triples mismatch: expected %d triples, got %d triples", len(expectedTriples), len(actualTriples)))
+		return TestResultFail
+	}
+
+	return TestResultPass
+}
+
+// runC14NTest parses RDF data, serializes to canonical format, and compares with expected output
+func (r *TestRunner) runC14NTest(manifest *TestManifest, test *TestCase, format string) TestResult {
+	if test.Action == "" {
+		r.recordError(test, "No action file specified")
+		return TestResultError
+	}
+
+	// Read and parse input RDF data
+	dataFile := manifest.ResolveFile(test.Action)
+	dataBytes, err := os.ReadFile(dataFile) // #nosec G304 - test suite legitimately reads test data files
+	if err != nil {
+		// Check if this is a missing file in the W3C test suite (known issue)
+		if os.IsNotExist(err) {
+			return TestResultSkip
+		}
+		r.recordError(test, fmt.Sprintf("Failed to read data file: %v", err))
+		return TestResultError
+	}
+
+	// Determine if this is a quad-based format
+	isQuadFormat := format == "nquads"
+
+	var canonicalOutput string
+	if isQuadFormat {
+		// Parse as quads
+		quads, err := r.parseRDFDataAsQuads(string(dataBytes), format, dataFile)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+			return TestResultFail
+		}
+
+		// Serialize to canonical N-Quads
+		canonicalOutput = rdf.SerializeQuadsCanonical(quads)
+	} else {
+		// Parse as triples
+		triples, err := r.parseRDFData(string(dataBytes), format, dataFile)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Parser error: %v", err))
+			return TestResultFail
+		}
+
+		// Serialize to canonical N-Triples
+		canonicalOutput = rdf.SerializeTriplesCanonical(triples)
+	}
+
+	// Read expected canonical output
+	if test.Result == "" {
+		r.recordError(test, "No result file specified")
+		return TestResultError
+	}
+
+	resultFile := manifest.ResolveFile(test.Result)
+	expectedBytes, err := os.ReadFile(resultFile) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		r.recordError(test, fmt.Sprintf("Failed to read result file: %v", err))
+		return TestResultError
+	}
+
+	expectedOutput := string(expectedBytes)
+
+	// Compare outputs (should be byte-for-byte identical for canonical format)
+	if strings.TrimSpace(canonicalOutput) != strings.TrimSpace(expectedOutput) {
+		r.recordError(test, "Canonical output mismatch")
 		return TestResultFail
 	}
 

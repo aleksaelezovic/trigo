@@ -64,10 +64,12 @@ const (
 	// RDF N-Triples tests
 	TestTypeNTriplesPositiveSyntax TestType = "TestNTriplesPositiveSyntax"
 	TestTypeNTriplesNegativeSyntax TestType = "TestNTriplesNegativeSyntax"
+	TestTypeNTriplesPositiveC14N   TestType = "TestNTriplesPositiveC14N"
 
 	// RDF N-Quads tests
 	TestTypeNQuadsPositiveSyntax TestType = "TestNQuadsPositiveSyntax"
 	TestTypeNQuadsNegativeSyntax TestType = "TestNQuadsNegativeSyntax"
+	TestTypeNQuadsPositiveC14N   TestType = "TestNQuadsPositiveC14N"
 
 	// RDF TriG tests
 	TestTypeTrigEval           TestType = "TestTrigEval"
@@ -214,11 +216,15 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 			} else if strings.Contains(line, "TestTurtleNegativeSyntax") {
 				currentTest.Type = TestTypeTurtleNegativeSyntax
 				// RDF N-Triples tests
+			} else if strings.Contains(line, "TestNTriplesPositiveC14N") {
+				currentTest.Type = TestTypeNTriplesPositiveC14N
 			} else if strings.Contains(line, "TestNTriplesPositiveSyntax") {
 				currentTest.Type = TestTypeNTriplesPositiveSyntax
 			} else if strings.Contains(line, "TestNTriplesNegativeSyntax") {
 				currentTest.Type = TestTypeNTriplesNegativeSyntax
 				// RDF N-Quads tests
+			} else if strings.Contains(line, "TestNQuadsPositiveC14N") {
+				currentTest.Type = TestTypeNQuadsPositiveC14N
 			} else if strings.Contains(line, "TestNQuadsPositiveSyntax") {
 				currentTest.Type = TestTypeNQuadsPositiveSyntax
 			} else if strings.Contains(line, "TestNQuadsNegativeSyntax") {
