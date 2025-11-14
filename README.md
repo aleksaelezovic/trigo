@@ -99,15 +99,15 @@ Validated against official W3C test suites:
 
 ### RDF 1.2 Parsers (Industry-Leading Support)
 - **RDF 1.2 N-Triples:** 100% (99/99 tests) ✅ — Perfect compliance
-- **RDF 1.2 N-Quads:** 70.9% (112/158 tests) — Triple term context support in progress
+- **RDF 1.2 N-Quads:** 72.2% (114/158 tests) ✅ — Triple term position validation complete
 - **RDF 1.2 Turtle:** 99.3% (405/408 tests) ✅ — Excellent (3 C14N output tests skipped)
-- **RDF 1.2 TriG:** 98.8% (415/420 tests) ✅ — Outstanding! (2 edge cases remaining)
-- **RDF 1.2 XML:** 86.4% (171/198 tests) — Advanced features in development
+- **RDF 1.2 TriG:** 99.0% (416/420 tests) ✅ — Outstanding! (annotation syntax complete)
+- **RDF 1.2 XML:** 99.0% (196/198 tests) ✅ — Excellent! (directionality, triple terms, annotations)
 
-**🚀 RDF 1.2 Total: 94.7% (1,203/1,270 tests) — Leading Go Implementation**
+**🚀 RDF 1.2 Total: 95.9% (1,230/1,283 tests) — Leading Go Implementation**
 
 ### Combined RDF Compliance
-**Overall: 97.2% (2,195/2,262 tests) across RDF 1.1 and 1.2**
+**Overall: 97.5% (2,222/2,275 tests) across RDF 1.1 and 1.2**
 
 ### SPARQL Query
 - **SPARQL Syntax:** 69.1% (65/94 tests)
