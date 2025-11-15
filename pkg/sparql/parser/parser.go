@@ -829,12 +829,40 @@ func (p *Parser) parseIRI() (string, error) {
 	return iri, nil
 }
 
-// parseStringLiteral parses a string literal
+// parseStringLiteral parses a string literal (supports single and triple-quoted)
 func (p *Parser) parseStringLiteral() (*rdf.Literal, error) {
 	quote := p.peek()
 	if quote != '"' && quote != '\'' {
 		return nil, fmt.Errorf("expected quote to start string literal")
 	}
+
+	// Check for triple-quoted string
+	if p.pos+2 < len(p.input) && p.input[p.pos+1] == quote && p.input[p.pos+2] == quote {
+		// Triple-quoted string
+		p.advance() // first quote
+		p.advance() // second quote
+		p.advance() // third quote
+
+		// Read until we find three consecutive quotes
+		var value strings.Builder
+		for p.pos < len(p.input) {
+			if p.pos+2 < len(p.input) &&
+				p.input[p.pos] == quote &&
+				p.input[p.pos+1] == quote &&
+				p.input[p.pos+2] == quote {
+				// Found closing triple quote
+				p.advance()
+				p.advance()
+				p.advance()
+				return rdf.NewLiteral(value.String()), nil
+			}
+			value.WriteByte(p.input[p.pos])
+			p.advance()
+		}
+		return nil, fmt.Errorf("unclosed triple-quoted string")
+	}
+
+	// Single-quoted string
 	p.advance()
 
 	value := p.readWhile(func(ch byte) bool {
