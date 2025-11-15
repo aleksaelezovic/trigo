@@ -543,29 +543,58 @@ type scanIterator struct {
 }
 
 func (it *scanIterator) Next() bool {
-	if !it.quadIter.Next() {
-		return false
-	}
+	for {
+		if !it.quadIter.Next() {
+			return false
+		}
 
-	quad, err := it.quadIter.Quad()
-	if err != nil {
-		return false
-	}
+		quad, err := it.quadIter.Quad()
+		if err != nil {
+			return false
+		}
 
-	// Bind variables
-	it.binding = store.NewBinding()
+		// Bind variables, checking for repeated variables
+		it.binding = store.NewBinding()
+		valid := true
 
-	if it.pattern.Subject.IsVariable() {
-		it.binding.Vars[it.pattern.Subject.Variable.Name] = quad.Subject
-	}
-	if it.pattern.Predicate.IsVariable() {
-		it.binding.Vars[it.pattern.Predicate.Variable.Name] = quad.Predicate
-	}
-	if it.pattern.Object.IsVariable() {
-		it.binding.Vars[it.pattern.Object.Variable.Name] = quad.Object
-	}
+		// Bind subject
+		if it.pattern.Subject.IsVariable() {
+			varName := it.pattern.Subject.Variable.Name
+			it.binding.Vars[varName] = quad.Subject
+		}
 
-	return true
+		// Bind predicate (check if variable already bound from subject)
+		if it.pattern.Predicate.IsVariable() {
+			varName := it.pattern.Predicate.Variable.Name
+			if existingValue, exists := it.binding.Vars[varName]; exists {
+				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Predicate) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Predicate
+			}
+		}
+
+		// Bind object (check if variable already bound from subject or predicate)
+		if valid && it.pattern.Object.IsVariable() {
+			varName := it.pattern.Object.Variable.Name
+			if existingValue, exists := it.binding.Vars[varName]; exists {
+				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Object) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Object
+			}
+		}
+
+		// If all variable constraints are satisfied, return this binding
+		if valid {
+			return true
+		}
+		// Otherwise, continue to next quad
+	}
 }
 
 func (it *scanIterator) Binding() *store.Binding {
