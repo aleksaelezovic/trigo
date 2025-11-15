@@ -74,6 +74,23 @@ func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string)
 		}
 		return rdf.NewLiteral(*stringValue), nil
 
+	case rdf.TermTypeTypedLiteral:
+		if stringValue == nil {
+			return nil, fmt.Errorf("string value required for typed literal")
+		}
+		// Split value^^datatypeIRI
+		// Format from encoder: "value^^datatypeIRI"
+		for i := len(*stringValue) - 1; i >= 1; i-- {
+			if (*stringValue)[i] == '^' && (*stringValue)[i-1] == '^' {
+				value := (*stringValue)[:i-1]
+				datatypeIRI := (*stringValue)[i+1:]
+				datatype := rdf.NewNamedNode(datatypeIRI)
+				return rdf.NewLiteralWithDatatype(value, datatype), nil
+			}
+		}
+		// Shouldn't happen if encoder is working correctly
+		return nil, fmt.Errorf("malformed typed literal string: %s", *stringValue)
+
 	case rdf.TermTypeIntegerLiteral:
 		value := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for binary decoding
 		return rdf.NewIntegerLiteral(value), nil

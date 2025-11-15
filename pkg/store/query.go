@@ -303,7 +303,8 @@ func (s *TripleStore) decodeTerm(txn Transaction, encoded EncodedTerm) (rdf.Term
 	// For terms that need string lookup
 	var stringValue *string
 	if termType == rdf.TermTypeNamedNode || termType == rdf.TermTypeBlankNode ||
-		termType == rdf.TermTypeStringLiteral || termType == rdf.TermTypeLangStringLiteral {
+		termType == rdf.TermTypeStringLiteral || termType == rdf.TermTypeLangStringLiteral ||
+		termType == rdf.TermTypeTypedLiteral {
 
 		str, err := txn.Get(TableID2Str, encoded[1:])
 		if err == nil {

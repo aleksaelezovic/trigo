@@ -110,6 +110,9 @@ func (e *TermEncoder) encodeLiteral(lit *rdf.Literal) (store.EncodedTerm, *strin
 			return e.encodeDateTimeLiteral(lit)
 		case rdf.XSDDate.IRI:
 			return e.encodeDateLiteral(lit)
+		default:
+			// For all other datatypes, encode value + datatype IRI
+			return e.encodeTypedLiteral(lit)
 		}
 	}
 
@@ -152,6 +155,19 @@ func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (store.EncodedTe
 	if lit.Direction != "" {
 		combined += "--" + lit.Direction
 	}
+	hash := e.Hash128(combined)
+	copy(encoded[1:], hash[:])
+
+	return encoded, &combined, nil
+}
+
+func (e *TermEncoder) encodeTypedLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
+	var encoded store.EncodedTerm
+	encoded[0] = byte(rdf.TermTypeTypedLiteral)
+
+	// Combine value and datatype IRI for hashing
+	// This ensures that "value"^^<type1> and "value"^^<type2> have different encodings
+	combined := lit.Value + "^^" + lit.Datatype.IRI
 	hash := e.Hash128(combined)
 	copy(encoded[1:], hash[:])
 

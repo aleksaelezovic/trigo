@@ -30,6 +30,7 @@ const (
 	TermTypeDateLiteral
 	TermTypeTimeLiteral
 	TermTypeDurationLiteral
+	TermTypeTypedLiteral // Custom datatype (not XSD built-in) - MUST be last to preserve existing type values
 )
 
 // Term represents an RDF term (IRI, blank node, or literal)
