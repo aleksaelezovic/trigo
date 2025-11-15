@@ -1010,15 +1010,20 @@ func (p *Parser) parseNumericLiteral() (*rdf.Literal, error) {
 		return (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+' || ch == 'e' || ch == 'E'
 	})
 
-	// Try to parse as integer
-	if !strings.Contains(numStr, ".") && !strings.Contains(numStr, "e") && !strings.Contains(numStr, "E") {
+	// Check for exponent notation (e or E) -> xsd:double
+	if strings.Contains(numStr, "e") || strings.Contains(numStr, "E") {
+		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDouble), nil
+	}
+
+	// Try to parse as integer (no decimal point)
+	if !strings.Contains(numStr, ".") {
 		if _, err := strconv.ParseInt(numStr, 10, 64); err == nil {
 			return rdf.NewLiteralWithDatatype(numStr, rdf.XSDInteger), nil
 		}
 	}
 
-	// Parse as double
-	return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDouble), nil
+	// Has decimal point but no exponent -> xsd:decimal
+	return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDecimal), nil
 }
 
 // parseFilter parses a FILTER expression
