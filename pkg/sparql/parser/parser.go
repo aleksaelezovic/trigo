@@ -196,10 +196,9 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 func (p *Parser) parseAsk() (*AskQuery, error) {
 	query := &AskQuery{}
 
-	// Parse WHERE clause
-	if !p.matchKeyword("WHERE") {
-		return nil, fmt.Errorf("expected WHERE clause")
-	}
+	// Parse WHERE clause (WHERE keyword is optional in SPARQL)
+	// Both "ASK WHERE { ... }" and "ASK { ... }" are valid
+	p.matchKeyword("WHERE") // skip if present, but don't require it
 
 	where, err := p.parseGraphPattern()
 	if err != nil {
