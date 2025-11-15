@@ -407,8 +407,11 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 			return fmt.Errorf("failed to read data file %s: %w", dataFile, err)
 		}
 
-		// Parse Turtle data
+		// Parse Turtle data with base URI set to file location
 		turtleParser := rdf.NewTurtleParser(string(dataBytes))
+		// Set base URI to the file's IRI for resolving relative IRIs
+		baseURI := manifest.fileToIRI(dataFile)
+		turtleParser.SetBaseURI(baseURI)
 		triples, err := turtleParser.Parse()
 		if err != nil {
 			return fmt.Errorf("failed to parse Turtle data in %s: %w", dataFile, err)
@@ -430,8 +433,11 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 			return fmt.Errorf("failed to read graph data file %s: %w", graphData.File, err)
 		}
 
-		// Parse Turtle data
+		// Parse Turtle data with base URI set to file location
 		turtleParser := rdf.NewTurtleParser(string(dataBytes))
+		// Set base URI to the file's IRI for resolving relative IRIs
+		baseURI := manifest.fileToIRI(graphData.File)
+		turtleParser.SetBaseURI(baseURI)
 		triples, err := turtleParser.Parse()
 		if err != nil {
 			return fmt.Errorf("failed to parse Turtle data in %s: %w", graphData.File, err)
