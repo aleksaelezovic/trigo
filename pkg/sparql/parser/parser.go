@@ -432,6 +432,11 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, graphPattern)
+			// Skip optional '.' separator after GRAPH block
+			p.skipWhitespace()
+			if p.peek() == '.' {
+				p.advance()
+			}
 			continue
 		}
 
@@ -443,6 +448,11 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			}
 			pattern.Filters = append(pattern.Filters, filter)
 			pattern.Elements = append(pattern.Elements, PatternElement{Filter: filter})
+			// Skip optional '.' separator after FILTER
+			p.skipWhitespace()
+			if p.peek() == '.' {
+				p.advance()
+			}
 			continue
 		}
 
@@ -454,6 +464,11 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			}
 			pattern.Binds = append(pattern.Binds, bind)
 			pattern.Elements = append(pattern.Elements, PatternElement{Bind: bind})
+			// Skip optional '.' separator after BIND
+			p.skipWhitespace()
+			if p.peek() == '.' {
+				p.advance()
+			}
 			continue
 		}
 
@@ -468,6 +483,11 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, optionalPattern)
+			// Skip optional '.' separator after OPTIONAL block
+			p.skipWhitespace()
+			if p.peek() == '.' {
+				p.advance()
+			}
 			continue
 		}
 
@@ -482,6 +502,11 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, minusPattern)
+			// Skip optional '.' separator after MINUS block
+			p.skipWhitespace()
+			if p.peek() == '.' {
+				p.advance()
+			}
 			continue
 		}
 
