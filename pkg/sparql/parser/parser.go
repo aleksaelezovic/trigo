@@ -1005,25 +1005,69 @@ func (p *Parser) parseBlankNode() (*rdf.BlankNode, error) {
 }
 
 // parseNumericLiteral parses a numeric literal
+// Grammar: [+-]? [0-9]+ ( '.' [0-9]+ )? ( [eE] [+-]? [0-9]+ )?
 func (p *Parser) parseNumericLiteral() (*rdf.Literal, error) {
-	numStr := p.readWhile(func(ch byte) bool {
-		return (ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '+' || ch == 'e' || ch == 'E'
-	})
+	start := p.pos
 
-	// Check for exponent notation (e or E) -> xsd:double
-	if strings.Contains(numStr, "e") || strings.Contains(numStr, "E") {
-		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDouble), nil
+	// Optional sign
+	if p.peek() == '+' || p.peek() == '-' {
+		p.advance()
 	}
 
-	// Try to parse as integer (no decimal point)
-	if !strings.Contains(numStr, ".") {
-		if _, err := strconv.ParseInt(numStr, 10, 64); err == nil {
-			return rdf.NewLiteralWithDatatype(numStr, rdf.XSDInteger), nil
+	// Integer part (required)
+	if !p.hasDigit() {
+		return nil, fmt.Errorf("expected digit in numeric literal")
+	}
+	for p.hasDigit() {
+		p.advance()
+	}
+
+	hasDecimal := false
+	hasExponent := false
+
+	// Optional decimal part
+	if p.peek() == '.' {
+		// Look ahead - if there's a digit after the dot, it's part of the number
+		if p.pos+1 < p.length && p.input[p.pos+1] >= '0' && p.input[p.pos+1] <= '9' {
+			p.advance() // consume '.'
+			hasDecimal = true
+			for p.hasDigit() {
+				p.advance()
+			}
+		}
+		// Otherwise, the dot is not part of the number (e.g., "123." where "." is a statement terminator)
+	}
+
+	// Optional exponent
+	if p.peek() == 'e' || p.peek() == 'E' {
+		p.advance()
+		hasExponent = true
+		if p.peek() == '+' || p.peek() == '-' {
+			p.advance()
+		}
+		if !p.hasDigit() {
+			return nil, fmt.Errorf("expected digit after exponent in numeric literal")
+		}
+		for p.hasDigit() {
+			p.advance()
 		}
 	}
 
-	// Has decimal point but no exponent -> xsd:decimal
-	return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDecimal), nil
+	numStr := p.input[start:p.pos]
+
+	// Determine type based on what we found
+	if hasExponent {
+		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDouble), nil
+	}
+	if hasDecimal {
+		return rdf.NewLiteralWithDatatype(numStr, rdf.XSDDecimal), nil
+	}
+	return rdf.NewLiteralWithDatatype(numStr, rdf.XSDInteger), nil
+}
+
+// hasDigit checks if the current position has a digit
+func (p *Parser) hasDigit() bool {
+	return p.pos < p.length && p.input[p.pos] >= '0' && p.input[p.pos] <= '9'
 }
 
 // parseFilter parses a FILTER expression
