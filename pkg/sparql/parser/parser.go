@@ -904,16 +904,47 @@ func (p *Parser) parseStringLiteral() (*rdf.Literal, error) {
 	// Single-quoted string
 	p.advance()
 
-	value := p.readWhile(func(ch byte) bool {
-		return ch != quote
-	})
+	// Read string with escape sequence support
+	var value strings.Builder
+	for p.pos < len(p.input) {
+		ch := p.peek()
 
-	if p.peek() != quote {
-		return nil, fmt.Errorf("expected quote to end string literal")
+		// Check for closing quote
+		if ch == quote {
+			p.advance()
+			return rdf.NewLiteral(value.String()), nil
+		}
+
+		// Handle escape sequences
+		if ch == '\\' && p.pos+1 < len(p.input) {
+			p.advance() // skip backslash
+			nextCh := p.peek()
+			switch nextCh {
+			case 't':
+				value.WriteByte('\t')
+			case 'n':
+				value.WriteByte('\n')
+			case 'r':
+				value.WriteByte('\r')
+			case '\\':
+				value.WriteByte('\\')
+			case '"':
+				value.WriteByte('"')
+			case '\'':
+				value.WriteByte('\'')
+			default:
+				// Unknown escape - keep the backslash and character
+				value.WriteByte('\\')
+				value.WriteByte(nextCh)
+			}
+			p.advance()
+		} else {
+			value.WriteByte(ch)
+			p.advance()
+		}
 	}
-	p.advance()
 
-	return rdf.NewLiteral(value), nil
+	return nil, fmt.Errorf("expected quote to end string literal")
 }
 
 // parseBlankNode parses a blank node
