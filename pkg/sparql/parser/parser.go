@@ -772,6 +772,43 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Check for language tag or datatype
+		p.skipWhitespace()
+		if p.peek() == '@' {
+			// Language tag
+			p.advance() // skip '@'
+			lang := p.readWhile(func(c byte) bool {
+				return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-'
+			})
+			return &TermOrVariable{Term: rdf.NewLiteralWithLanguage(literal.Value, lang)}, nil
+		} else if p.peek() == '^' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '^' {
+			// Datatype
+			p.advance() // skip first '^'
+			p.advance() // skip second '^'
+			p.skipWhitespace()
+
+			// Parse datatype IRI (can be <iri> or prefix:local)
+			var datatypeIRI string
+			if p.peek() == '<' {
+				iri, err := p.parseIRI()
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse datatype IRI: %w", err)
+				}
+				datatypeIRI = iri
+			} else {
+				// Prefixed name
+				prefixedName, err := p.parsePrefixedName()
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse datatype: %w", err)
+				}
+				datatypeIRI = prefixedName
+			}
+
+			datatype := rdf.NewNamedNode(datatypeIRI)
+			return &TermOrVariable{Term: rdf.NewLiteralWithDatatype(literal.Value, datatype)}, nil
+		}
+
 		return &TermOrVariable{Term: literal}, nil
 	}
 
