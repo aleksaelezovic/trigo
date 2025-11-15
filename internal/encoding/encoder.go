@@ -97,23 +97,33 @@ func (e *TermEncoder) encodeBlankNode(node *rdf.BlankNode) (store.EncodedTerm, *
 func (e *TermEncoder) encodeLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
 	// Check for typed literals with special encoding
 	if lit.Datatype != nil {
+		var encoded store.EncodedTerm
+		var str *string
+		var err error
+
 		switch lit.Datatype.IRI {
 		case rdf.XSDInteger.IRI:
-			return e.encodeIntegerLiteral(lit)
+			encoded, str, err = e.encodeIntegerLiteral(lit)
 		case rdf.XSDDecimal.IRI:
-			return e.encodeDecimalLiteral(lit)
+			encoded, str, err = e.encodeDecimalLiteral(lit)
 		case rdf.XSDDouble.IRI:
-			return e.encodeDoubleLiteral(lit)
+			encoded, str, err = e.encodeDoubleLiteral(lit)
 		case rdf.XSDBoolean.IRI:
-			return e.encodeBooleanLiteral(lit)
+			encoded, str, err = e.encodeBooleanLiteral(lit)
 		case rdf.XSDDateTime.IRI:
-			return e.encodeDateTimeLiteral(lit)
+			encoded, str, err = e.encodeDateTimeLiteral(lit)
 		case rdf.XSDDate.IRI:
-			return e.encodeDateLiteral(lit)
+			encoded, str, err = e.encodeDateLiteral(lit)
 		default:
 			// For all other datatypes, encode value + datatype IRI
 			return e.encodeTypedLiteral(lit)
 		}
+
+		// If special encoding failed (ill-formed literal), fall back to generic typed literal
+		if err != nil {
+			return e.encodeTypedLiteral(lit)
+		}
+		return encoded, str, nil
 	}
 
 	// Language-tagged string
