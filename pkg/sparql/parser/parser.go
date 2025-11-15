@@ -793,6 +793,16 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 		return &TermOrVariable{Term: literal}, nil
 	}
 
+	// Boolean literals (true/false)
+	if ch == 't' || ch == 'f' {
+		if p.matchKeyword("true") {
+			return &TermOrVariable{Term: rdf.NewBooleanLiteral(true)}, nil
+		}
+		if p.matchKeyword("false") {
+			return &TermOrVariable{Term: rdf.NewBooleanLiteral(false)}, nil
+		}
+	}
+
 	// Keyword 'a' (shorthand for rdf:type)
 	if ch == 'a' {
 		// Check if it's just 'a' by itself (not part of a prefixed name)
@@ -836,7 +846,7 @@ func (p *Parser) parseVariable() (*Variable, error) {
 	return &Variable{Name: name}, nil
 }
 
-// parseIRI parses an IRI enclosed in < >
+// parseIRI parses an IRI enclosed in < > and resolves it against BASE if needed
 func (p *Parser) parseIRI() (string, error) {
 	if p.peek() != '<' {
 		return "", fmt.Errorf("expected '<' to start IRI")
@@ -852,7 +862,10 @@ func (p *Parser) parseIRI() (string, error) {
 	}
 	p.advance()
 
-	return iri, nil
+	// Resolve relative IRI against BASE if needed
+	resolvedIRI := p.resolveIRI(iri)
+
+	return resolvedIRI, nil
 }
 
 // parseStringLiteral parses a string literal (supports single and triple-quoted)
