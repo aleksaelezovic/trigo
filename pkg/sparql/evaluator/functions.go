@@ -551,12 +551,14 @@ func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Bindi
 	}
 
 	// Process flags
-	// SPARQL flags: i (case-insensitive), m (multiline), s (dotall), x (extended/ignore whitespace)
+	// SPARQL flags: i (case-insensitive), m (multiline), s (dotall), x (extended/ignore whitespace), q (quote/literal)
 	// Go regexp uses different syntax:
 	//   - i: prepend (?i) to pattern
 	//   - m: prepend (?m) to pattern (changes ^ and $ behavior)
 	//   - s: prepend (?s) to pattern (. matches newlines)
 	//   - x: prepend (?x) to pattern (ignore whitespace and allow comments)
+	//   - q: escape all regex metacharacters using QuoteMeta
+	var hasQuote bool
 	var flagPrefix string
 	if flags != "" {
 		flagPrefix = "(?"
@@ -565,15 +567,22 @@ func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Bindi
 			case 'i', 'm', 's', 'x':
 				flagPrefix += string(flag)
 			case 'q':
-				// q is not standard in Go regexp, treat as no-op
-				// In some regex engines, 'q' means literal/quote mode
-				// For now, ignore it
+				hasQuote = true
 			default:
 				return nil, fmt.Errorf("unsupported REGEX flag: %c", flag)
 			}
 		}
 		flagPrefix += ")"
-		pattern = flagPrefix + pattern
+
+		// Apply quote flag to escape metacharacters
+		if hasQuote {
+			pattern = regexp.QuoteMeta(pattern)
+		}
+
+		// Prepend flag modifiers if any
+		if len(flagPrefix) > 2 {
+			pattern = flagPrefix + pattern
+		}
 	}
 
 	// Compile and match
