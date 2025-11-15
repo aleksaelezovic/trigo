@@ -15,6 +15,7 @@ type Parser struct {
 	pos      int
 	length   int
 	prefixes map[string]string // Maps prefix to IRI
+	baseURI  string            // Base URI for resolving relative IRIs
 }
 
 // NewParser creates a new SPARQL parser
@@ -24,6 +25,7 @@ func NewParser(input string) *Parser {
 		pos:      0,
 		length:   len(input),
 		prefixes: make(map[string]string),
+		baseURI:  "",
 	}
 }
 
@@ -1265,31 +1267,39 @@ func (p *Parser) skipPrefix() error {
 	}
 	p.advance() // skip '>'
 
+	// Resolve relative IRI against BASE if needed
+	resolvedIRI := p.resolveIRI(iri)
+
 	// Store the prefix mapping
-	p.prefixes[prefix] = iri
+	p.prefixes[prefix] = resolvedIRI
 
 	return nil
 }
 
-// skipBase skips a BASE declaration (<iri>)
+// skipBase parses and stores a BASE declaration (<iri>)
 func (p *Parser) skipBase() error {
 	p.skipWhitespace()
 
-	// Skip IRI <...>
+	// Parse IRI <...>
 	if p.peek() != '<' {
 		return fmt.Errorf("expected '<' to start IRI in BASE declaration")
 	}
 	p.advance() // skip '<'
 
-	// Skip until '>'
+	// Read the IRI
+	iriStart := p.pos
 	for p.pos < p.length && p.input[p.pos] != '>' {
 		p.advance()
 	}
+	iri := p.input[iriStart:p.pos]
 
 	if p.pos >= p.length {
 		return fmt.Errorf("expected '>' to end IRI in BASE declaration")
 	}
 	p.advance() // skip '>'
+
+	// Store the base URI
+	p.baseURI = iri
 
 	return nil
 }
@@ -1853,5 +1863,40 @@ func (p *Parser) match(s string) bool {
 	}
 
 	p.pos += len(s)
+	return true
+}
+
+// resolveIRI resolves a potentially relative IRI against the BASE URI
+func (p *Parser) resolveIRI(iri string) string {
+	// If no BASE is set or IRI is absolute, return as-is
+	if p.baseURI == "" || isAbsoluteIRI(iri) {
+		return iri
+	}
+
+	// Handle fragment-only IRIs like "#x"
+	if strings.HasPrefix(iri, "#") {
+		return p.baseURI + iri
+	}
+
+	// Simple relative IRI resolution
+	// This is a simplified version - full RFC 3986 resolution is complex
+	return p.baseURI + iri
+}
+
+// isAbsoluteIRI checks if an IRI is absolute (has a scheme)
+func isAbsoluteIRI(iri string) bool {
+	// Check for scheme: "scheme:"
+	colonIdx := strings.Index(iri, ":")
+	if colonIdx <= 0 {
+		return false
+	}
+	// Check that everything before colon is valid scheme chars
+	for i := 0; i < colonIdx; i++ {
+		c := iri[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9' && i > 0) || c == '+' || c == '-' || c == '.') {
+			return false
+		}
+	}
 	return true
 }
