@@ -1409,21 +1409,160 @@ func (it *orderByIterator) compareByCondition(a, b *store.Binding, condition *pa
 	return it.compareTerms(aVal, bVal)
 }
 
-// compareTerms compares two RDF terms
+// compareTerms compares two RDF terms according to SPARQL ordering rules
 // Returns: -1 if a < b, 0 if a == b, 1 if a > b
+// SPARQL order: (Unbound) < Blank nodes < IRIs < Literals (by datatype, then value)
 func (it *orderByIterator) compareTerms(a, b rdf.Term) int {
-	// Use string comparison for now
-	// TODO: Implement proper SPARQL ordering rules
-	aStr := a.String()
-	bStr := b.String()
+	// Determine term types
+	aType := termSortOrder(a)
+	bType := termSortOrder(b)
 
-	if aStr < bStr {
+	// If different types, order by type
+	if aType != bType {
+		if aType < bType {
+			return -1
+		}
+		return 1
+	}
+
+	// Same type - compare values within type
+	switch a.(type) {
+	case *rdf.BlankNode:
+		// Blank nodes: compare by identifier
+		aBlank := a.(*rdf.BlankNode)
+		bBlank := b.(*rdf.BlankNode)
+		if aBlank.ID < bBlank.ID {
+			return -1
+		}
+		if aBlank.ID > bBlank.ID {
+			return 1
+		}
+		return 0
+
+	case *rdf.NamedNode:
+		// IRIs: compare lexically
+		aNode := a.(*rdf.NamedNode)
+		bNode := b.(*rdf.NamedNode)
+		if aNode.IRI < bNode.IRI {
+			return -1
+		}
+		if aNode.IRI > bNode.IRI {
+			return 1
+		}
+		return 0
+
+	case *rdf.Literal:
+		// Literals: compare by value, considering datatype
+		return compareLiterals(a.(*rdf.Literal), b.(*rdf.Literal))
+
+	default:
+		// Fallback to string comparison
+		aStr := a.String()
+		bStr := b.String()
+		if aStr < bStr {
+			return -1
+		}
+		if aStr > bStr {
+			return 1
+		}
+		return 0
+	}
+}
+
+// termSortOrder returns the sort order priority for a term type
+// Lower numbers come first in ordering
+func termSortOrder(t rdf.Term) int {
+	switch t.(type) {
+	case *rdf.BlankNode:
+		return 0
+	case *rdf.NamedNode:
+		return 1
+	case *rdf.Literal:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// compareLiterals compares two literals according to SPARQL rules
+// Handles numeric types with numeric comparison, others with lexical comparison
+func compareLiterals(a, b *rdf.Literal) int {
+	// Try numeric comparison if both are numeric types
+	aNum, aIsNum := tryParseNumeric(a)
+	bNum, bIsNum := tryParseNumeric(b)
+
+	if aIsNum && bIsNum {
+		// Numeric comparison
+		if aNum < bNum {
+			return -1
+		}
+		if aNum > bNum {
+			return 1
+		}
+		return 0
+	}
+
+	// Different datatypes or non-numeric: compare by datatype IRI first, then lexically
+	aDT := ""
+	if a.Datatype != nil {
+		aDT = a.Datatype.IRI
+	}
+	bDT := ""
+	if b.Datatype != nil {
+		bDT = b.Datatype.IRI
+	}
+
+	if aDT != bDT {
+		if aDT < bDT {
+			return -1
+		}
+		return 1
+	}
+
+	// Same datatype: lexical comparison
+	if a.Value < b.Value {
 		return -1
 	}
-	if aStr > bStr {
+	if a.Value > b.Value {
 		return 1
 	}
 	return 0
+}
+
+// tryParseNumeric attempts to parse a literal as a numeric value
+// Returns (value, true) if successful, (0, false) otherwise
+func tryParseNumeric(lit *rdf.Literal) (float64, bool) {
+	if lit.Datatype == nil {
+		return 0, false
+	}
+
+	dt := lit.Datatype.IRI
+	// Check if it's a numeric datatype
+	switch dt {
+	case "http://www.w3.org/2001/XMLSchema#integer",
+		"http://www.w3.org/2001/XMLSchema#decimal",
+		"http://www.w3.org/2001/XMLSchema#float",
+		"http://www.w3.org/2001/XMLSchema#double",
+		"http://www.w3.org/2001/XMLSchema#int",
+		"http://www.w3.org/2001/XMLSchema#long",
+		"http://www.w3.org/2001/XMLSchema#short",
+		"http://www.w3.org/2001/XMLSchema#byte",
+		"http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+		"http://www.w3.org/2001/XMLSchema#positiveInteger",
+		"http://www.w3.org/2001/XMLSchema#unsignedLong",
+		"http://www.w3.org/2001/XMLSchema#unsignedInt",
+		"http://www.w3.org/2001/XMLSchema#unsignedShort",
+		"http://www.w3.org/2001/XMLSchema#unsignedByte",
+		"http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+		"http://www.w3.org/2001/XMLSchema#negativeInteger":
+		// Try to parse as float64
+		var val float64
+		_, err := fmt.Sscanf(lit.Value, "%f", &val)
+		if err == nil {
+			return val, true
+		}
+	}
+	return 0, false
 }
 
 // extractVariablesFromGraphPattern extracts all variables from a graph pattern
