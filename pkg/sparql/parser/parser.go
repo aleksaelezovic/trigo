@@ -787,6 +787,11 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 		return p.parseCollection()
 	}
 
+	// Blank node property list: [...]
+	if ch == '[' {
+		return p.parseBlankNodePropertyList()
+	}
+
 	// IRI (named node)
 	if ch == '<' {
 		iri, err := p.parseIRI()
@@ -1126,6 +1131,90 @@ func (p *Parser) parseCollection() (*TermOrVariable, error) {
 	}
 
 	return listHead, nil
+}
+
+// parseBlankNodePropertyList parses a blank node property list: [ pred obj ; pred obj ]
+// Creates an anonymous blank node with the specified properties
+func (p *Parser) parseBlankNodePropertyList() (*TermOrVariable, error) {
+	if p.peek() != '[' {
+		return nil, fmt.Errorf("expected '[' at start of blank node property list")
+	}
+	p.advance() // skip '['
+	p.skipWhitespace()
+
+	// Check for empty blank node property list: []
+	if p.peek() == ']' {
+		p.advance() // skip ']'
+		// Empty property list is just an anonymous blank node
+		return &TermOrVariable{Term: p.newBlankNode()}, nil
+	}
+
+	// Create the blank node that will be the subject
+	blankNode := &TermOrVariable{Term: p.newBlankNode()}
+
+	// Parse predicate-object pairs
+	for {
+		p.skipWhitespace()
+		if p.peek() == ']' {
+			break
+		}
+
+		// Parse predicate
+		predicate, err := p.parseTermOrVariable()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse predicate in blank node property list: %w", err)
+		}
+
+		p.skipWhitespace()
+
+		// Parse object(s) - can have multiple objects separated by commas
+		for {
+			object, err := p.parseTermOrVariable()
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse object in blank node property list: %w", err)
+			}
+
+			// Add triple: blankNode predicate object
+			p.extraTriples = append(p.extraTriples, TriplePattern{
+				Subject:   *blankNode,
+				Predicate: *predicate,
+				Object:    *object,
+			})
+
+			p.skipWhitespace()
+
+			// Check for comma (multiple objects with same predicate)
+			if p.peek() == ',' {
+				p.advance() // skip ','
+				p.skipWhitespace()
+				continue
+			}
+			break
+		}
+
+		p.skipWhitespace()
+
+		// Check for semicolon (more predicate-object pairs)
+		if p.peek() == ';' {
+			p.advance() // skip ';'
+			p.skipWhitespace()
+			// Check for trailing semicolon before ]
+			if p.peek() == ']' {
+				break
+			}
+			continue
+		}
+
+		// No semicolon, must be end of property list
+		break
+	}
+
+	if p.peek() != ']' {
+		return nil, fmt.Errorf("expected ']' at end of blank node property list")
+	}
+	p.advance() // skip ']'
+
+	return blankNode, nil
 }
 
 // parseNumericLiteral parses a numeric literal
