@@ -11,21 +11,25 @@ import (
 
 // Parser parses SPARQL queries
 type Parser struct {
-	input    string
-	pos      int
-	length   int
-	prefixes map[string]string // Maps prefix to IRI
-	baseURI  string            // Base URI for resolving relative IRIs
+	input            string
+	pos              int
+	length           int
+	prefixes         map[string]string // Maps prefix to IRI
+	baseURI          string            // Base URI for resolving relative IRIs
+	blankNodeCounter int               // Counter for generating blank node identifiers
+	extraTriples     []TriplePattern   // Extra triples generated from collections and blank node property lists
 }
 
 // NewParser creates a new SPARQL parser
 func NewParser(input string) *Parser {
 	return &Parser{
-		input:    input,
-		pos:      0,
-		length:   len(input),
-		prefixes: make(map[string]string),
-		baseURI:  "",
+		input:            input,
+		pos:              0,
+		length:           len(input),
+		prefixes:         make(map[string]string),
+		baseURI:          "",
+		blankNodeCounter: 0,
+		extraTriples:     make([]TriplePattern, 0),
 	}
 }
 
@@ -674,12 +678,21 @@ func (p *Parser) parseTriplePattern() (*TriplePattern, error) {
 func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 	var triples []*TriplePattern
 
+	// Clear any previous extra triples before parsing
+	p.extraTriples = make([]TriplePattern, 0)
+
 	// Parse first triple
 	firstTriple, err := p.parseTriplePattern()
 	if err != nil {
 		return nil, err
 	}
 	triples = append(triples, firstTriple)
+
+	// Add any extra triples generated from collections in the first triple
+	for i := range p.extraTriples {
+		triples = append(triples, &p.extraTriples[i])
+	}
+	p.extraTriples = make([]TriplePattern, 0)
 
 	// Handle property list shorthand
 	for {
@@ -701,6 +714,12 @@ func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 				Predicate: firstTriple.Predicate,
 				Object:    *object,
 			})
+
+			// Add any extra triples generated from collections
+			for i := range p.extraTriples {
+				triples = append(triples, &p.extraTriples[i])
+			}
+			p.extraTriples = make([]TriplePattern, 0)
 
 		} else if ch == ';' {
 			// Semicolon: same subject, new predicate and object
@@ -730,6 +749,12 @@ func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 			}
 			triples = append(triples, triple)
 
+			// Add any extra triples generated from collections
+			for i := range p.extraTriples {
+				triples = append(triples, &p.extraTriples[i])
+			}
+			p.extraTriples = make([]TriplePattern, 0)
+
 			// Update firstTriple to allow comma after this predicate-object pair
 			firstTriple = triple
 
@@ -755,6 +780,11 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 			return nil, err
 		}
 		return &TermOrVariable{Variable: variable}, nil
+	}
+
+	// Collection: (...)
+	if ch == '(' {
+		return p.parseCollection()
 	}
 
 	// IRI (named node)
@@ -1002,6 +1032,100 @@ func (p *Parser) parseBlankNode() (*rdf.BlankNode, error) {
 	})
 
 	return rdf.NewBlankNode(id), nil
+}
+
+// newBlankNode generates a new blank node with a unique identifier
+func (p *Parser) newBlankNode() *rdf.BlankNode {
+	p.blankNodeCounter++
+	return rdf.NewBlankNode(fmt.Sprintf("b%d", p.blankNodeCounter))
+}
+
+// parseCollection parses an RDF collection (list) in SPARQL syntax: (item1 item2 ...)
+// Collections are expanded to rdf:first/rdf:rest triples
+func (p *Parser) parseCollection() (*TermOrVariable, error) {
+	if p.peek() != '(' {
+		return nil, fmt.Errorf("expected '(' at start of collection")
+	}
+	p.advance() // skip '('
+	p.skipWhitespace()
+
+	// Check for empty collection: ()
+	if p.peek() == ')' {
+		p.advance() // skip ')'
+		// Empty collection is rdf:nil
+		return &TermOrVariable{Term: rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")}, nil
+	}
+
+	// Parse collection items
+	var items []*TermOrVariable
+	for {
+		p.skipWhitespace()
+		if p.peek() == ')' {
+			break
+		}
+
+		item, err := p.parseTermOrVariable()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse collection item: %w", err)
+		}
+		items = append(items, item)
+
+		p.skipWhitespace()
+		if p.peek() == ')' {
+			break
+		}
+		// Items are separated by whitespace, not commas
+	}
+
+	if p.peek() != ')' {
+		return nil, fmt.Errorf("expected ')' at end of collection")
+	}
+	p.advance() // skip ')'
+
+	// Build RDF list structure: _:b1 rdf:first item1 ; rdf:rest _:b2 . etc.
+	rdfFirst := rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+	rdfRest := rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+	rdfNil := rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+
+	var listHead *TermOrVariable
+	var prevNode *TermOrVariable
+
+	for i, item := range items {
+		node := &TermOrVariable{Term: p.newBlankNode()}
+
+		if i == 0 {
+			listHead = node
+		}
+
+		// Add rdf:first triple (this node points to the item)
+		p.extraTriples = append(p.extraTriples, TriplePattern{
+			Subject:   *node,
+			Predicate: TermOrVariable{Term: rdfFirst},
+			Object:    *item,
+		})
+
+		// Link previous node to this one
+		if i > 0 && prevNode != nil {
+			p.extraTriples = append(p.extraTriples, TriplePattern{
+				Subject:   *prevNode,
+				Predicate: TermOrVariable{Term: rdfRest},
+				Object:    *node,
+			})
+		}
+
+		// Add rdf:rest triple for last item
+		if i == len(items)-1 {
+			p.extraTriples = append(p.extraTriples, TriplePattern{
+				Subject:   *node,
+				Predicate: TermOrVariable{Term: rdfRest},
+				Object:    TermOrVariable{Term: rdfNil},
+			})
+		}
+
+		prevNode = node
+	}
+
+	return listHead, nil
 }
 
 // parseNumericLiteral parses a numeric literal
