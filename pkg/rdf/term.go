@@ -136,7 +136,8 @@ func (l *Literal) Equals(other Term) bool {
 		if l.Value != ol.Value {
 			return false
 		}
-		if l.Language != ol.Language {
+		// Language tags are case-insensitive per RDF spec
+		if !equalLanguageTags(l.Language, ol.Language) {
 			return false
 		}
 		// RDF 1.2: Compare direction
@@ -403,4 +404,10 @@ func EncodeFloat64BigEndian(value float64) []byte {
 
 func DecodeFloat64BigEndian(buf []byte) float64 {
 	return math.Float64frombits(binary.BigEndian.Uint64(buf))
+}
+
+// equalLanguageTags compares two language tags case-insensitively
+// Per RDF spec, language tags are case-insensitive (e.g., "en" == "EN")
+func equalLanguageTags(a, b string) bool {
+	return strings.EqualFold(a, b)
 }
