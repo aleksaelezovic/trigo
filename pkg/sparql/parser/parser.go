@@ -1743,10 +1743,16 @@ func (p *Parser) parsePrefixedName() (string, error) {
 	p.advance() // skip ':'
 
 	// Read local part (everything after ':')
+	// According to SPARQL spec, PN_LOCAL can start with: PN_CHARS_U | ':' | [0-9] | PLX
+	// and continue with: (PN_CHARS | '.' | ':' | PLX)*
+	// We'll use a simplified approach that allows most characters
 	localStart := p.pos
 	for p.pos < p.length {
 		ch := p.input[p.pos]
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+		// Allow letters, digits, underscore, hyphen, and dot
+		// According to spec, local part can be more complex, but this covers common cases
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
 			break
 		}
 		p.advance()
