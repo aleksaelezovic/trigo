@@ -160,8 +160,12 @@ func (e *TermEncoder) encodeLangStringLiteral(lit *rdf.Literal) (store.EncodedTe
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeLangStringLiteral)
 
-	// Combine value, language tag, and direction (RDF 1.2) for hashing
-	combined := lit.Value + "@" + lit.Language
+	// Normalize language tag to lowercase for consistent hashing
+	// Per RDF spec, language tags are case-insensitive, so we use lowercase canonical form
+	normalizedLang := strings.ToLower(lit.Language)
+
+	// Combine value, normalized language tag, and direction (RDF 1.2) for hashing
+	combined := lit.Value + "@" + normalizedLang
 	if lit.Direction != "" {
 		combined += "--" + lit.Direction
 	}
