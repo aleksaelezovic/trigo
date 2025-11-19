@@ -180,14 +180,23 @@ func (e *Evaluator) effectiveBooleanValue(term rdf.Term) (bool, error) {
 // Comparison operators
 
 func (e *Evaluator) evaluateEqual(left, right rdf.Term) (rdf.Term, error) {
-	// Use RDF term equality
-	result := left.Equals(right)
+	// SPARQL equality with value-based comparison for compatible types
+	result, err := e.sparqlEquals(left, right)
+	if err != nil {
+		// If comparison is undefined (incompatible types), return false
+		return rdf.NewBooleanLiteral(false), nil
+	}
 	return rdf.NewBooleanLiteral(result), nil
 }
 
 func (e *Evaluator) evaluateNotEqual(left, right rdf.Term) (rdf.Term, error) {
-	result := !left.Equals(right)
-	return rdf.NewBooleanLiteral(result), nil
+	// SPARQL inequality with value-based comparison for compatible types
+	result, err := e.sparqlEquals(left, right)
+	if err != nil {
+		// If comparison is undefined (incompatible types), return true
+		return rdf.NewBooleanLiteral(true), nil
+	}
+	return rdf.NewBooleanLiteral(!result), nil
 }
 
 func (e *Evaluator) evaluateLessThan(left, right rdf.Term) (rdf.Term, error) {
@@ -222,32 +231,106 @@ func (e *Evaluator) evaluateGreaterThanOrEqual(left, right rdf.Term) (rdf.Term, 
 	return rdf.NewBooleanLiteral(cmp >= 0), nil
 }
 
+// sparqlEquals implements SPARQL equality semantics
+// Returns true if terms are equal, false if not equal, error if incompatible
+func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
+	// If both are literals, try value-based comparison
+	leftLit, leftIsLit := left.(*rdf.Literal)
+	rightLit, rightIsLit := right.(*rdf.Literal)
+
+	if leftIsLit && rightIsLit {
+		// Try numeric comparison first
+		leftNum, leftIsNum := e.extractNumeric(left)
+		rightNum, rightIsNum := e.extractNumeric(right)
+
+		if leftIsNum && rightIsNum {
+			// Numeric equality: "1"^^xsd:integer == "01"^^xsd:integer
+			return leftNum == rightNum, nil
+		}
+
+		// Try simple literal comparison (same datatype and value)
+		// This handles strings, booleans, dates, etc.
+		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			if leftLit.Datatype.IRI == rightLit.Datatype.IRI {
+				// Same datatype, compare lexical forms
+				return leftLit.Value == rightLit.Value, nil
+			}
+			// Different datatypes (non-numeric) are not equal
+			return false, nil
+		}
+
+		// Plain literals (no datatype)
+		if leftLit.Datatype == nil && rightLit.Datatype == nil {
+			// Must have same language tag and value
+			return leftLit.Language == rightLit.Language && leftLit.Value == rightLit.Value, nil
+		}
+
+		// One has datatype, other doesn't - not equal
+		return false, nil
+	}
+
+	// For non-literals (IRIs, blank nodes), use RDF term equality
+	return left.Equals(right), nil
+}
+
 // compareTerms compares two terms for ordering
 // Returns: -1 if left < right, 0 if left == right, 1 if left > right
 func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
-	// Try numeric comparison first
-	leftNum, leftIsNum := e.extractNumeric(left)
-	rightNum, rightIsNum := e.extractNumeric(right)
+	// Get literals if both are literals
+	leftLit, leftIsLit := left.(*rdf.Literal)
+	rightLit, rightIsLit := right.(*rdf.Literal)
 
-	if leftIsNum && rightIsNum {
-		if leftNum < rightNum {
-			return -1, nil
-		} else if leftNum > rightNum {
-			return 1, nil
+	// Try numeric comparison first if both are numeric literals
+	if leftIsLit && rightIsLit {
+		leftNum, leftIsNum := e.extractNumeric(left)
+		rightNum, rightIsNum := e.extractNumeric(right)
+
+		if leftIsNum && rightIsNum {
+			// Numeric comparison
+			if leftNum < rightNum {
+				return -1, nil
+			} else if leftNum > rightNum {
+				return 1, nil
+			}
+			return 0, nil
 		}
-		return 0, nil
+
+		// Both literals but not numeric - try string/datetime comparison
+		// Must have compatible datatypes
+		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			if leftLit.Datatype.IRI != rightLit.Datatype.IRI {
+				// Incompatible datatypes
+				return 0, fmt.Errorf("cannot compare literals with different datatypes: %s and %s",
+					leftLit.Datatype.IRI, rightLit.Datatype.IRI)
+			}
+			// Same datatype, compare lexical forms
+			if leftLit.Value < rightLit.Value {
+				return -1, nil
+			} else if leftLit.Value > rightLit.Value {
+				return 1, nil
+			}
+			return 0, nil
+		}
+
+		// Plain literals - compare by value and language tag
+		if leftLit.Datatype == nil && rightLit.Datatype == nil {
+			if leftLit.Language != rightLit.Language {
+				return 0, fmt.Errorf("cannot compare literals with different language tags")
+			}
+			if leftLit.Value < rightLit.Value {
+				return -1, nil
+			} else if leftLit.Value > rightLit.Value {
+				return 1, nil
+			}
+			return 0, nil
+		}
+
+		// One has datatype, other doesn't
+		return 0, fmt.Errorf("cannot compare typed and untyped literals")
 	}
 
-	// Try string comparison
-	leftStr := left.String()
-	rightStr := right.String()
-
-	if leftStr < rightStr {
-		return -1, nil
-	} else if leftStr > rightStr {
-		return 1, nil
-	}
-	return 0, nil
+	// Not both literals - cannot compare
+	return 0, fmt.Errorf("cannot compare non-literal terms")
 }
 
 // Arithmetic operators
