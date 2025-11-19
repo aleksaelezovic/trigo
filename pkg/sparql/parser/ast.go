@@ -28,6 +28,8 @@ type SelectQuery struct {
 	Variables []*Variable       // Variables to select (* for all)
 	Distinct  bool              // DISTINCT modifier
 	Reduced   bool              // REDUCED modifier
+	From      []string          // FROM clause (default graph IRIs)
+	FromNamed []string          // FROM NAMED clause (named graph IRIs)
 	Where     *GraphPattern     // WHERE clause
 	GroupBy   []*GroupCondition // GROUP BY clause
 	Having    []*Filter         // HAVING clause
@@ -38,18 +40,24 @@ type SelectQuery struct {
 
 // ConstructQuery represents a CONSTRUCT query
 type ConstructQuery struct {
-	Template []*TriplePattern // CONSTRUCT template
-	Where    *GraphPattern    // WHERE clause
+	Template  []*TriplePattern // CONSTRUCT template
+	From      []string         // FROM clause (default graph IRIs)
+	FromNamed []string         // FROM NAMED clause (named graph IRIs)
+	Where     *GraphPattern    // WHERE clause
 }
 
 // AskQuery represents an ASK query
 type AskQuery struct {
-	Where *GraphPattern // WHERE clause
+	From      []string      // FROM clause (default graph IRIs)
+	FromNamed []string      // FROM NAMED clause (named graph IRIs)
+	Where     *GraphPattern // WHERE clause
 }
 
 // DescribeQuery represents a DESCRIBE query
 type DescribeQuery struct {
 	Resources []*rdf.NamedNode // Resources to describe
+	From      []string         // FROM clause (default graph IRIs)
+	FromNamed []string         // FROM NAMED clause (named graph IRIs)
 	Where     *GraphPattern    // WHERE clause (optional)
 }
 

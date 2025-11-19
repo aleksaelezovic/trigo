@@ -133,6 +133,14 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 	}
 	query.Variables = variables
 
+	// Parse FROM and FROM NAMED clauses (optional)
+	from, fromNamed, err := p.parseDatasetClauses()
+	if err != nil {
+		return nil, err
+	}
+	query.From = from
+	query.FromNamed = fromNamed
+
 	// Parse WHERE clause (WHERE keyword is optional)
 	p.matchKeyword("WHERE") // consume WHERE if present, but don't require it
 
@@ -199,6 +207,14 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 // parseAsk parses an ASK query
 func (p *Parser) parseAsk() (*AskQuery, error) {
 	query := &AskQuery{}
+
+	// Parse FROM and FROM NAMED clauses (optional)
+	from, fromNamed, err := p.parseDatasetClauses()
+	if err != nil {
+		return nil, err
+	}
+	query.From = from
+	query.FromNamed = fromNamed
 
 	// Parse WHERE clause (WHERE keyword is optional in SPARQL)
 	// Both "ASK WHERE { ... }" and "ASK { ... }" are valid
@@ -273,6 +289,14 @@ func (p *Parser) parseConstruct() (*ConstructQuery, error) {
 
 	query.Template = template
 
+	// Parse FROM and FROM NAMED clauses (optional)
+	from, fromNamed, err := p.parseDatasetClauses()
+	if err != nil {
+		return nil, err
+	}
+	query.From = from
+	query.FromNamed = fromNamed
+
 	// Parse WHERE clause
 	if !p.matchKeyword("WHERE") {
 		return nil, fmt.Errorf("expected WHERE clause")
@@ -340,6 +364,14 @@ func (p *Parser) parseDescribe() (*DescribeQuery, error) {
 		p.skipWhitespace()
 	}
 
+	// Parse FROM and FROM NAMED clauses (optional)
+	from, fromNamed, err := p.parseDatasetClauses()
+	if err != nil {
+		return nil, err
+	}
+	query.From = from
+	query.FromNamed = fromNamed
+
 	// Parse optional WHERE clause
 	p.skipWhitespace()
 	if p.matchKeyword("WHERE") {
@@ -396,6 +428,50 @@ func (p *Parser) parseProjection() ([]*Variable, error) {
 	}
 
 	return variables, nil
+}
+
+// parseDatasetClauses parses FROM and FROM NAMED clauses
+// Returns (from IRIs, fromNamed IRIs, error)
+func (p *Parser) parseDatasetClauses() ([]string, []string, error) {
+	var from []string
+	var fromNamed []string
+
+	for {
+		p.skipWhitespace()
+
+		// Check for FROM NAMED
+		if p.matchKeyword("FROM") {
+			p.skipWhitespace()
+			if p.matchKeyword("NAMED") {
+				// FROM NAMED <iri>
+				p.skipWhitespace()
+				if p.peek() != '<' {
+					return nil, nil, fmt.Errorf("expected IRI after FROM NAMED")
+				}
+				iri, err := p.parseIRI()
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to parse IRI in FROM NAMED: %w", err)
+				}
+				fromNamed = append(fromNamed, iri)
+			} else {
+				// FROM <iri>
+				p.skipWhitespace()
+				if p.peek() != '<' {
+					return nil, nil, fmt.Errorf("expected IRI after FROM")
+				}
+				iri, err := p.parseIRI()
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to parse IRI in FROM: %w", err)
+				}
+				from = append(from, iri)
+			}
+		} else {
+			// No more FROM clauses
+			break
+		}
+	}
+
+	return from, fromNamed, nil
 }
 
 // parseGraphPattern parses a graph pattern (WHERE clause content)
