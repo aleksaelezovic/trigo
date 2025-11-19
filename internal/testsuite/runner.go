@@ -277,16 +277,9 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 
 	// Handle different query types
 	switch res := result.(type) {
-	case *executor.SelectResult, *executor.AskResult:
-		// Handle SELECT/ASK queries
-		selectResult, ok := result.(*executor.SelectResult)
-		if !ok {
-			// ASK queries return boolean, not implemented yet for comparison
-			r.recordError(test, "ASK query comparison not implemented yet")
-			return TestResultSkip
-		}
-
-		actualBindings, err := r.resultsToBindings(selectResult)
+	case *executor.SelectResult:
+		// Handle SELECT queries
+		actualBindings, err := r.resultsToBindings(res)
 		if err != nil {
 			r.recordError(test, fmt.Sprintf("Failed to convert results: %v", err))
 			return TestResultFail
@@ -307,6 +300,27 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 		// Compare results
 		if !results.CompareResults(expectedBindings, actualBindings) {
 			r.recordError(test, fmt.Sprintf("Results mismatch: expected %d bindings, got %d bindings", len(expectedBindings), len(actualBindings)))
+			return TestResultFail
+		}
+
+		return TestResultPass
+
+	case *executor.AskResult:
+		// Handle ASK queries
+		if test.Result == "" {
+			r.recordError(test, "No result file specified")
+			return TestResultError
+		}
+
+		expectedResult, err := r.loadExpectedAskResult(manifest, test)
+		if err != nil {
+			r.recordError(test, fmt.Sprintf("Failed to load expected ASK result: %v", err))
+			return TestResultFail
+		}
+
+		// Compare boolean results
+		if res.Result != expectedResult {
+			r.recordError(test, fmt.Sprintf("ASK result mismatch: expected %v, got %v", expectedResult, res.Result))
 			return TestResultFail
 		}
 
@@ -537,6 +551,30 @@ func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase)
 	}
 
 	return xmlResults.ToBindings()
+}
+
+// loadExpectedAskResult loads expected ASK query result (boolean) from file
+func (r *TestRunner) loadExpectedAskResult(manifest *TestManifest, test *TestCase) (bool, error) {
+	resultPath := manifest.ResolveFile(test.Result)
+
+	// Parse SPARQL XML results (.srx format)
+	resultFile, err := os.Open(resultPath) // #nosec G304 - test suite legitimately reads test result files
+	if err != nil {
+		return false, fmt.Errorf("failed to open result file: %w", err)
+	}
+	defer resultFile.Close()
+
+	xmlResults, err := results.ParseXMLResults(resultFile)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse XML results: %w", err)
+	}
+
+	// Check if this is an ASK result
+	if xmlResults.Boolean == nil {
+		return false, fmt.Errorf("result file does not contain ASK result (boolean is nil)")
+	}
+
+	return *xmlResults.Boolean, nil
 }
 
 // loadExpectedTriples loads expected N-Triples from result file
