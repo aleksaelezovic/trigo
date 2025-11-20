@@ -393,6 +393,7 @@ func (e *Evaluator) evaluateDivide(left, right rdf.Term) (rdf.Term, error) {
 // Helper functions
 
 // extractNumeric extracts a numeric value from a literal
+// Recognizes all XSD numeric types per SPARQL spec
 func (e *Evaluator) extractNumeric(term rdf.Term) (float64, bool) {
 	lit, ok := term.(*rdf.Literal)
 	if !ok {
@@ -407,15 +408,27 @@ func (e *Evaluator) extractNumeric(term rdf.Term) (float64, bool) {
 	var err error
 
 	switch lit.Datatype.IRI {
+	// Integer types (all subtypes of xsd:integer)
 	case "http://www.w3.org/2001/XMLSchema#integer",
 		"http://www.w3.org/2001/XMLSchema#int",
-		"http://www.w3.org/2001/XMLSchema#long":
+		"http://www.w3.org/2001/XMLSchema#long",
+		"http://www.w3.org/2001/XMLSchema#short",
+		"http://www.w3.org/2001/XMLSchema#byte",
+		"http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+		"http://www.w3.org/2001/XMLSchema#negativeInteger",
+		"http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+		"http://www.w3.org/2001/XMLSchema#positiveInteger",
+		"http://www.w3.org/2001/XMLSchema#unsignedLong",
+		"http://www.w3.org/2001/XMLSchema#unsignedInt",
+		"http://www.w3.org/2001/XMLSchema#unsignedShort",
+		"http://www.w3.org/2001/XMLSchema#unsignedByte":
 		intVal, err := strconv.ParseInt(lit.Value, 10, 64)
 		if err != nil {
 			return 0, false
 		}
 		val = float64(intVal)
 
+	// Floating point and decimal types
 	case "http://www.w3.org/2001/XMLSchema#double",
 		"http://www.w3.org/2001/XMLSchema#float",
 		"http://www.w3.org/2001/XMLSchema#decimal":
@@ -432,24 +445,95 @@ func (e *Evaluator) extractNumeric(term rdf.Term) (float64, bool) {
 }
 
 // createNumericLiteral creates a numeric literal from a float64 value
-// Tries to preserve the type of the input literals
+// Implements SPARQL type promotion rules for arithmetic operations
 func (e *Evaluator) createNumericLiteral(value float64, left, right rdf.Term) rdf.Term {
-	// Check if result is actually an integer
-	if value == math.Floor(value) && !math.IsInf(value, 0) {
-		// Both inputs are integers, return integer
-		leftLit, leftOk := left.(*rdf.Literal)
-		rightLit, rightOk := right.(*rdf.Literal)
+	leftLit, leftOk := left.(*rdf.Literal)
+	rightLit, rightOk := right.(*rdf.Literal)
 
-		if leftOk && rightOk &&
-			leftLit.Datatype != nil && rightLit.Datatype != nil &&
-			(leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#integer" ||
-				leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#int") &&
-			(rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#integer" ||
-				rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#int") {
-			return rdf.NewIntegerLiteral(int64(value))
-		}
+	if !leftOk || !rightOk || leftLit.Datatype == nil || rightLit.Datatype == nil {
+		// Fallback to double if we can't determine types
+		return rdf.NewDoubleLiteral(value)
 	}
 
-	// Otherwise return double
-	return rdf.NewDoubleLiteral(value)
+	// Get promoted type according to SPARQL type promotion rules
+	promotedType := promoteNumericTypes(leftLit.Datatype.IRI, rightLit.Datatype.IRI)
+
+	// Create result with promoted type
+	switch promotedType {
+	case "http://www.w3.org/2001/XMLSchema#integer":
+		// All integer subtypes promote to xsd:integer
+		if value == math.Floor(value) && !math.IsInf(value, 0) {
+			return rdf.NewIntegerLiteral(int64(value))
+		}
+		// If result is not an integer (e.g., division), promote to decimal
+		return rdf.NewLiteralWithDatatype(fmt.Sprintf("%g", value), rdf.XSDDecimal)
+
+	case "http://www.w3.org/2001/XMLSchema#decimal":
+		return rdf.NewLiteralWithDatatype(fmt.Sprintf("%g", value), rdf.XSDDecimal)
+
+	case "http://www.w3.org/2001/XMLSchema#float":
+		return rdf.NewLiteralWithDatatype(fmt.Sprintf("%e", float32(value)), rdf.XSDFloat)
+
+	case "http://www.w3.org/2001/XMLSchema#double":
+		return rdf.NewDoubleLiteral(value)
+
+	default:
+		return rdf.NewDoubleLiteral(value)
+	}
+}
+
+// promoteNumericTypes returns the promoted type for two XSD numeric types
+// Implements SPARQL 1.0 type promotion rules
+func promoteNumericTypes(leftType, rightType string) string {
+	// Type promotion hierarchy (higher number = wider type)
+	typeRank := map[string]int{
+		// Integer types all rank 1 (promote to xsd:integer)
+		"http://www.w3.org/2001/XMLSchema#integer":            1,
+		"http://www.w3.org/2001/XMLSchema#int":                1,
+		"http://www.w3.org/2001/XMLSchema#long":               1,
+		"http://www.w3.org/2001/XMLSchema#short":              1,
+		"http://www.w3.org/2001/XMLSchema#byte":               1,
+		"http://www.w3.org/2001/XMLSchema#nonPositiveInteger": 1,
+		"http://www.w3.org/2001/XMLSchema#negativeInteger":    1,
+		"http://www.w3.org/2001/XMLSchema#nonNegativeInteger": 1,
+		"http://www.w3.org/2001/XMLSchema#positiveInteger":    1,
+		"http://www.w3.org/2001/XMLSchema#unsignedLong":       1,
+		"http://www.w3.org/2001/XMLSchema#unsignedInt":        1,
+		"http://www.w3.org/2001/XMLSchema#unsignedShort":      1,
+		"http://www.w3.org/2001/XMLSchema#unsignedByte":       1,
+		// Decimal
+		"http://www.w3.org/2001/XMLSchema#decimal": 2,
+		// Float
+		"http://www.w3.org/2001/XMLSchema#float": 3,
+		// Double (widest)
+		"http://www.w3.org/2001/XMLSchema#double": 4,
+	}
+
+	leftRank, leftExists := typeRank[leftType]
+	rightRank, rightExists := typeRank[rightType]
+
+	if !leftExists || !rightExists {
+		// Unknown type, default to double
+		return "http://www.w3.org/2001/XMLSchema#double"
+	}
+
+	// Promote to wider type
+	maxRank := leftRank
+	if rightRank > maxRank {
+		maxRank = rightRank
+	}
+
+	// Return the promoted type
+	switch maxRank {
+	case 1:
+		return "http://www.w3.org/2001/XMLSchema#integer"
+	case 2:
+		return "http://www.w3.org/2001/XMLSchema#decimal"
+	case 3:
+		return "http://www.w3.org/2001/XMLSchema#float"
+	case 4:
+		return "http://www.w3.org/2001/XMLSchema#double"
+	default:
+		return "http://www.w3.org/2001/XMLSchema#double"
+	}
 }

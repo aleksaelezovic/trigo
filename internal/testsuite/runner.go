@@ -557,6 +557,34 @@ func (r *TestRunner) loadExpectedResults(manifest *TestManifest, test *TestCase)
 func (r *TestRunner) loadExpectedAskResult(manifest *TestManifest, test *TestCase) (bool, error) {
 	resultPath := manifest.ResolveFile(test.Result)
 
+	// Check file extension to determine format
+	if strings.HasSuffix(resultPath, ".ttl") || strings.HasSuffix(resultPath, ".nt") {
+		// Parse as Turtle/N-Triples (SPARQL 1.0 style)
+		resultBytes, err := os.ReadFile(resultPath) // #nosec G304 - test suite legitimately reads test result files
+		if err != nil {
+			return false, fmt.Errorf("failed to read result file: %w", err)
+		}
+
+		parser := rdf.NewTurtleParser(string(resultBytes))
+		triples, err := parser.Parse()
+		if err != nil {
+			return false, fmt.Errorf("failed to parse Turtle result: %w", err)
+		}
+
+		// Extract rs:boolean from triples
+		// Format: [] rdf:type rs:ResultSet ; rs:boolean "true"^^xsd:boolean .
+		for _, triple := range triples {
+			if pred, ok := triple.Predicate.(*rdf.NamedNode); ok {
+				if pred.IRI == "http://www.w3.org/2001/sw/DataAccess/tests/result-set#boolean" {
+					if lit, ok := triple.Object.(*rdf.Literal); ok {
+						return lit.Value == "true", nil
+					}
+				}
+			}
+		}
+		return false, fmt.Errorf("no rs:boolean property found in Turtle result")
+	}
+
 	// Parse SPARQL XML results (.srx format)
 	resultFile, err := os.Open(resultPath) // #nosec G304 - test suite legitimately reads test result files
 	if err != nil {

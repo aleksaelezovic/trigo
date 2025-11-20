@@ -328,6 +328,7 @@ var (
 	XSDString   = NewNamedNode("http://www.w3.org/2001/XMLSchema#string")
 	XSDInteger  = NewNamedNode("http://www.w3.org/2001/XMLSchema#integer")
 	XSDDecimal  = NewNamedNode("http://www.w3.org/2001/XMLSchema#decimal")
+	XSDFloat    = NewNamedNode("http://www.w3.org/2001/XMLSchema#float")
 	XSDDouble   = NewNamedNode("http://www.w3.org/2001/XMLSchema#double")
 	XSDBoolean  = NewNamedNode("http://www.w3.org/2001/XMLSchema#boolean")
 	XSDDateTime = NewNamedNode("http://www.w3.org/2001/XMLSchema#dateTime")
