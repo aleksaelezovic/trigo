@@ -1,14 +1,22 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 366/450 tests passing (81.3%)
-**Remaining:** 84 failing tests (18.7%)
-**Last Updated:** 2025-01-20
+**Current Status:** 369/450 tests passing (82.0%)
+**Remaining:** 81 failing tests (18.0%)
+**Last Updated:** 2025-01-21
 
 ## Progress Summary
+
+### Completed (Session 10 - UNION Chaining)
+- ✅ Fixed chained UNION operations (A UNION B UNION C)
+- ✅ UNION now supports multiple consecutive operations per SPARQL grammar
+- ✅ Syntax-sparql1 suite: 81/81 (100.0%) ⭐ **COMPLETE!**
+- **Test improvement:** 366→369 (+3 tests, +0.7pp)
+- **🎉 Milestone:** 100% syntax-sparql1 compliance achieved!
 
 ### Completed (Session 9 Continued - String Literals & Prefixed Names)
 - ✅ Added dot support in prefixed names (x.y:, :a.b)
 - ✅ Implemented escape sequences in triple-quoted strings (\""")
+- ✅ Trailing semicolons before graph pattern keywords (OPTIONAL, UNION, etc.)
 - ✅ Syntax-sparql1 suite: 79/81 (97.5%) - was 77/81
 - **Test improvement:** 363→366 (+3 tests, +0.6pp)
 - **Session 9 total:** 355→366 (+11 tests, +2.6pp)
@@ -52,6 +60,7 @@
 
 ### Test Suite Status
 ```
+✅ syntax-sparql1:   81/81  (100.0%) ⭐ NEW!
 ✅ expr-builtin:     24/24  (100.0%)
 ✅ regex:            All passing
 ✅ sort:             14/15  (93.3%)
@@ -253,21 +262,8 @@
 **Files to Modify:**
 - `pkg/sparql/evaluator/functions.go` - BOUND function (lines ~86-99)
 
-### 9. Syntax Tests (1 test)
-**Priority:** VERY LOW
-**Complexity:** LOW
-
-**Problem:**
-- syntax-order-01.rq fails but should parse
-- Likely test runner issue, not parser issue
-
-**Tests Failing:**
-- syntax-order-01.rq
-
-**Implementation Steps:**
-1. Check if parser actually accepts the query
-2. May be test runner expecting different behavior
-3. Low priority - doesn't affect actual functionality
+### 9. Syntax Tests
+**Status:** ✅ **COMPLETED** - 100% compliance (81/81)
 
 ## Implementation Priority Order
 

@@ -639,18 +639,33 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			pattern.Children = append(pattern.Children, nestedPattern)
 
 			// Check for UNION after the nested pattern
+			// UNION can chain: { ... } UNION { ... } UNION { ... }
+			// Build the UNION chain by looping
 			p.skipWhitespace()
 			if p.matchKeyword("UNION") {
-				// Parse the right side of UNION
-				rightPattern, err := p.parseGraphPattern()
-				if err != nil {
-					return nil, err
+				// Collect all patterns in the UNION chain
+				unionChildren := []*GraphPattern{nestedPattern}
+
+				// Loop to handle multiple consecutive UNIONs
+				for {
+					// Parse the next pattern after UNION
+					rightPattern, err := p.parseGraphPattern()
+					if err != nil {
+						return nil, err
+					}
+					unionChildren = append(unionChildren, rightPattern)
+
+					// Check if there's another UNION
+					p.skipWhitespace()
+					if !p.matchKeyword("UNION") {
+						break
+					}
 				}
 
-				// Create a UNION pattern containing both sides
+				// Create a UNION pattern containing all patterns in the chain
 				unionPattern := &GraphPattern{
 					Type:     GraphPatternTypeUnion,
-					Children: []*GraphPattern{nestedPattern, rightPattern},
+					Children: unionChildren,
 				}
 
 				// Replace the last child with the union pattern
@@ -832,9 +847,20 @@ func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 			p.skipWhitespace()
 
 			// Check for end of pattern (semicolon can be trailing)
+			// Trailing semicolon can be followed by: '.', '}', or graph pattern keywords
 			if p.peek() == '.' || p.peek() == '}' {
 				break
 			}
+
+			// Check for graph pattern keywords (OPTIONAL, UNION, MINUS, FILTER, BIND, GRAPH)
+			savedPos := p.pos
+			if p.matchKeyword("OPTIONAL") || p.matchKeyword("UNION") || p.matchKeyword("MINUS") ||
+				p.matchKeyword("FILTER") || p.matchKeyword("BIND") || p.matchKeyword("GRAPH") {
+				// Trailing semicolon before graph pattern keyword
+				p.pos = savedPos // restore position
+				break
+			}
+			p.pos = savedPos // restore position for normal parsing
 
 			predicate, err := p.parseTermOrVariable()
 			if err != nil {
