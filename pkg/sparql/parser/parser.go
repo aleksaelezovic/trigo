@@ -183,22 +183,27 @@ func (p *Parser) parseSelect() (*SelectQuery, error) {
 		query.OrderBy = orderBy
 	}
 
-	// Parse optional LIMIT
-	if p.matchKeyword("LIMIT") {
-		limit, err := p.parseInteger()
-		if err != nil {
-			return nil, err
+	// Parse optional LIMIT and OFFSET (in either order)
+	// SPARQL allows both "LIMIT n OFFSET m" and "OFFSET m LIMIT n"
+	for {
+		p.skipWhitespace()
+		if query.Limit == nil && p.matchKeyword("LIMIT") {
+			limit, err := p.parseInteger()
+			if err != nil {
+				return nil, err
+			}
+			query.Limit = &limit
+			continue
 		}
-		query.Limit = &limit
-	}
-
-	// Parse optional OFFSET
-	if p.matchKeyword("OFFSET") {
-		offset, err := p.parseInteger()
-		if err != nil {
-			return nil, err
+		if query.Offset == nil && p.matchKeyword("OFFSET") {
+			offset, err := p.parseInteger()
+			if err != nil {
+				return nil, err
+			}
+			query.Offset = &offset
+			continue
 		}
-		query.Offset = &offset
+		break
 	}
 
 	return query, nil
