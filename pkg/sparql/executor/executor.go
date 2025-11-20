@@ -387,13 +387,38 @@ func (e *Executor) instantiateTerm(termOrVar parser.TermOrVariable, binding *sto
 
 // createIterator creates an iterator from a query plan
 func (e *Executor) createIterator(plan optimizer.QueryPlan) (store.BindingIterator, error) {
+	return e.createIteratorWithContext(plan, nil)
+}
+
+// createIteratorWithContext creates an iterator with an optional context binding for OPTIONAL patterns
+func (e *Executor) createIteratorWithContext(plan optimizer.QueryPlan, contextBinding *store.Binding) (store.BindingIterator, error) {
 	switch p := plan.(type) {
 	case *optimizer.ScanPlan:
-		return e.createScanIterator(p)
+		iter, err := e.createScanIterator(p)
+		if err != nil {
+			return nil, err
+		}
+		// Wrap scans with context binding so filters can see outer variables
+		if contextBinding != nil {
+			return &preBindingIterator{
+				input:       iter,
+				baseBinding: contextBinding,
+			}, nil
+		}
+		return iter, nil
 	case *optimizer.JoinPlan:
 		return e.createJoinIterator(p)
 	case *optimizer.FilterPlan:
-		return e.createFilterIterator(p)
+		input, err := e.createIteratorWithContext(p.Input, contextBinding)
+		if err != nil {
+			return nil, err
+		}
+		return &filterIterator{
+			input:          input,
+			filter:         p.Filter,
+			evaluator:      evaluator.NewEvaluator(),
+			contextBinding: contextBinding, // Provide context for filter evaluation
+		}, nil
 	case *optimizer.ProjectionPlan:
 		return e.createProjectionIterator(p)
 	case *optimizer.LimitPlan:
@@ -460,20 +485,6 @@ func (e *Executor) createJoinIterator(plan *optimizer.JoinPlan) (store.BindingIt
 	default:
 		return nil, fmt.Errorf("unsupported join type: %v", plan.Type)
 	}
-}
-
-// createFilterIterator creates an iterator for filter operations
-func (e *Executor) createFilterIterator(plan *optimizer.FilterPlan) (store.BindingIterator, error) {
-	input, err := e.createIterator(plan.Input)
-	if err != nil {
-		return nil, err
-	}
-
-	return &filterIterator{
-		input:     input,
-		filter:    plan.Filter,
-		evaluator: evaluator.NewEvaluator(),
-	}, nil
 }
 
 // createProjectionIterator creates an iterator for projection operations
@@ -685,9 +696,10 @@ func (it *nestedLoopJoinIterator) mergeBindings(left, right *store.Binding) *sto
 
 // filterIterator implements filter operations
 type filterIterator struct {
-	input     store.BindingIterator
-	filter    *parser.Filter
-	evaluator *evaluator.Evaluator
+	input          store.BindingIterator
+	filter         *parser.Filter
+	evaluator      *evaluator.Evaluator
+	contextBinding *store.Binding // Optional: provides variables from outer scope (for OPTIONAL)
 }
 
 func (it *filterIterator) Next() bool {
@@ -699,8 +711,18 @@ func (it *filterIterator) Next() bool {
 			return true
 		}
 
+		// Merge with context binding if present (for OPTIONAL patterns)
+		evalBinding := binding
+		if it.contextBinding != nil {
+			merged := it.contextBinding.Clone()
+			for varName, term := range binding.Vars {
+				merged.Vars[varName] = term
+			}
+			evalBinding = merged
+		}
+
 		// Evaluate the filter expression
-		result, err := it.evaluator.Evaluate(it.filter.Expression, binding)
+		result, err := it.evaluator.Evaluate(it.filter.Expression, evalBinding)
 		if err != nil {
 			// Expression evaluation error - filter out this binding
 			continue
@@ -1087,6 +1109,10 @@ func (it *preBindingIterator) Next() bool {
 		// Check if bindings are compatible
 		inputBinding := it.input.Binding()
 
+		// Debug: log what we're merging
+		// fmt.Printf("[preBinding] Base vars: %v, Input vars: %v\n",
+		//    it.baseBinding.Vars, inputBinding.Vars)
+
 		// Verify no conflicts between base binding and input binding
 		compatible := true
 		for varName, baseTerm := range it.baseBinding.Vars {
@@ -1168,18 +1194,15 @@ func (it *optionalIterator) Next() bool {
 		it.currentLeft = it.left.Binding()
 		it.hasMatch = false
 
-		// Create new right iterator
-		rightIter, err := it.executor.createIterator(it.rightPlan)
+		// Create new right iterator with context binding from left side
+		// This allows FILTERs in the OPTIONAL to access outer variables
+		rightIter, err := it.executor.createIteratorWithContext(it.rightPlan, it.currentLeft)
 		if err != nil {
 			// If right fails, still return left binding (OPTIONAL semantics)
 			it.result = it.currentLeft
 			return true
 		}
-		// Wrap right iterator with pre-binding to make left binding variables available
-		it.currentRight = &preBindingIterator{
-			input:       rightIter,
-			baseBinding: it.currentLeft,
-		}
+		it.currentRight = rightIter
 	}
 }
 
