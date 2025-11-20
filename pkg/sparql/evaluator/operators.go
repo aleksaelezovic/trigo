@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
@@ -262,13 +263,28 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 			return false, nil
 		}
 
-		// Plain literals (no datatype)
+		// Plain literals (no datatype, no language tag)
 		if leftLit.Datatype == nil && rightLit.Datatype == nil {
-			// Must have same language tag and value
-			return leftLit.Language == rightLit.Language && leftLit.Value == rightLit.Value, nil
+			// Both plain literals
+			if leftLit.Language == "" && rightLit.Language == "" {
+				// Both are simple literals (no lang tag) - compare values
+				return leftLit.Value == rightLit.Value, nil
+			}
+			// At least one has a language tag - compare with case-insensitive lang tags
+			// RFC 5646: language tags are case-insensitive
+			return strings.EqualFold(leftLit.Language, rightLit.Language) && leftLit.Value == rightLit.Value, nil
 		}
 
-		// One has datatype, other doesn't - not equal
+		// SPARQL 1.0 special case: plain literal (no lang tag) equals xsd:string
+		// Per SPARQL spec, simple literals are equivalent to xsd:string for equality
+		if (leftLit.Datatype == nil && leftLit.Language == "" &&
+			rightLit.Datatype != nil && rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#string") ||
+			(rightLit.Datatype == nil && rightLit.Language == "" &&
+				leftLit.Datatype != nil && leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#string") {
+			return leftLit.Value == rightLit.Value, nil
+		}
+
+		// One has datatype/lang tag, other doesn't - not equal
 		return false, nil
 	}
 
