@@ -1075,6 +1075,53 @@ func (e *Executor) createOptionalIterator(plan *optimizer.OptionalPlan) (store.B
 	}, nil
 }
 
+// preBindingIterator seeds an iterator with an initial binding
+// This provides variables from the outer scope to inner patterns (for OPTIONAL)
+type preBindingIterator struct {
+	input       store.BindingIterator
+	baseBinding *store.Binding
+}
+
+func (it *preBindingIterator) Next() bool {
+	for it.input.Next() {
+		// Check if bindings are compatible
+		inputBinding := it.input.Binding()
+
+		// Verify no conflicts between base binding and input binding
+		compatible := true
+		for varName, baseTerm := range it.baseBinding.Vars {
+			if inputTerm, exists := inputBinding.Vars[varName]; exists {
+				if !baseTerm.Equals(inputTerm) {
+					// Conflict - skip this binding
+					compatible = false
+					break
+				}
+			}
+		}
+
+		if compatible {
+			return true
+		}
+	}
+	return false
+}
+
+func (it *preBindingIterator) Binding() *store.Binding {
+	// Merge base binding with input binding
+	inputBinding := it.input.Binding()
+	result := it.baseBinding.Clone()
+
+	for varName, term := range inputBinding.Vars {
+		result.Vars[varName] = term
+	}
+
+	return result
+}
+
+func (it *preBindingIterator) Close() error {
+	return it.input.Close()
+}
+
 // optionalIterator implements OPTIONAL patterns (left outer join)
 type optionalIterator struct {
 	left         store.BindingIterator
@@ -1128,7 +1175,11 @@ func (it *optionalIterator) Next() bool {
 			it.result = it.currentLeft
 			return true
 		}
-		it.currentRight = rightIter
+		// Wrap right iterator with pre-binding to make left binding variables available
+		it.currentRight = &preBindingIterator{
+			input:       rightIter,
+			baseBinding: it.currentLeft,
+		}
 	}
 }
 
