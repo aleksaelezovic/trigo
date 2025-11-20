@@ -1,10 +1,18 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 364/469 tests passing (77.6%)
-**Remaining:** 105 failing tests (22.4%)
+**Current Status:** 354/450 tests passing (78.7%)
+**Remaining:** 96 failing tests (21.3%)
 **Last Updated:** 2025-01-20
 
 ## Progress Summary
+
+### Completed (Session 8 - Manifest Parser Fix)
+- ✅ Fixed manifest parser test detection logic
+- ✅ Tests were being assigned wrong action files due to multi-line parsing bug
+- ✅ Parser now correctly identifies test definitions by looking for "mf:name"
+- ✅ Syntax-sparql1 suite: 69/81 (85.2%) - was 68/80 with wrong files
+- **Note:** Test counts changed (469→450) because old parser was miscounting/duplicating tests
+- **Test improvement:** More accurate test detection, +1 real test fix (syntax-order-01)
 
 ### Completed (Session 7 - OPTIONAL/FILTER Context Binding)
 - ✅ Implemented context binding for OPTIONAL/FILTER patterns
