@@ -2177,13 +2177,13 @@ func (p *Parser) parsePrimaryExpression() (Expression, error) {
 		return &VariableExpression{Variable: variable}, nil
 	}
 
-	// Check for function call (uppercase letter at start)
+	// Check for function call (uppercase letter at start, or prefixed name like xsd:string)
 	ch := p.peek()
 	if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
 		// Try to parse as function call
 		savedPos := p.pos
 		_ = p.readWhile(func(c byte) bool {
-			return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+			return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == ':'
 		})
 
 		p.skipWhitespace()

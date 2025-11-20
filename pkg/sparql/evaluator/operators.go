@@ -234,6 +234,9 @@ func (e *Evaluator) evaluateGreaterThanOrEqual(left, right rdf.Term) (rdf.Term, 
 // sparqlEquals implements SPARQL equality semantics
 // Returns true if terms are equal, false if not equal, error if incompatible
 func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
+	// DEBUG: Print what we're comparing
+	// fmt.Printf("DEBUG sparqlEquals: left=%v (type=%T), right=%v (type=%T)\n", left, left, right, right)
+
 	// If both are literals, try value-based comparison
 	leftLit, leftIsLit := left.(*rdf.Literal)
 	rightLit, rightIsLit := right.(*rdf.Literal)

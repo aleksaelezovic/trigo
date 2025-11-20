@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
@@ -73,7 +74,7 @@ func (e *Evaluator) evaluateFunctionCall(expr *parser.FunctionCallExpression, bi
 	default:
 		// Check if it's a type casting function (IRI-based)
 		if strings.HasPrefix(funcName, "HTTP://WWW.W3.ORG/2001/XMLSCHEMA#") {
-			datatype := funcName // Full IRI
+			datatype := expr.Function // Use original IRI (not uppercased)
 			return e.evaluateTypeCast(expr.Arguments, binding, datatype)
 		}
 		return nil, fmt.Errorf("unsupported function: %s", funcName)
@@ -686,6 +687,10 @@ func (e *Evaluator) evaluateTypeCast(args []parser.Expression, binding *store.Bi
 	case *rdf.Literal:
 		value = t.Value
 	case *rdf.NamedNode:
+		// Can only cast IRIs to string
+		if datatypeIRI != "http://www.w3.org/2001/XMLSchema#string" {
+			return nil, fmt.Errorf("cannot cast IRI to %s", datatypeIRI)
+		}
 		value = t.IRI
 	case *rdf.BlankNode:
 		return nil, fmt.Errorf("cannot cast blank node to %s", datatypeIRI)
@@ -693,9 +698,70 @@ func (e *Evaluator) evaluateTypeCast(args []parser.Expression, binding *store.Bi
 		return nil, fmt.Errorf("cannot cast term type %T to %s", term, datatypeIRI)
 	}
 
-	// Create a new literal with the target datatype
-	// The value string is kept as-is (SPARQL spec allows this for type casting)
-	return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+	// Validate the cast based on target type
+	switch datatypeIRI {
+	case "http://www.w3.org/2001/XMLSchema#string":
+		// Any literal can be cast to string
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	case "http://www.w3.org/2001/XMLSchema#integer":
+		// Integer: use strconv.ParseInt for strict validation
+		_, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer value: %s", value)
+		}
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	case "http://www.w3.org/2001/XMLSchema#decimal":
+		// Decimal: must not contain exponent, but allows decimal point
+		// XSD decimal format is: [+-]? [0-9]+ ('.' [0-9]+)?
+		if strings.ContainsAny(value, "eE") {
+			return nil, fmt.Errorf("invalid decimal value (no exponents allowed): %s", value)
+		}
+		// Try to parse as float to validate it's numeric
+		_, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid decimal value: %s", value)
+		}
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	case "http://www.w3.org/2001/XMLSchema#float", "http://www.w3.org/2001/XMLSchema#double":
+		// Float/double: allows all numeric formats including scientific notation
+		_, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float/double value: %s", value)
+		}
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	case "http://www.w3.org/2001/XMLSchema#boolean":
+		// Must be "true", "false", "1", or "0"
+		if value != "true" && value != "false" && value != "1" && value != "0" {
+			return nil, fmt.Errorf("invalid boolean value: %s", value)
+		}
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	case "http://www.w3.org/2001/XMLSchema#dateTime":
+		// Simple validation for dateTime format (ISO 8601)
+		// Format: YYYY-MM-DDTHH:MM:SS[.fff][Z|+/-HH:MM]
+		// Must contain 'T' separating date from time
+		upperValue := strings.ToUpper(value)
+		if !strings.Contains(upperValue, "T") {
+			return nil, fmt.Errorf("invalid dateTime value (missing T separator): %s", value)
+		}
+		// Must have date-like format (YYYY-MM-DD)
+		if !strings.Contains(value, "-") {
+			return nil, fmt.Errorf("invalid dateTime value (missing date separators): %s", value)
+		}
+		// Must have time-like format (HH:MM:SS)
+		if strings.Count(value, ":") < 2 {
+			return nil, fmt.Errorf("invalid dateTime value (missing time separators): %s", value)
+		}
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+
+	default:
+		// For other datatypes, allow the cast without validation
+		return rdf.NewLiteralWithDatatype(value, rdf.NewNamedNode(datatypeIRI)), nil
+	}
 }
 
 // termsEqual checks strict RDF term equality
