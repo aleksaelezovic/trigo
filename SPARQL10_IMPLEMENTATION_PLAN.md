@@ -1,10 +1,20 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 362/469 tests passing (77.2%)
-**Remaining:** 107 failing tests (22.8%)
+**Current Status:** 364/469 tests passing (77.6%)
+**Remaining:** 105 failing tests (22.4%)
 **Last Updated:** 2025-01-20
 
 ## Progress Summary
+
+### Completed (Session 7 - OPTIONAL/FILTER Context Binding)
+- ✅ Implemented context binding for OPTIONAL/FILTER patterns
+- ✅ Filters inside OPTIONAL can now access outer scope variables
+- ✅ Added preBindingIterator for variable injection at scan level
+- ✅ Created createIteratorWithContext() for context propagation
+- ✅ Exported ExtractNumeric() for future value-based comparison
+- ✅ Fixed xsd:string normalization (plain literals = xsd:string)
+- ✅ Optional-filter suite: 7/9 (77.8%) - was 5/9
+- **Test improvement:** 362→364 (+2 tests, +0.4pp)
 
 ### Completed (Session 6)
 - ✅ DATATYPE() function returns rdf:langString for language-tagged literals
