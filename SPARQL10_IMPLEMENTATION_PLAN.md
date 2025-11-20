@@ -1,10 +1,17 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 363/450 tests passing (80.7%)
-**Remaining:** 87 failing tests (19.3%)
+**Current Status:** 366/450 tests passing (81.3%)
+**Remaining:** 84 failing tests (18.7%)
 **Last Updated:** 2025-01-20
 
 ## Progress Summary
+
+### Completed (Session 9 Continued - String Literals & Prefixed Names)
+- ✅ Added dot support in prefixed names (x.y:, :a.b)
+- ✅ Implemented escape sequences in triple-quoted strings (\""")
+- ✅ Syntax-sparql1 suite: 79/81 (97.5%) - was 77/81
+- **Test improvement:** 363→366 (+3 tests, +0.6pp)
+- **Session 9 total:** 355→366 (+11 tests, +2.6pp)
 
 ### Completed (Session 9 - Parser Fixes: Function Calls & Blank Nodes)
 - ✅ Fixed prefixed function names in FILTER expressions (:myFunc)
