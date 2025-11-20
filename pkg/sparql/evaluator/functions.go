@@ -523,10 +523,13 @@ func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Bindi
 	if err != nil {
 		return nil, err
 	}
-	text, err := e.extractString(textTerm)
-	if err != nil {
-		return nil, fmt.Errorf("REGEX text argument: %w", err)
+
+	// REGEX only works on literals, not IRIs
+	lit, ok := textTerm.(*rdf.Literal)
+	if !ok {
+		return nil, fmt.Errorf("REGEX can only be applied to literals")
 	}
+	text := lit.Value
 
 	// Evaluate pattern argument
 	patternTerm, err := e.Evaluate(args[1], binding)
