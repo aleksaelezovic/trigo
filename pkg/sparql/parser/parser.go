@@ -2182,9 +2182,9 @@ func (p *Parser) parsePrimaryExpression() (Expression, error) {
 		return &VariableExpression{Variable: variable}, nil
 	}
 
-	// Check for function call (uppercase letter at start, or prefixed name like xsd:string)
+	// Check for function call (uppercase letter at start, or prefixed name like xsd:string or :myFunc)
 	ch := p.peek()
-	if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+	if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == ':' {
 		// Try to parse as function call
 		savedPos := p.pos
 		_ = p.readWhile(func(c byte) bool {
