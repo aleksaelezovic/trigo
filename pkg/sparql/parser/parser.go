@@ -516,6 +516,8 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, graphPattern)
+			// Add to Elements to preserve order with FILTERs
+			pattern.Elements = append(pattern.Elements, PatternElement{GraphPattern: graphPattern})
 			// Skip optional '.' separator after GRAPH block
 			p.skipWhitespace()
 			if p.peek() == '.' {
@@ -567,6 +569,8 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, optionalPattern)
+			// Add to Elements to preserve order with FILTERs
+			pattern.Elements = append(pattern.Elements, PatternElement{GraphPattern: optionalPattern})
 			// Skip optional '.' separator after OPTIONAL block
 			p.skipWhitespace()
 			if p.peek() == '.' {
@@ -586,6 +590,8 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 				pattern.Children = []*GraphPattern{}
 			}
 			pattern.Children = append(pattern.Children, minusPattern)
+			// Add to Elements to preserve order with FILTERs
+			pattern.Elements = append(pattern.Elements, PatternElement{GraphPattern: minusPattern})
 			// Skip optional '.' separator after MINUS block
 			p.skipWhitespace()
 			if p.peek() == '.' {
@@ -642,6 +648,7 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			// UNION can chain: { ... } UNION { ... } UNION { ... }
 			// Build the UNION chain by looping
 			p.skipWhitespace()
+			var finalPattern *GraphPattern
 			if p.matchKeyword("UNION") {
 				// Collect all patterns in the UNION chain
 				unionChildren := []*GraphPattern{nestedPattern}
@@ -670,7 +677,13 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 				// Replace the last child with the union pattern
 				pattern.Children[len(pattern.Children)-1] = unionPattern
+				finalPattern = unionPattern
+			} else {
+				finalPattern = nestedPattern
 			}
+
+			// Add to Elements to preserve order with FILTERs
+			pattern.Elements = append(pattern.Elements, PatternElement{GraphPattern: finalPattern})
 			continue
 		}
 

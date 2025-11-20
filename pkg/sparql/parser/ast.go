@@ -75,13 +75,14 @@ type GraphPattern struct {
 	Elements []PatternElement
 }
 
-// PatternElement represents an element in a graph pattern (triple, BIND, or FILTER).
+// PatternElement represents an element in a graph pattern (triple, BIND, FILTER, or child pattern).
 // Used to preserve the ordering of elements as they appear in the query text,
-// which is necessary for correct BIND variable scoping.
+// which is necessary for correct BIND variable scoping and FILTER placement.
 type PatternElement struct {
-	Triple *TriplePattern
-	Bind   *Bind
-	Filter *Filter
+	Triple       *TriplePattern
+	Bind         *Bind
+	Filter       *Filter
+	GraphPattern *GraphPattern // For OPTIONAL, UNION, MINUS, GRAPH patterns
 }
 
 // GraphPatternType represents the type of graph pattern

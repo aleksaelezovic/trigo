@@ -422,6 +422,56 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 						Filter: elem.Filter,
 					}
 				}
+			} else if elem.GraphPattern != nil {
+				// Handle nested graph patterns (OPTIONAL, UNION, MINUS, GRAPH)
+				childPlan, err := o.optimizeGraphPattern(elem.GraphPattern)
+				if err != nil {
+					return nil, err
+				}
+
+				if childPlan != nil {
+					if plan == nil {
+						plan = childPlan
+					} else {
+						// Create appropriate plan based on child pattern type
+						switch elem.GraphPattern.Type {
+						case parser.GraphPatternTypeOptional:
+							plan = &OptionalPlan{
+								Left:  plan,
+								Right: childPlan,
+							}
+						case parser.GraphPatternTypeUnion:
+							// UNION patterns are already optimized by optimizeUnionPattern
+							// Just need to combine with existing plan using JOIN
+							// Actually, UNION should be part of the main pattern, not joined
+							// This case shouldn't happen if UNION is at top level
+							plan = &JoinPlan{
+								Left:  plan,
+								Right: childPlan,
+								Type:  JoinTypeNestedLoop,
+							}
+						case parser.GraphPatternTypeMinus:
+							plan = &MinusPlan{
+								Left:  plan,
+								Right: childPlan,
+							}
+						case parser.GraphPatternTypeGraph:
+							// GRAPH patterns should be joined
+							plan = &JoinPlan{
+								Left:  plan,
+								Right: childPlan,
+								Type:  JoinTypeNestedLoop,
+							}
+						default:
+							// Regular join for other pattern types
+							plan = &JoinPlan{
+								Left:  plan,
+								Right: childPlan,
+								Type:  JoinTypeNestedLoop,
+							}
+						}
+					}
+				}
 			}
 		}
 	} else {
