@@ -995,10 +995,17 @@ func (it *distinctIterator) Close() error {
 
 // bindingKey creates a unique key for a binding
 func (it *distinctIterator) bindingKey(binding *store.Binding) string {
-	// Simple string concatenation for now
-	// TODO: Implement better hashing
+	// Sort variable names to ensure consistent key generation
+	// (map iteration order is non-deterministic in Go)
+	vars := make([]string, 0, len(binding.Vars))
+	for varName := range binding.Vars {
+		vars = append(vars, varName)
+	}
+	sort.Strings(vars)
+
 	key := ""
-	for varName, term := range binding.Vars {
+	for _, varName := range vars {
+		term := binding.Vars[varName]
 		key += varName + "=" + term.String() + ";"
 	}
 	return key
