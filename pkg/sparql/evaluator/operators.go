@@ -260,11 +260,26 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 		// Try simple literal comparison (same datatype and value)
 		// This handles strings, booleans, dates, etc.
 		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			// Check if datatypes are known (XSD types)
+			leftKnown := e.isKnownDatatype(leftLit.Datatype.IRI)
+			rightKnown := e.isKnownDatatype(rightLit.Datatype.IRI)
+
 			if leftLit.Datatype.IRI == rightLit.Datatype.IRI {
-				// Same datatype, compare lexical forms
+				// Same datatype IRI
+				if !leftKnown && leftLit.Value != rightLit.Value {
+					// Unknown datatype with different lexical forms - cannot determine if values differ
+					return false, fmt.Errorf("cannot compare unknown datatype values")
+				}
+				// Same datatype, same lexical form (or known datatype) - compare lexical forms
 				return leftLit.Value == rightLit.Value, nil
 			}
-			// Different datatypes (non-numeric) are not equal
+
+			// Different datatypes
+			if !leftKnown || !rightKnown {
+				// At least one unknown datatype - cannot compare
+				return false, fmt.Errorf("cannot compare unknown datatypes")
+			}
+			// Both known but different (non-numeric) - not equal
 			return false, nil
 		}
 
@@ -557,4 +572,11 @@ func promoteNumericTypes(leftType, rightType string) string {
 	default:
 		return "http://www.w3.org/2001/XMLSchema#double"
 	}
+}
+
+// isKnownDatatype checks if a datatype IRI is a known XSD type
+func (e *Evaluator) isKnownDatatype(iri string) bool {
+	// SPARQL 1.0 recognizes XSD datatypes and rdf:langString
+	return strings.HasPrefix(iri, "http://www.w3.org/2001/XMLSchema#") ||
+		iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
 }
