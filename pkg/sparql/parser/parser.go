@@ -1059,9 +1059,38 @@ func (p *Parser) parseStringLiteral() (*rdf.Literal, error) {
 		p.advance() // second quote
 		p.advance() // third quote
 
-		// Read until we find three consecutive quotes
+		// Read until we find three consecutive quotes (not escaped)
 		var value strings.Builder
 		for p.pos < len(p.input) {
+			ch := p.input[p.pos]
+
+			// Handle escape sequences
+			if ch == '\\' && p.pos+1 < len(p.input) {
+				p.advance() // skip backslash
+				nextCh := p.input[p.pos]
+				switch nextCh {
+				case 't':
+					value.WriteByte('\t')
+				case 'n':
+					value.WriteByte('\n')
+				case 'r':
+					value.WriteByte('\r')
+				case '\\':
+					value.WriteByte('\\')
+				case '"':
+					value.WriteByte('"')
+				case '\'':
+					value.WriteByte('\'')
+				default:
+					// Unknown escape - keep the backslash and character
+					value.WriteByte('\\')
+					value.WriteByte(nextCh)
+				}
+				p.advance()
+				continue
+			}
+
+			// Check for closing triple quote (after escape handling)
 			if p.pos+2 < len(p.input) &&
 				p.input[p.pos] == quote &&
 				p.input[p.pos+1] == quote &&
@@ -1072,6 +1101,7 @@ func (p *Parser) parseStringLiteral() (*rdf.Literal, error) {
 				p.advance()
 				return rdf.NewLiteral(value.String()), nil
 			}
+
 			value.WriteByte(p.input[p.pos])
 			p.advance()
 		}
@@ -1831,10 +1861,13 @@ func (p *Parser) skipSelectExpression() error {
 // parsePrefixedName parses a prefixed name (like :foo or prefix:foo) and expands it to a full IRI
 func (p *Parser) parsePrefixedName() (string, error) {
 	// Read prefix part (everything before ':')
+	// Per SPARQL grammar, prefix names can contain: PN_CHARS_BASE | '_' and continue with PN_CHARS | '.'
+	// In practice: letters, digits, underscore, hyphen, and dots
 	prefixStart := p.pos
 	for p.pos < p.length && p.input[p.pos] != ':' {
 		ch := p.input[p.pos]
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+		// Allow letters, digits, underscore, hyphen, and dot in prefix
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
 			break
 		}
 		p.advance()

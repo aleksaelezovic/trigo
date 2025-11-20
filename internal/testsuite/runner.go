@@ -695,8 +695,8 @@ func (r *TestRunner) printSummary() {
 	if len(r.stats.Errors) > 0 {
 		fmt.Println("\n❌ ERRORS:")
 		for i, err := range r.stats.Errors {
-			if i >= 50 {
-				fmt.Printf("   ... and %d more\n", len(r.stats.Errors)-50)
+			if i >= 10 {
+				fmt.Printf("   ... and %d more\n", len(r.stats.Errors)-10)
 				break
 			}
 			fmt.Printf("   • %s: %s\n", err.TestName, err.Error)
