@@ -733,6 +733,20 @@ func (p *Parser) parseTriplePattern() (*TriplePattern, error) {
 	}
 
 	p.skipWhitespace()
+
+	// Check if the subject was a blank node property list or collection that stands alone
+	// In SPARQL, [ :p :q ] is valid by itself - it generates triples via extraTriples
+	// and doesn't require additional predicate/object
+	if len(p.extraTriples) > 0 {
+		ch := p.peek()
+		if ch == '.' || ch == ';' || ch == '}' || ch == 0 {
+			// Standalone blank node property list or collection
+			// Return nil - the real triples are in extraTriples
+			// parseTriplePatterns will handle the nil case
+			return nil, nil
+		}
+	}
+
 	predicate, err := p.parseTermOrVariable()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse predicate: %w", err)
@@ -767,13 +781,23 @@ func (p *Parser) parseTriplePatterns() ([]*TriplePattern, error) {
 	if err != nil {
 		return nil, err
 	}
-	triples = append(triples, firstTriple)
 
-	// Add any extra triples generated from collections in the first triple
+	// firstTriple may be nil if it's a standalone blank node property list/collection
+	// In that case, only the extraTriples matter
+	if firstTriple != nil {
+		triples = append(triples, firstTriple)
+	}
+
+	// Add any extra triples generated from collections or blank node property lists
 	for i := range p.extraTriples {
 		triples = append(triples, &p.extraTriples[i])
 	}
 	p.extraTriples = make([]TriplePattern, 0)
+
+	// If firstTriple is nil (standalone property list), skip property list shorthand handling
+	if firstTriple == nil {
+		return triples, nil
+	}
 
 	// Handle property list shorthand
 	for {
