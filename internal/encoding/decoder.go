@@ -3,7 +3,6 @@ package encoding
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 	"strconv"
 	"time"
 
@@ -92,18 +91,22 @@ func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string)
 		return nil, fmt.Errorf("malformed typed literal string: %s", *stringValue)
 
 	case rdf.TermTypeIntegerLiteral:
-		value := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for binary decoding
-		return rdf.NewIntegerLiteral(value), nil
+		if stringValue == nil {
+			return nil, fmt.Errorf("string value required for integer literal")
+		}
+		return rdf.NewLiteralWithDatatype(*stringValue, rdf.XSDInteger), nil
 
 	case rdf.TermTypeDecimalLiteral:
-		bits := binary.BigEndian.Uint64(encoded[1:9])
-		value := math.Float64frombits(bits)
-		return rdf.NewLiteralWithDatatype(fmt.Sprintf("%g", value), rdf.XSDDecimal), nil
+		if stringValue == nil {
+			return nil, fmt.Errorf("string value required for decimal literal")
+		}
+		return rdf.NewLiteralWithDatatype(*stringValue, rdf.XSDDecimal), nil
 
 	case rdf.TermTypeDoubleLiteral:
-		bits := binary.BigEndian.Uint64(encoded[1:9])
-		value := math.Float64frombits(bits)
-		return rdf.NewDoubleLiteral(value), nil
+		if stringValue == nil {
+			return nil, fmt.Errorf("string value required for double literal")
+		}
+		return rdf.NewLiteralWithDatatype(*stringValue, rdf.XSDDouble), nil
 
 	case rdf.TermTypeBooleanLiteral:
 		value := encoded[1] != 0

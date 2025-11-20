@@ -3,7 +3,6 @@ package encoding
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -192,56 +191,57 @@ func (e *TermEncoder) encodeIntegerLiteral(lit *rdf.Literal) (store.EncodedTerm,
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeIntegerLiteral)
 
-	value, err := strconv.ParseInt(lit.Value, 10, 64)
+	// Validate that it's a valid integer
+	_, err := strconv.ParseInt(lit.Value, 10, 64)
 	if err != nil {
 		return encoded, nil, fmt.Errorf("invalid integer literal: %w", err)
 	}
 
-	// Store as big endian signed integer
-	binary.BigEndian.PutUint64(encoded[1:9], uint64(value)) // #nosec G115 - intentional bit-pattern conversion for binary encoding
-	// Zero out remaining bytes
-	for i := 9; i < EncodedTermSize; i++ {
-		encoded[i] = 0
-	}
+	// Hash the lexical form to preserve distinction between "1", "01", "001", etc.
+	// This ensures SPARQL graph pattern matching is lexical, not value-based
+	hash := e.Hash128(lit.Value)
+	copy(encoded[1:], hash[:])
 
-	return encoded, nil, nil
+	// Store lexical form in id2str table
+	return encoded, &lit.Value, nil
 }
 
 func (e *TermEncoder) encodeDecimalLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDecimalLiteral)
 
-	// Parse as float and store
-	value, err := strconv.ParseFloat(lit.Value, 64)
+	// Validate that it's a valid decimal
+	_, err := strconv.ParseFloat(lit.Value, 64)
 	if err != nil {
 		return encoded, nil, fmt.Errorf("invalid decimal literal: %w", err)
 	}
 
-	binary.BigEndian.PutUint64(encoded[1:9], math.Float64bits(value))
-	// Zero out remaining bytes
-	for i := 9; i < EncodedTermSize; i++ {
-		encoded[i] = 0
-	}
+	// Hash the lexical form to preserve distinction between "1.0", "1.00", etc.
+	// This ensures SPARQL graph pattern matching is lexical, not value-based
+	hash := e.Hash128(lit.Value)
+	copy(encoded[1:], hash[:])
 
-	return encoded, nil, nil
+	// Store lexical form in id2str table
+	return encoded, &lit.Value, nil
 }
 
 func (e *TermEncoder) encodeDoubleLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
 	var encoded store.EncodedTerm
 	encoded[0] = byte(rdf.TermTypeDoubleLiteral)
 
-	value, err := strconv.ParseFloat(lit.Value, 64)
+	// Validate that it's a valid double
+	_, err := strconv.ParseFloat(lit.Value, 64)
 	if err != nil {
 		return encoded, nil, fmt.Errorf("invalid double literal: %w", err)
 	}
 
-	binary.BigEndian.PutUint64(encoded[1:9], math.Float64bits(value))
-	// Zero out remaining bytes
-	for i := 9; i < EncodedTermSize; i++ {
-		encoded[i] = 0
-	}
+	// Hash the lexical form to preserve distinction between different representations
+	// This ensures SPARQL graph pattern matching is lexical, not value-based
+	hash := e.Hash128(lit.Value)
+	copy(encoded[1:], hash[:])
 
-	return encoded, nil, nil
+	// Store lexical form in id2str table
+	return encoded, &lit.Value, nil
 }
 
 func (e *TermEncoder) encodeBooleanLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
