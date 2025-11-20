@@ -557,16 +557,19 @@ func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Bindi
 	//   - i: prepend (?i) to pattern
 	//   - m: prepend (?m) to pattern (changes ^ and $ behavior)
 	//   - s: prepend (?s) to pattern (. matches newlines)
-	//   - x: prepend (?x) to pattern (ignore whitespace and allow comments)
+	//   - x: manually strip whitespace from pattern (Go's (?x) doesn't match SPARQL semantics)
 	//   - q: escape all regex metacharacters using QuoteMeta
 	var hasQuote bool
+	var hasExtended bool
 	var flagPrefix string
 	if flags != "" {
 		flagPrefix = "(?"
 		for _, flag := range flags {
 			switch flag {
-			case 'i', 'm', 's', 'x':
+			case 'i', 'm', 's':
 				flagPrefix += string(flag)
+			case 'x':
+				hasExtended = true
 			case 'q':
 				hasQuote = true
 			default:
@@ -578,6 +581,30 @@ func (e *Evaluator) evaluateRegex(args []parser.Expression, binding *store.Bindi
 		// Apply quote flag to escape metacharacters
 		if hasQuote {
 			pattern = regexp.QuoteMeta(pattern)
+		}
+
+		// Apply extended flag: remove unescaped whitespace from pattern
+		if hasExtended {
+			var result []rune
+			escaped := false
+			for _, r := range pattern {
+				if escaped {
+					// Previous char was backslash, keep this char
+					result = append(result, r)
+					escaped = false
+				} else if r == '\\' {
+					// This is a backslash, mark as escaped and keep it
+					result = append(result, r)
+					escaped = true
+				} else if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+					// Unescaped whitespace, ignore it
+					continue
+				} else {
+					// Regular character, keep it
+					result = append(result, r)
+				}
+			}
+			pattern = string(result)
 		}
 
 		// Prepend flag modifiers if any
