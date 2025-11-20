@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/executor"
@@ -247,7 +248,7 @@ func bindingToStringWithMapping(binding map[string]rdf.Term, mapping map[string]
 			str += "|"
 		}
 		term := binding[v]
-		termStr := term.String()
+		termStr := termToNormalizedString(term)
 
 		// Apply blank node mapping if provided
 		if mapping != nil {
@@ -278,9 +279,24 @@ func bindingToString(binding map[string]rdf.Term) string {
 		if i > 0 {
 			str += "|"
 		}
-		str += v + "=" + binding[v].String()
+		str += v + "=" + termToNormalizedString(binding[v])
 	}
 	return str
+}
+
+// termToNormalizedString converts a term to a normalized string for comparison
+// Language tags are normalized to lowercase per RFC 5646
+func termToNormalizedString(term rdf.Term) string {
+	if lit, ok := term.(*rdf.Literal); ok && lit.Language != "" {
+		// Normalize language tag to lowercase for comparison
+		result := fmt.Sprintf(`"%s"`, lit.Value)
+		result += "@" + strings.ToLower(lit.Language)
+		if lit.Direction != "" {
+			result += "--" + lit.Direction
+		}
+		return result
+	}
+	return term.String()
 }
 
 // SPARQL XML Results Format (Serialization)

@@ -190,7 +190,7 @@ func (e *Evaluator) evaluateLang(args []parser.Expression, binding *store.Bindin
 
 	lit, ok := term.(*rdf.Literal)
 	if !ok {
-		return rdf.NewLiteral(""), nil
+		return nil, fmt.Errorf("LANG can only be applied to literals")
 	}
 
 	return rdf.NewLiteral(lit.Language), nil
@@ -215,8 +215,14 @@ func (e *Evaluator) evaluateDatatype(args []parser.Expression, binding *store.Bi
 		return lit.Datatype, nil
 	}
 
-	// Default to xsd:string if no datatype
-	return rdf.NewNamedNode("http://www.w3.org/2001/XMLSchema#string"), nil
+	// SPARQL 1.0: Plain literals (no datatype, no language) default to xsd:string
+	// For language-tagged literals, return rdf:langString (even though this is technically RDF 1.1)
+	if lit.Language != "" {
+		// RDF 1.1 introduced rdf:langString, but SPARQL 1.0 tests expect this behavior
+		return rdf.NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"), nil
+	}
+
+	return rdf.XSDString, nil
 }
 
 // String functions
