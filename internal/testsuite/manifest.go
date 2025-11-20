@@ -158,18 +158,16 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 			continue
 		}
 
-		// Start of new test (test definition can be <#testname>, :testname, or prefix:testname like trs:test-1)
-		// Handles both "rdf:type" and shorthand "a rdft:" or "a mf:"
-		// Check if line contains "rdf:type" or " a " AND starts with a test identifier
-		hasTestType := strings.Contains(line, "rdf:type") || strings.Contains(line, " a rdft:") || strings.Contains(line, " a mf:")
-		// Match lines like: <#test> rdf:type ..., :test rdf:type ..., or trs:test rdf:type ...
-		startsWithTestID := strings.HasPrefix(line, "<#") ||
-			strings.HasPrefix(line, ":") ||
-			(len(line) > 0 && line[0] != ' ' && line[0] != '#' && strings.Contains(line, ":") &&
-				strings.Index(line, ":") < strings.Index(line, " "))
-		isTestStart := startsWithTestID && hasTestType
+		// Start of new test: detect line with test ID AND mf:name
+		// This is the actual start of a test definition (not just the test list)
+		// Test definitions look like: ":syntax-basic-01  mf:name  "syntax-basic-01.rq" ;"
+		startsWithTestID := (strings.HasPrefix(line, "<#") || strings.HasPrefix(line, ":") ||
+			(len(line) > 0 && line[0] != ' ' && line[0] != '\t' && line[0] != '#' && strings.Contains(line, ":") &&
+				strings.Index(line, ":") < strings.IndexAny(line, " \t"))) && strings.Contains(line, "mf:name")
 
-		if isTestStart {
+		if startsWithTestID {
+			// This is the start of a new test definition
+			// Save the previous test first
 			if currentTest != nil {
 				// Only add tests that have both a name and a type (valid test entries)
 				// Malformed manifest entries with missing names/types are skipped
@@ -177,9 +175,9 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 					manifest.Tests = append(manifest.Tests, *currentTest)
 				}
 			}
+			// Start a new test
 			currentTest = &TestCase{}
 			inTest = true
-			// Parse the rdf:type on this line immediately
 		}
 
 		if !inTest || currentTest == nil {
