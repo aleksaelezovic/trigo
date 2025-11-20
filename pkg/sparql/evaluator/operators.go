@@ -194,8 +194,8 @@ func (e *Evaluator) evaluateNotEqual(left, right rdf.Term) (rdf.Term, error) {
 	// SPARQL inequality with value-based comparison for compatible types
 	result, err := e.sparqlEquals(left, right)
 	if err != nil {
-		// If comparison is undefined (incompatible types), return true
-		return rdf.NewBooleanLiteral(true), nil
+		// Propagate error - incompatible types cause filter to fail
+		return nil, err
 	}
 	return rdf.NewBooleanLiteral(!result), nil
 }
@@ -250,6 +250,11 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 		if leftIsNum && rightIsNum {
 			// Numeric equality: "1"^^xsd:integer == "01"^^xsd:integer
 			return leftNum == rightNum, nil
+		}
+
+		// If one is numeric and the other isn't, error
+		if leftIsNum != rightIsNum {
+			return false, fmt.Errorf("cannot compare numeric and non-numeric values")
 		}
 
 		// Try simple literal comparison (same datatype and value)
