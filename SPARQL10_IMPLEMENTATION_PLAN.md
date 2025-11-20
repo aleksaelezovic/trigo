@@ -1,10 +1,18 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 354/450 tests passing (78.7%)
-**Remaining:** 96 failing tests (21.3%)
+**Current Status:** 363/450 tests passing (80.7%)
+**Remaining:** 87 failing tests (19.3%)
 **Last Updated:** 2025-01-20
 
 ## Progress Summary
+
+### Completed (Session 9 - Parser Fixes: Function Calls & Blank Nodes)
+- ✅ Fixed prefixed function names in FILTER expressions (:myFunc)
+- ✅ Implemented standalone blank node property lists ([:p :q])
+- ✅ Added support for nested collections (( ( ?z ) ))
+- ✅ Syntax-sparql1 suite: 76/81 (93.8%) - was 70/81
+- **Test improvement:** 355→363 (+8 tests, +1.8pp)
+- **🎉 Milestone:** Passed 80% compliance threshold!
 
 ### Completed (Session 8 - Manifest Parser Fix)
 - ✅ Fixed manifest parser test detection logic
