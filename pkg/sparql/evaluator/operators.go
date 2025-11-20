@@ -244,8 +244,8 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 
 	if leftIsLit && rightIsLit {
 		// Try numeric comparison first
-		leftNum, leftIsNum := e.extractNumeric(left)
-		rightNum, rightIsNum := e.extractNumeric(right)
+		leftNum, leftIsNum := e.ExtractNumeric(left)
+		rightNum, rightIsNum := e.ExtractNumeric(right)
 
 		if leftIsNum && rightIsNum {
 			// Numeric equality: "1"^^xsd:integer == "01"^^xsd:integer
@@ -321,8 +321,8 @@ func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
 
 	// Try numeric comparison first if both are numeric literals
 	if leftIsLit && rightIsLit {
-		leftNum, leftIsNum := e.extractNumeric(left)
-		rightNum, rightIsNum := e.extractNumeric(right)
+		leftNum, leftIsNum := e.ExtractNumeric(left)
+		rightNum, rightIsNum := e.ExtractNumeric(right)
 
 		if leftIsNum && rightIsNum {
 			// Numeric comparison
@@ -375,8 +375,8 @@ func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
 // Arithmetic operators
 
 func (e *Evaluator) evaluateAdd(left, right rdf.Term) (rdf.Term, error) {
-	leftVal, leftOk := e.extractNumeric(left)
-	rightVal, rightOk := e.extractNumeric(right)
+	leftVal, leftOk := e.ExtractNumeric(left)
+	rightVal, rightOk := e.ExtractNumeric(right)
 
 	if !leftOk || !rightOk {
 		return nil, fmt.Errorf("cannot add non-numeric terms")
@@ -387,8 +387,8 @@ func (e *Evaluator) evaluateAdd(left, right rdf.Term) (rdf.Term, error) {
 }
 
 func (e *Evaluator) evaluateSubtract(left, right rdf.Term) (rdf.Term, error) {
-	leftVal, leftOk := e.extractNumeric(left)
-	rightVal, rightOk := e.extractNumeric(right)
+	leftVal, leftOk := e.ExtractNumeric(left)
+	rightVal, rightOk := e.ExtractNumeric(right)
 
 	if !leftOk || !rightOk {
 		return nil, fmt.Errorf("cannot subtract non-numeric terms")
@@ -399,8 +399,8 @@ func (e *Evaluator) evaluateSubtract(left, right rdf.Term) (rdf.Term, error) {
 }
 
 func (e *Evaluator) evaluateMultiply(left, right rdf.Term) (rdf.Term, error) {
-	leftVal, leftOk := e.extractNumeric(left)
-	rightVal, rightOk := e.extractNumeric(right)
+	leftVal, leftOk := e.ExtractNumeric(left)
+	rightVal, rightOk := e.ExtractNumeric(right)
 
 	if !leftOk || !rightOk {
 		return nil, fmt.Errorf("cannot multiply non-numeric terms")
@@ -411,8 +411,8 @@ func (e *Evaluator) evaluateMultiply(left, right rdf.Term) (rdf.Term, error) {
 }
 
 func (e *Evaluator) evaluateDivide(left, right rdf.Term) (rdf.Term, error) {
-	leftVal, leftOk := e.extractNumeric(left)
-	rightVal, rightOk := e.extractNumeric(right)
+	leftVal, leftOk := e.ExtractNumeric(left)
+	rightVal, rightOk := e.ExtractNumeric(right)
 
 	if !leftOk || !rightOk {
 		return nil, fmt.Errorf("cannot divide non-numeric terms")
@@ -428,9 +428,10 @@ func (e *Evaluator) evaluateDivide(left, right rdf.Term) (rdf.Term, error) {
 
 // Helper functions
 
-// extractNumeric extracts a numeric value from a literal
+// ExtractNumeric extracts a numeric value from a literal
 // Recognizes all XSD numeric types per SPARQL spec
-func (e *Evaluator) extractNumeric(term rdf.Term) (float64, bool) {
+// Exported for use in DISTINCT deduplication
+func (e *Evaluator) ExtractNumeric(term rdf.Term) (float64, bool) {
 	lit, ok := term.(*rdf.Literal)
 	if !ok {
 		return 0, false

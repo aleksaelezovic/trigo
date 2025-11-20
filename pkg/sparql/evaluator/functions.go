@@ -150,7 +150,7 @@ func (e *Evaluator) evaluateIsNumeric(args []parser.Expression, binding *store.B
 		return nil, err
 	}
 
-	_, isNumeric := e.extractNumeric(term)
+	_, isNumeric := e.ExtractNumeric(term)
 	return rdf.NewBooleanLiteral(isNumeric), nil
 }
 
@@ -265,7 +265,7 @@ func (e *Evaluator) evaluateSubStr(args []parser.Expression, binding *store.Bind
 		return nil, err
 	}
 
-	start, ok := e.extractNumeric(startTerm)
+	start, ok := e.ExtractNumeric(startTerm)
 	if !ok {
 		return nil, fmt.Errorf("SUBSTR start position must be numeric")
 	}
@@ -285,7 +285,7 @@ func (e *Evaluator) evaluateSubStr(args []parser.Expression, binding *store.Bind
 			return nil, err
 		}
 
-		length, ok := e.extractNumeric(lengthTerm)
+		length, ok := e.ExtractNumeric(lengthTerm)
 		if !ok {
 			return nil, fmt.Errorf("SUBSTR length must be numeric")
 		}
@@ -456,7 +456,7 @@ func (e *Evaluator) evaluateAbs(args []parser.Expression, binding *store.Binding
 		return nil, err
 	}
 
-	val, ok := e.extractNumeric(term)
+	val, ok := e.ExtractNumeric(term)
 	if !ok {
 		return nil, fmt.Errorf("ABS requires numeric argument")
 	}
@@ -474,7 +474,7 @@ func (e *Evaluator) evaluateCeil(args []parser.Expression, binding *store.Bindin
 		return nil, err
 	}
 
-	val, ok := e.extractNumeric(term)
+	val, ok := e.ExtractNumeric(term)
 	if !ok {
 		return nil, fmt.Errorf("CEIL requires numeric argument")
 	}
@@ -492,7 +492,7 @@ func (e *Evaluator) evaluateFloor(args []parser.Expression, binding *store.Bindi
 		return nil, err
 	}
 
-	val, ok := e.extractNumeric(term)
+	val, ok := e.ExtractNumeric(term)
 	if !ok {
 		return nil, fmt.Errorf("FLOOR requires numeric argument")
 	}
@@ -510,7 +510,7 @@ func (e *Evaluator) evaluateRound(args []parser.Expression, binding *store.Bindi
 		return nil, err
 	}
 
-	val, ok := e.extractNumeric(term)
+	val, ok := e.ExtractNumeric(term)
 	if !ok {
 		return nil, fmt.Errorf("ROUND requires numeric argument")
 	}

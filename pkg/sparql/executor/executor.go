@@ -162,6 +162,7 @@ func bindingSignature(binding *store.Binding) string {
 }
 
 // termSignature creates a unique string representation of an RDF term
+// Per RDF/SPARQL semantics, plain literals are equivalent to xsd:string literals
 func termSignature(term rdf.Term) string {
 	switch t := term.(type) {
 	case *rdf.NamedNode:
@@ -173,7 +174,9 @@ func termSignature(term rdf.Term) string {
 		if t.Language != "" {
 			sig += "@" + t.Language
 		}
-		if t.Datatype != nil {
+		// Normalize: plain literals (no language, no datatype or xsd:string datatype)
+		// are equivalent per RDF semantics
+		if t.Datatype != nil && t.Datatype.IRI != "http://www.w3.org/2001/XMLSchema#string" {
 			sig += "^^" + t.Datatype.IRI
 		}
 		return sig
@@ -994,21 +997,11 @@ func (it *distinctIterator) Close() error {
 }
 
 // bindingKey creates a unique key for a binding
+// Uses the same termSignature logic as bindingSignature for consistency
 func (it *distinctIterator) bindingKey(binding *store.Binding) string {
-	// Sort variable names to ensure consistent key generation
-	// (map iteration order is non-deterministic in Go)
-	vars := make([]string, 0, len(binding.Vars))
-	for varName := range binding.Vars {
-		vars = append(vars, varName)
-	}
-	sort.Strings(vars)
-
-	key := ""
-	for _, varName := range vars {
-		term := binding.Vars[varName]
-		key += varName + "=" + term.String() + ";"
-	}
-	return key
+	// Use the shared bindingSignature function to ensure consistency
+	// with post-execution DISTINCT logic
+	return bindingSignature(binding)
 }
 
 // createBindIterator creates an iterator for BIND operations
