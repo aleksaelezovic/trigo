@@ -1,10 +1,18 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 369/450 tests passing (82.0%)
-**Remaining:** 81 failing tests (18.0%)
+**Current Status:** 371/450 tests passing (82.4%)
+**Remaining:** 79 failing tests (17.6%)
 **Last Updated:** 2025-01-21
 
 ## Progress Summary
+
+### Completed (Session 10 Continued - UNION Optimizer Fix)
+- ✅ Fixed UNION pattern optimization for multi-way UNIONs
+- ✅ Added optimizeUnionPattern() to build binary UnionPlan trees
+- ✅ UNION patterns now properly processed as alternation, not join
+- ✅ Distinct suite: 9/10 (90.0%) - was 8/10
+- **Test improvement:** 369→371 (+2 tests, +0.4pp)
+- **🎉 Fixed:** "SELECT DISTINCT *" with UNION now working!
 
 ### Completed (Session 10 - UNION Chaining)
 - ✅ Fixed chained UNION operations (A UNION B UNION C)
@@ -60,13 +68,13 @@
 
 ### Test Suite Status
 ```
-✅ syntax-sparql1:   81/81  (100.0%) ⭐ NEW!
+✅ syntax-sparql1:   81/81  (100.0%) ⭐
 ✅ expr-builtin:     24/24  (100.0%)
 ✅ regex:            All passing
-✅ sort:             14/15  (93.3%)
 ✅ type-promotion:   4/4    (100.0%)
+✅ sort:             14/15  (93.3%)
+⚠️  distinct:        9/10   (90.0%) ⬆ was 8/10
 ⚠️  open-eq:         11/12  (91.7%)
-⚠️  distinct:        7/10   (70.0%)
 ⚠️  construct:       5/8    (62.5%)
 ⚠️  optional-filter: 3/6    (50.0%)
 ⚠️  basic:           35/38  (92.1%)
@@ -199,28 +207,22 @@
 - `pkg/sparql/executor/executor.go` - CONSTRUCT result handling
 - `pkg/server/results/` - Result serialization
 
-### 6. DISTINCT with UNION (3 tests)
-**Priority:** MEDIUM
-**Complexity:** LOW-MEDIUM
+### 6. DISTINCT with UNION
+**Status:** ✅ **MOSTLY COMPLETED** - 9/10 tests passing (90%)
 
-**Problem:**
-- DISTINCT not properly deduplicating across UNION branches
-- May be related to how we build binding keys
+**Fixed:**
+- ✅ UNION patterns now properly optimized as alternation (not join)
+- ✅ Added `optimizeUnionPattern()` to build binary UnionPlan trees
+- ✅ "SELECT DISTINCT *" now working correctly
 
-**Tests Failing:**
-- SELECT DISTINCT *
-- Strings: Distinct
-- All: Distinct
+**Remaining Issue:**
+- ❌ "Strings: Distinct" - Result serialization issue with plain literals
+  - Expected: `""`, `"ABC"`
+  - Actual: `""^^<http://www.w3.org/2001/XMLSchema#string>`, `"ABC"^^<http://www.w3.org/2001/XMLSchema#string>`
+  - This is a result format issue, not a DISTINCT/UNION logic issue
 
-**Implementation Steps:**
-1. Review UNION implementation in executor
-2. Check if DISTINCT is applied before or after UNION merge
-3. Verify binding key generation includes all variables
-4. Test with SELECT * to ensure all variables included
-
-**Files to Modify:**
-- `pkg/sparql/executor/executor.go` - DISTINCT iterator (lines ~990-1020)
-- `pkg/sparql/executor/executor.go` - UNION iterator
+**Files Modified:**
+- `pkg/sparql/optimizer/optimizer.go` - Added optimizeUnionPattern() (lines ~331-374)
 
 ### 7. Remaining open-eq/open-cmp Tests (5 tests)
 **Priority:** LOW

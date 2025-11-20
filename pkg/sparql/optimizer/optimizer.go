@@ -1,6 +1,8 @@
 package optimizer
 
 import (
+	"fmt"
+
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
 )
@@ -305,8 +307,10 @@ func (o *Optimizer) optimizeGraphPattern(pattern *parser.GraphPattern) (QueryPla
 		return o.optimizeBasicGraphPattern(pattern)
 	case parser.GraphPatternTypeGraph:
 		return o.optimizeGraphGraphPattern(pattern)
+	case parser.GraphPatternTypeUnion:
+		return o.optimizeUnionPattern(pattern)
 	default:
-		// TODO: Handle other pattern types (UNION, OPTIONAL, etc.)
+		// TODO: Handle other pattern types (OPTIONAL, etc.)
 		return o.optimizeBasicGraphPattern(pattern)
 	}
 }
@@ -324,6 +328,51 @@ func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (Que
 		Input: innerPlan,
 		Graph: pattern.Graph,
 	}, nil
+}
+
+// optimizeUnionPattern optimizes a UNION pattern
+// A UNION pattern has multiple children that should be combined with UNION (alternation),
+// not JOIN. This function builds a binary tree of UnionPlans from the children.
+func (o *Optimizer) optimizeUnionPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
+	if len(pattern.Children) == 0 {
+		return nil, fmt.Errorf("UNION pattern has no children")
+	}
+
+	// Optimize each child pattern
+	var plans []QueryPlan
+	for _, child := range pattern.Children {
+		childPlan, err := o.optimizeGraphPattern(child)
+		if err != nil {
+			return nil, err
+		}
+		if childPlan != nil {
+			plans = append(plans, childPlan)
+		}
+	}
+
+	if len(plans) == 0 {
+		return nil, nil
+	}
+
+	if len(plans) == 1 {
+		return plans[0], nil
+	}
+
+	// Build binary tree of UnionPlans
+	// For [A, B, C], build: (A UNION B) UNION C
+	plan := &UnionPlan{
+		Left:  plans[0],
+		Right: plans[1],
+	}
+
+	for i := 2; i < len(plans); i++ {
+		plan = &UnionPlan{
+			Left:  plan,
+			Right: plans[i],
+		}
+	}
+
+	return plan, nil
 }
 
 // optimizeBasicGraphPattern optimizes a basic graph pattern.
