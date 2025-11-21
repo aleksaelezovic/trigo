@@ -1,10 +1,18 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 371/450 tests passing (82.4%)
-**Remaining:** 79 failing tests (17.6%)
-**Last Updated:** 2025-01-21 (Session 10 Complete)
+**Current Status:** 373/450 tests passing (82.9%)
+**Remaining:** 77 failing tests (17.1%)
+**Last Updated:** 2025-01-21 (Session 10 Continued)
 
 ## Progress Summary
+
+### Completed (Session 10 Continued Part 3 - FILTER Scoping Fix)
+- ✅ Fixed FILTER scoping to apply to entire basic graph pattern
+- ✅ FILTERs now collected and applied after triples/BINDs per SPARQL algebra
+- ✅ FILTER position before patterns no longer causes failures
+- ✅ algebra suite: 8/13 → 10/13 (76.9%)
+- **Test improvement:** 371→373 (+2 tests, +0.5pp)
+- **🎯 Impact:** Correct SPARQL FILTER scoping within basic graph patterns
 
 ### Completed (Session 10 Continued Part 2 - OPTIONAL/FILTER Ordering)
 - ✅ Fixed FILTER placement after OPTIONAL patterns
