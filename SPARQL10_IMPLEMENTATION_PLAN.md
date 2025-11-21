@@ -1,10 +1,20 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 373/450 tests passing (82.9%)
-**Remaining:** 77 failing tests (17.1%)
-**Last Updated:** 2025-01-21 (Session 10 Continued)
+**Current Status:** 374/450 tests passing (83.1%)
+**Remaining:** 76 failing tests (16.9%)
+**Last Updated:** 2025-11-21 (Session 10 Continued Part 4)
 
 ## Progress Summary
+
+### Completed (Session 10 Continued Part 4 - Nested Group FILTER Scoping)
+- ✅ Fixed FILTER variable scoping in nested basic graph patterns
+- ✅ Added EmptyPlan type for patterns with only FILTERs (no triples)
+- ✅ Empty patterns now correctly produce single empty binding per SPARQL spec
+- ✅ FILTERs in nested `{ }` groups can no longer see outer variables
+- ✅ Filter-nested - 2 test now passes
+- ✅ algebra suite: 10/13 → 11/13 (84.6%)
+- **Test improvement:** 373→374 (+1 test, +0.2pp)
+- **🎯 Impact:** Correct SPARQL nested group semantics for FILTER evaluation
 
 ### Completed (Session 10 Continued Part 3 - FILTER Scoping Fix)
 - ✅ Fixed FILTER scoping to apply to entire basic graph pattern

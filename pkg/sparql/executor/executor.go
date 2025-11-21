@@ -439,6 +439,9 @@ func (e *Executor) createIteratorWithContext(plan optimizer.QueryPlan, contextBi
 		return e.createMinusIterator(p)
 	case *optimizer.OrderByPlan:
 		return e.createOrderByIterator(p)
+	case *optimizer.EmptyPlan:
+		// EmptyPlan produces a single empty binding
+		return &emptyIterator{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %T", plan)
 	}
@@ -1703,4 +1706,29 @@ func extractVariablesFromGraphPattern(pattern *parser.GraphPattern) []*parser.Va
 
 	processPattern(pattern)
 	return variables
+}
+
+// emptyIterator produces a single empty binding.
+// This is used for empty graph patterns like { FILTER(expr) } with no triples.
+// According to SPARQL semantics, an empty pattern {} produces one binding μ = {}.
+type emptyIterator struct {
+	returned bool
+	binding  *store.Binding
+}
+
+func (it *emptyIterator) Next() bool {
+	if it.returned {
+		return false
+	}
+	it.returned = true
+	it.binding = store.NewBinding()
+	return true
+}
+
+func (it *emptyIterator) Binding() *store.Binding {
+	return it.binding
+}
+
+func (it *emptyIterator) Close() error {
+	return nil
 }

@@ -202,6 +202,13 @@ type MinusPlan struct {
 
 func (p *MinusPlan) planNode() {}
 
+// EmptyPlan represents an empty graph pattern that produces a single empty binding.
+// This is used for patterns like { FILTER(expr) } with no triples.
+// According to SPARQL semantics, an empty pattern {} produces one empty binding μ = {}.
+type EmptyPlan struct{}
+
+func (p *EmptyPlan) planNode() {}
+
 // optimizeSelect optimizes a SELECT query
 func (o *Optimizer) optimizeSelect(query *parser.SelectQuery) (QueryPlan, error) {
 	// Start with the WHERE clause
@@ -488,6 +495,13 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 		}
 
 		// Apply any remaining pending filters (filters after all patterns in the group)
+		// If we have filters but no triples (plan is still nil), we need to create
+		// an EmptyPlan that produces a single empty binding, then apply filters to it.
+		// This handles cases like { FILTER(?v = 1) } where ?v would be unbound.
+		if len(pendingFilters) > 0 && plan == nil {
+			plan = &EmptyPlan{}
+		}
+
 		for _, filter := range pendingFilters {
 			if plan != nil {
 				plan = &FilterPlan{
