@@ -1720,7 +1720,14 @@ func (p *Parser) parseOrderBy() ([]*OrderCondition, error) {
 
 		// Check if there are more conditions
 		p.skipWhitespace()
-		if !p.matchKeyword("LIMIT") && !p.matchKeyword("OFFSET") && p.pos < p.length {
+		// Check for LIMIT/OFFSET without consuming them (lookahead)
+		savedPos := p.pos
+		hasLimit := p.matchKeyword("LIMIT")
+		p.pos = savedPos
+		hasOffset := p.matchKeyword("OFFSET")
+		p.pos = savedPos
+
+		if !hasLimit && !hasOffset && p.pos < p.length {
 			continue
 		}
 		break
