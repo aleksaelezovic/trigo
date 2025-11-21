@@ -2,9 +2,18 @@
 
 **Current Status:** 371/450 tests passing (82.4%)
 **Remaining:** 79 failing tests (17.6%)
-**Last Updated:** 2025-01-21
+**Last Updated:** 2025-01-21 (Session 10 Complete)
 
 ## Progress Summary
+
+### Completed (Session 10 Continued Part 2 - OPTIONAL/FILTER Ordering)
+- ✅ Fixed FILTER placement after OPTIONAL patterns
+- ✅ Extended PatternElement to include GraphPattern field
+- ✅ Parser now adds OPTIONAL/UNION/MINUS/GRAPH to Elements for correct ordering
+- ✅ Optimizer processes patterns in textual order
+- ✅ "OPTIONAL - Outer FILTER" test now passes
+- **Test improvement:** Maintains 371/450 but fixes critical semantics issue
+- **🎯 Impact:** Correct SPARQL FILTER/OPTIONAL execution order per spec
 
 ### Completed (Session 10 Continued - UNION Optimizer Fix)
 - ✅ Fixed UNION pattern optimization for multi-way UNIONs
@@ -141,25 +150,33 @@
 
 ### 3. RDF Collections/Lists (3 tests)
 **Priority:** LOW-MEDIUM
-**Complexity:** MEDIUM
+**Complexity:** MEDIUM-HIGH
 
 **Problem:**
-- RDF collection syntax `(item1 item2 item3)` not fully supported
-- Collection expansion to rdf:first/rdf:rest triples incomplete
+- Collection syntax `(1)`, `(?v)`, `(?v ?w)` in SPARQL queries not matching data
+- Both Turtle and SPARQL parsers correctly expand collections to rdf:first/rdf:rest
+- Issue is with blank node unification during pattern matching
+
+**Investigation (Session 10):**
+- ✅ Turtle parser correctly expands `:x :list1 ("1"^^xsd:integer)` to rdf:first/rdf:rest triples
+- ✅ SPARQL parser correctly expands `:x ?p (?v)` to pattern with rdf:first/rdf:rest
+- ❌ Matching fails - returns 0 bindings instead of expected results
+- Root cause: Blank nodes from collections not unifying correctly during join
 
 **Tests Failing:**
-- Basic - List 2
-- Basic - List 3
-- Basic - List 4
+- Basic - List 2: `:x ?p (1)` - constant in collection
+- Basic - List 3: `:x ?p (?v)` - variable in collection (should bind ?v to list element)
+- Basic - List 4: `:x ?p (?v ?w)` - two variables in collection
 
 **Implementation Steps:**
-1. Review Turtle parser collection handling
-2. Identify where collection expansion fails
-3. Complete rdf:first/rdf:rest/rdf:nil expansion
-4. Test with nested collections
+1. Debug blank node matching in join operations
+2. Ensure blank nodes from extraTriples can unify with data blank nodes
+3. May need to implement blank node renaming/canonicalization
+4. Test with variables in collections
 
-**Files to Modify:**
-- `pkg/rdf/turtle.go` - Collection parsing (lines ~1400-1500)
+**Files to Investigate:**
+- `pkg/sparql/executor/executor.go` - Join/matching logic
+- `pkg/store/store.go` - Triple matching with blank nodes
 
 ### 4. Date/Time Comparisons (2+ tests)
 **Priority:** LOW
