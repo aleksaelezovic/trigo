@@ -780,6 +780,13 @@ func (p *Parser) parseTriplePattern() (*TriplePattern, error) {
 		return nil, fmt.Errorf("failed to parse predicate: %w", err)
 	}
 
+	// Validate predicate: blank nodes cannot be predicates in SPARQL patterns
+	if !predicate.IsVariable() {
+		if _, isBlankNode := predicate.Term.(*rdf.BlankNode); isBlankNode {
+			return nil, fmt.Errorf("blank nodes cannot be used as predicates in triple patterns")
+		}
+	}
+
 	p.skipWhitespace()
 	object, err := p.parseTermOrVariable()
 	if err != nil {
@@ -2307,6 +2314,10 @@ func (p *Parser) parsePrimaryExpression() (Expression, error) {
 	// If it's a variable, we shouldn't get here (handled above)
 	// If it's a term, wrap it in a LiteralExpression
 	if termOrVar.Term != nil {
+		// Validate: blank node labels cannot be used in expressions
+		if _, isBlankNode := termOrVar.Term.(*rdf.BlankNode); isBlankNode {
+			return nil, fmt.Errorf("blank node labels cannot be used in expressions")
+		}
 		return &LiteralExpression{Literal: termOrVar.Term}, nil
 	}
 
