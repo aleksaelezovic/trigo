@@ -1,10 +1,21 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 374/450 tests passing (83.1%)
-**Remaining:** 76 failing tests (16.9%)
-**Last Updated:** 2025-11-21 (Session 10 Continued Part 4)
+**Current Status:** 375/450 tests passing (83.3%)
+**Remaining:** 75 failing tests (16.7%)
+**Last Updated:** 2025-11-21 (Session 10 Continued Part 5)
 
 ## Progress Summary
+
+### Completed (Session 10 Continued Part 5 - Short-Circuit Evaluation for OR/AND)
+- ✅ Implemented short-circuit evaluation for logical OR operator
+- ✅ Implemented short-circuit evaluation for logical AND operator
+- ✅ OR now skips right operand if left is true (critical for !bound(?x) || ?x = 5)
+- ✅ AND now skips right operand if left is false
+- ✅ Fixed BOUND function interaction with OPTIONAL patterns
+- ✅ "OPTIONAL - Outer FILTER with BOUND" test now passes
+- ✅ optional-filter suite: 3/5 → 4/5 (60.0% → 80.0%)
+- **Test improvement:** 374→375 (+1 test, +0.2pp)
+- **🎯 Impact:** Correct SPARQL logical operator semantics with proper short-circuiting
 
 ### Completed (Session 10 Continued Part 4 - Nested Group FILTER Scoping)
 - ✅ Fixed FILTER variable scoping in nested basic graph patterns

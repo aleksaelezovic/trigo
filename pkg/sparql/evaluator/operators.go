@@ -13,7 +13,75 @@ import (
 
 // evaluateBinaryExpression evaluates binary operations
 func (e *Evaluator) evaluateBinaryExpression(expr *parser.BinaryExpression, binding *store.Binding) (rdf.Term, error) {
-	// Evaluate left and right operands
+	// Special handling for logical operators to support short-circuit evaluation
+	// This is critical for SPARQL patterns like: !bound(?x) || ?x = 5
+	// where evaluating the right side would error if ?x is unbound
+	if expr.Operator == parser.OpOr {
+		// Evaluate left operand
+		left, leftErr := e.Evaluate(expr.Left, binding)
+
+		// If left is true, short-circuit (don't evaluate right)
+		if leftErr == nil {
+			leftEBV, err := e.effectiveBooleanValue(left)
+			if err == nil && leftEBV {
+				return rdf.NewBooleanLiteral(true), nil
+			}
+		}
+
+		// Either left is false/error, so we need to evaluate right
+		right, rightErr := e.Evaluate(expr.Right, binding)
+
+		// If we have both values, use the standard OR logic
+		if leftErr == nil && rightErr == nil {
+			return e.evaluateOr(left, right)
+		}
+
+		// SPARQL OR error semantics:
+		// - If right is true, return true (even if left errored)
+		// - If both error, return error
+		if rightErr == nil {
+			rightEBV, err := e.effectiveBooleanValue(right)
+			if err == nil && rightEBV {
+				return rdf.NewBooleanLiteral(true), nil
+			}
+		}
+
+		// Return left error if it exists, otherwise right error
+		if leftErr != nil {
+			return nil, leftErr
+		}
+		return nil, rightErr
+	}
+
+	if expr.Operator == parser.OpAnd {
+		// Evaluate left operand
+		left, leftErr := e.Evaluate(expr.Left, binding)
+
+		// If left has error or is false, short-circuit
+		if leftErr == nil {
+			leftEBV, err := e.effectiveBooleanValue(left)
+			if err == nil && !leftEBV {
+				return rdf.NewBooleanLiteral(false), nil
+			}
+		}
+
+		// Left is true or error, evaluate right
+		right, rightErr := e.Evaluate(expr.Right, binding)
+
+		// If we have both values, use standard AND logic
+		if leftErr == nil && rightErr == nil {
+			return e.evaluateAnd(left, right)
+		}
+
+		// SPARQL AND error semantics:
+		// - If either side errors, return error (unless one side is false)
+		if leftErr != nil {
+			return nil, leftErr
+		}
+		return nil, rightErr
+	}
+
+	// For all other operators, evaluate both operands first
 	left, err := e.Evaluate(expr.Left, binding)
 	if err != nil {
 		return nil, err
@@ -25,7 +93,7 @@ func (e *Evaluator) evaluateBinaryExpression(expr *parser.BinaryExpression, bind
 	}
 
 	switch expr.Operator {
-	// Logical operators
+	// Logical operators (already handled above, but keep for clarity)
 	case parser.OpAnd:
 		return e.evaluateAnd(left, right)
 	case parser.OpOr:
