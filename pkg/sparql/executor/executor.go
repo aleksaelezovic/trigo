@@ -549,6 +549,12 @@ func (e *Executor) convertTermOrVariable(tov parser.TermOrVariable) any {
 	if tov.IsVariable() {
 		return store.NewVariable(tov.Variable.Name)
 	}
+	// Blank nodes in query patterns act as non-distinguished variables
+	// Per SPARQL spec, blank node labels in patterns are treated as variables
+	// Anonymous blank nodes from [] and labeled blank nodes _:label both match any value
+	if blankNode, ok := tov.Term.(*rdf.BlankNode); ok {
+		return store.NewVariable("_:" + blankNode.ID)
+	}
 	return tov.Term
 }
 
