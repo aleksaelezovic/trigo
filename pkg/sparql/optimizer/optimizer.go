@@ -388,10 +388,15 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 
 	// Use Elements if available (preserves order of triples, BINDs, FILTERs)
 	if len(pattern.Elements) > 0 {
-		// Process elements in order to respect BIND/FILTER semantics.
-		// IMPORTANT: This preserves the semantics where:
-		//   ?s ?p ?o . BIND(?o+1 AS ?z) ?s1 ?p1 ?z
-		// makes ?z available to the second triple pattern.
+		// Process elements in order to respect BIND semantics and OPTIONAL/FILTER placement.
+		// IMPORTANT:
+		//   1. BIND makes variables available to subsequent patterns: ?s ?p ?o . BIND(?o+1 AS ?z) ?s1 ?p1 ?z
+		//   2. FILTER applies to entire basic graph pattern (all triples before next OPTIONAL/UNION/etc)
+		//   3. FILTER position relative to OPTIONAL/UNION/MINUS matters for scoping
+
+		// Collect filters to apply to the current basic graph pattern
+		var pendingFilters []*parser.Filter
+
 		for _, elem := range pattern.Elements {
 			if elem.Triple != nil {
 				// Add triple pattern as scan or join
@@ -415,14 +420,21 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 					}
 				}
 			} else if elem.Filter != nil {
-				// Apply FILTER immediately
-				if plan != nil {
-					plan = &FilterPlan{
-						Input:  plan,
-						Filter: elem.Filter,
+				// Collect filter to apply after current basic graph pattern
+				pendingFilters = append(pendingFilters, elem.Filter)
+			} else if elem.GraphPattern != nil {
+				// Before processing graph pattern (OPTIONAL/UNION/etc), apply pending filters
+				for _, filter := range pendingFilters {
+					if plan != nil {
+						plan = &FilterPlan{
+							Input:  plan,
+							Filter: filter,
+						}
 					}
 				}
-			} else if elem.GraphPattern != nil {
+				pendingFilters = nil // Clear pending filters
+
+				// Handle nested graph patterns (OPTIONAL, UNION, MINUS, GRAPH)
 				// Handle nested graph patterns (OPTIONAL, UNION, MINUS, GRAPH)
 				childPlan, err := o.optimizeGraphPattern(elem.GraphPattern)
 				if err != nil {
@@ -471,6 +483,16 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 							}
 						}
 					}
+				}
+			}
+		}
+
+		// Apply any remaining pending filters (filters after all patterns in the group)
+		for _, filter := range pendingFilters {
+			if plan != nil {
+				plan = &FilterPlan{
+					Input:  plan,
+					Filter: filter,
 				}
 			}
 		}
