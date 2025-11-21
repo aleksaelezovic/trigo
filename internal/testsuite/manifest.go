@@ -123,7 +123,8 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 	var includeFiles []string
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		rawLine := scanner.Text()
+		line := strings.TrimSpace(rawLine)
 
 		// Skip comments and empty lines
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -158,12 +159,19 @@ func parseManifestWithVisited(path string, visited map[string]bool) (*TestManife
 			continue
 		}
 
-		// Start of new test: detect line with test ID AND mf:name
-		// This is the actual start of a test definition (not just the test list)
-		// Test definitions look like: ":syntax-basic-01  mf:name  "syntax-basic-01.rq" ;"
-		startsWithTestID := (strings.HasPrefix(line, "<#") || strings.HasPrefix(line, ":") ||
-			(len(line) > 0 && line[0] != ' ' && line[0] != '\t' && line[0] != '#' && strings.Contains(line, ":") &&
-				strings.Index(line, ":") < strings.IndexAny(line, " \t"))) && strings.Contains(line, "mf:name")
+		// Start of new test: detect line with test ID AND either mf:name OR rdf:type
+		// This handles two manifest formats:
+		// SPARQL: ":syntax-basic-01  mf:name  "syntax-basic-01.rq" ;"
+		// RDF: "<#nt-syntax-datatypes-02> rdf:type rdft:TestNTriplesPositiveSyntax ;"
+		//      "   mf:name    \"nt-syntax-datatypes-02\" ;"  (indented, NOT a new test)
+		// Use rawLine to check indentation (line has been trimmed)
+		isIndented := len(rawLine) > 0 && (rawLine[0] == ' ' || rawLine[0] == '\t')
+		hasTestID := !isIndented && (strings.HasPrefix(line, "<#") || strings.HasPrefix(line, ":") ||
+			(len(line) > 0 && line[0] != '#' && strings.Contains(line, ":") &&
+				strings.Index(line, ":") < strings.IndexAny(line, " \t")))
+		hasTypeOrName := strings.Contains(line, "mf:name") || strings.Contains(line, "rdf:type") ||
+			strings.Contains(line, " a mf:") || strings.Contains(line, " a rdft:")
+		startsWithTestID := hasTestID && hasTypeOrName
 
 		if startsWithTestID {
 			// This is the start of a new test definition
