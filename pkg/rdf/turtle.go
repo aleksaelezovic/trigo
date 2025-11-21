@@ -18,6 +18,7 @@ type TurtleParser struct {
 	strictNTriples          bool      // When true, enforce strict N-Triples syntax
 	extraTriples            []*Triple // Triples generated during term parsing (collections, blank node property lists)
 	lastTermWasPropertyList bool      // True if the last parsed term was a blank node property list
+	lastTermWasKeywordA     bool      // True if the last parsed term was the 'a' keyword (not rdf:type IRI)
 }
 
 // NewTurtleParser creates a new Turtle parser
@@ -428,6 +429,12 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 				return nil, fmt.Errorf("failed to parse object: %w", err)
 			}
 
+			// Validate object position: 'a' keyword cannot be used as object
+			// (but rdf:type IRI can be used as object)
+			if p.lastTermWasKeywordA {
+				return nil, fmt.Errorf("keyword 'a' cannot be used as object")
+			}
+
 			// N-Triples restrictions for objects
 			if p.strictNTriples {
 				// QuotedTriple (Turtle syntax) not allowed as object
@@ -463,12 +470,6 @@ func (p *TurtleParser) parseTripleBlock() ([]*Triple, error) {
 				p.extraTriples = append(p.extraTriples, reifiesTriple)
 				// Use the blank node as the actual object
 				object = reifier
-			}
-			// Validate object position: 'a' keyword (rdf:type) is only valid as predicate, not as object
-			if namedNode, ok := object.(*NamedNode); ok {
-				if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
-					return nil, fmt.Errorf("keyword 'a' cannot be used as object")
-				}
 			}
 			// Collect any extra triples from object parsing
 			triples = append(triples, p.extraTriples...)
@@ -813,6 +814,8 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 
 	// Default: clear the property list flag (will be set by parseAnonymousBlankNode if needed)
 	p.lastTermWasPropertyList = false
+	// Default: clear the keyword 'a' flag (will be set if we parse the 'a' keyword)
+	p.lastTermWasKeywordA = false
 
 	ch := p.input[p.pos]
 
@@ -898,7 +901,8 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 			if p.strictNTriples {
 				return nil, fmt.Errorf("'a' abbreviation not allowed in N-Triples at position %d", p.pos)
 			}
-			p.pos++ // skip 'a'
+			p.pos++                      // skip 'a'
+			p.lastTermWasKeywordA = true // Mark that we parsed the keyword 'a'
 			return NewNamedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), nil
 		}
 	}
@@ -1375,12 +1379,13 @@ func (p *TurtleParser) parseAnonymousBlankNode() (Term, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse object in blank node property list: %w", err)
 			}
-			// Validate object position: 'a' keyword (rdf:type) is only valid as predicate, not as object
-			if namedNode, ok := object.(*NamedNode); ok {
-				if namedNode.IRI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
-					return nil, fmt.Errorf("keyword 'a' cannot be used as object in blank node property list")
-				}
+
+			// Validate object position: 'a' keyword cannot be used as object
+			// (but rdf:type IRI can be used as object)
+			if p.lastTermWasKeywordA {
+				return nil, fmt.Errorf("keyword 'a' cannot be used as object in blank node property list")
 			}
+
 			// Collect any extra triples from object parsing
 
 			// Add triple for this blank node property
