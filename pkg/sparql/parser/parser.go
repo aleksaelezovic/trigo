@@ -698,10 +698,36 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			pattern.Elements = append(pattern.Elements, PatternElement{Triple: triple})
 		}
 
-		// Skip optional '.' separator
+		// Handle '.' separator
+		// DOT is required between triple patterns, but optional at the end
 		p.skipWhitespace()
-		if p.peek() == '.' {
+		ch := p.peek()
+
+		// Check if DOT is present
+		hadDot := false
+		if ch == '.' {
 			p.advance()
+			hadDot = true
+			p.skipWhitespace()
+			ch = p.peek()
+		}
+
+		// If we didn't have a DOT, check if the next thing requires one
+		// DOT is required before another triple pattern, but not before keywords or end of pattern
+		if !hadDot && ch != '}' && ch != 0 {
+			// Check if it's a keyword (FILTER, OPTIONAL, etc.)
+			savedPos := p.pos
+			isKeyword := p.matchKeyword("FILTER") || p.matchKeyword("OPTIONAL") ||
+				p.matchKeyword("UNION") || p.matchKeyword("GRAPH") ||
+				p.matchKeyword("BIND") || p.matchKeyword("MINUS")
+			p.pos = savedPos
+
+			// If not a keyword and could start a triple pattern, DOT was required
+			// Triple pattern can start with: IRI (<, :), variable (?, $), blank node (_, [), or collection (()
+			if !isKeyword && (ch == '<' || ch == ':' || ch == '?' || ch == '$' ||
+				ch == '_' || ch == '[' || ch == '(') {
+				return nil, fmt.Errorf("expected '.' between triple patterns")
+			}
 		}
 	}
 
@@ -1494,25 +1520,25 @@ func (p *Parser) parseFilter() (*Filter, error) {
 	}
 
 	// Parse the expression
-	// SPARQL allows both FILTER (expr) and FILTER funcCall(...)
-	// If there's a '(', it's FILTER (expr) and we need to consume the outer parens
-	// Otherwise, the expression itself (like a function call) provides delimiters
-	needsOuterParens := p.peek() == '('
-	if needsOuterParens {
-		p.advance() // skip '('
+	// Per SPARQL grammar: Filter ::= 'FILTER' Constraint
+	// Constraint ::= BrackettedExpression | BuiltInCall | FunctionCall
+	// This means FILTER must be followed by:
+	//   - '(' for bracketed expression: FILTER (?x > 5)
+	//   - A letter for function: FILTER REGEX(?x, "...") or FILTER fn:custom(?x)
+	// A bare variable or literal (FILTER ?x) is NOT valid per the grammar
+	p.skipWhitespace()
+	ch := p.peek()
+
+	// Validate that we have a valid constraint start
+	isLetter := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+	if ch != '(' && !isLetter {
+		return nil, fmt.Errorf("expected '(' or function name after FILTER keyword")
 	}
 
+	// parseExpression handles all valid cases (bracketed expressions, function calls, etc.)
 	expr, err := p.parseExpression()
 	if err != nil {
 		return nil, fmt.Errorf("error parsing FILTER expression: %w", err)
-	}
-
-	if needsOuterParens {
-		p.skipWhitespace()
-		if p.peek() != ')' {
-			return nil, fmt.Errorf("expected ')' after FILTER expression")
-		}
-		p.advance() // skip ')'
 	}
 
 	return &Filter{Expression: expr}, nil
