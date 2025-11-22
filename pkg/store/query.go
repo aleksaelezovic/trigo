@@ -107,10 +107,13 @@ func (s *TripleStore) selectIndex(pattern *Pattern) (Table, []int) {
 	pBound := !isVariable(pattern.Predicate)
 	oBound := !isVariable(pattern.Object)
 	gBound := pattern.Graph != nil && !isVariable(pattern.Graph)
+	gVariable := pattern.Graph != nil && isVariable(pattern.Graph)
 
-	// If graph is not specified or is a variable, prefer default graph indexes
-	if !gBound {
-		// Default graph indexes (SPO, POS, OSP)
+	// If graph is not specified (nil), query default graph indexes
+	// If graph is a variable, query named graph indexes (to match ALL named graphs)
+	// If graph is bound to a specific IRI, query named graph indexes with that constraint
+	if pattern.Graph == nil {
+		// Default graph indexes (SPO, POS, OSP) - no graph constraint
 		// KeyPattern maps: key_position -> SPOG_position (S=0, P=1, O=2, G=3)
 		if sBound && pBound {
 			return TableSPO, []int{0, 1, 2} // Key order: S, P, O
@@ -132,6 +135,34 @@ func (s *TripleStore) selectIndex(pattern *Pattern) (Table, []int) {
 		}
 		// No variables bound, use SPO
 		return TableSPO, []int{0, 1, 2}
+	}
+
+	// Graph is specified (either variable or concrete IRI)
+	// Use named graph indexes (SPOG, GSPO, etc.)
+	// If graph is a variable, this will scan all named graphs
+	if gVariable {
+		// Graph is a variable - use indexes that allow scanning all graphs
+		// SPOG is best for this as it scans across all graphs
+		if sBound && pBound {
+			return TableSPOG, []int{0, 1, 2, 3} // Key order: S, P, O, G
+		}
+		if pBound && oBound {
+			return TablePOSG, []int{1, 2, 0, 3} // Key order: P, O, S, G
+		}
+		if oBound && sBound {
+			return TableOSPG, []int{2, 0, 1, 3} // Key order: O, S, P, G
+		}
+		if sBound {
+			return TableSPOG, []int{0, 1, 2, 3} // Key order: S, P, O, G
+		}
+		if pBound {
+			return TablePOSG, []int{1, 2, 0, 3} // Key order: P, O, S, G
+		}
+		if oBound {
+			return TableOSPG, []int{2, 0, 1, 3} // Key order: O, S, P, G
+		}
+		// No S/P/O bound, use SPOG
+		return TableSPOG, []int{0, 1, 2, 3}
 	}
 
 	// Named graph indexes (SPOG, POSG, OSPG, GSPO, GPOS, GOSP)

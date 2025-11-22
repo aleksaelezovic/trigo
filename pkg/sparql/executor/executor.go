@@ -911,10 +911,12 @@ func (ge *graphExecutor) createGraphScanIterator(plan *optimizer.ScanPlan) (stor
 		return nil, err
 	}
 
-	return &scanIterator{
-		quadIter: quadIter,
-		pattern:  plan.Pattern,
-		binding:  store.NewBinding(),
+	// Create a graph-aware scan iterator that also binds the graph variable
+	return &graphScanIterator{
+		quadIter:  quadIter,
+		pattern:   plan.Pattern,
+		graphTerm: ge.graph,
+		binding:   store.NewBinding(),
 	}, nil
 }
 
@@ -998,6 +1000,96 @@ func (it *graphJoinIterator) mergeBindings(left, right *store.Binding) *store.Bi
 	}
 
 	return result
+}
+
+// graphScanIterator is a scanIterator that also binds the graph variable
+type graphScanIterator struct {
+	quadIter  store.QuadIterator
+	pattern   *parser.TriplePattern
+	graphTerm *parser.GraphTerm
+	binding   *store.Binding
+}
+
+func (it *graphScanIterator) Next() bool {
+	for {
+		if !it.quadIter.Next() {
+			return false
+		}
+
+		quad, err := it.quadIter.Quad()
+		if err != nil {
+			return false
+		}
+
+		// Bind variables, checking for repeated variables
+		it.binding = store.NewBinding()
+		valid := true
+
+		// Bind subject
+		if it.pattern.Subject.IsVariable() {
+			varName := it.pattern.Subject.Variable.Name
+			it.binding.Vars[varName] = quad.Subject
+		}
+
+		// Bind predicate (check if variable already bound from subject)
+		if it.pattern.Predicate.IsVariable() {
+			varName := it.pattern.Predicate.Variable.Name
+			if existingValue, exists := it.binding.Vars[varName]; exists {
+				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Predicate) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Predicate
+			}
+		}
+
+		// Bind object (check if variable already bound from subject or predicate)
+		if valid && it.pattern.Object.IsVariable() {
+			varName := it.pattern.Object.Variable.Name
+			if existingValue, exists := it.binding.Vars[varName]; exists {
+				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Object) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Object
+			}
+		}
+
+		// Bind graph variable if the GRAPH pattern uses a variable
+		if valid && it.graphTerm != nil && it.graphTerm.Variable != nil {
+			varName := it.graphTerm.Variable.Name
+			if quad.Graph != nil {
+				// Skip default graph quads when GRAPH uses a variable
+				// GRAPH ?g means "match any NAMED graph", not the default graph
+				if quad.Graph.Type() == rdf.TermTypeDefaultGraph {
+					valid = false
+				} else if existingValue, exists := it.binding.Vars[varName]; exists {
+					// Variable already bound - check if values match
+					if !existingValue.Equals(quad.Graph) {
+						valid = false
+					}
+				} else {
+					it.binding.Vars[varName] = quad.Graph
+				}
+			}
+		}
+
+		// If all variable constraints are satisfied, return this binding
+		if valid {
+			return true
+		}
+		// Otherwise, continue to next quad
+	}
+}
+
+func (it *graphScanIterator) Binding() *store.Binding {
+	return it.binding
+}
+
+func (it *graphScanIterator) Close() error {
+	return it.quadIter.Close()
 }
 
 // distinctIterator implements DISTINCT operations

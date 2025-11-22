@@ -379,31 +379,61 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 func (r *TestRunner) clearStore() error {
 	// Simple approach: clear by iterating and deleting
 	// For a production system, would want a more efficient Clear() method
+
+	// First, clear default graph
 	pattern := &store.Pattern{
 		Subject:   &store.Variable{Name: "s"},
 		Predicate: &store.Variable{Name: "p"},
 		Object:    &store.Variable{Name: "o"},
-		Graph:     &store.Variable{Name: "g"},
+		Graph:     nil, // nil means default graph only
 	}
 	iter, err := r.store.Query(pattern)
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
 
 	var triples []*rdf.Triple
 	for iter.Next() {
 		quad, err := iter.Quad()
 		if err != nil {
+			_ = iter.Close() // #nosec G104 - close error less important than query error
 			return err
 		}
-		// Convert quad to triple (ignore graph for now)
 		triple := rdf.NewTriple(quad.Subject, quad.Predicate, quad.Object)
 		triples = append(triples, triple)
 	}
+	_ = iter.Close() // #nosec G104 - close error doesn't affect data collection
 
 	for _, triple := range triples {
 		if err := r.store.DeleteTriple(triple); err != nil {
+			return err
+		}
+	}
+
+	// Second, clear all named graphs
+	namedGraphPattern := &store.Pattern{
+		Subject:   &store.Variable{Name: "s"},
+		Predicate: &store.Variable{Name: "p"},
+		Object:    &store.Variable{Name: "o"},
+		Graph:     &store.Variable{Name: "g"}, // Variable means all named graphs
+	}
+	iter2, err := r.store.Query(namedGraphPattern)
+	if err != nil {
+		return err
+	}
+	defer iter2.Close()
+
+	var quads []*rdf.Quad
+	for iter2.Next() {
+		quad, err := iter2.Quad()
+		if err != nil {
+			return err
+		}
+		quads = append(quads, quad)
+	}
+
+	for _, quad := range quads {
+		if err := r.store.DeleteQuad(quad); err != nil {
 			return err
 		}
 	}
@@ -449,8 +479,8 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 
 		// Parse Turtle data with base URI set to file location
 		turtleParser := rdf.NewTurtleParser(string(dataBytes))
-		// Set base URI to the file's IRI for resolving relative IRIs
-		baseURI := manifest.fileToIRI(graphData.File)
+		// Set base URI to the file's canonical URI (W3C test suite uses https:// URIs)
+		baseURI := r.filePathToURI(dataPath)
 		turtleParser.SetBaseURI(baseURI)
 		triples, err := turtleParser.Parse()
 		if err != nil {
@@ -458,8 +488,8 @@ func (r *TestRunner) loadTestData(manifest *TestManifest, test *TestCase) error 
 		}
 
 		// Convert file path to IRI (W3C test suite convention)
-		// The graph name is the file's IRI
-		graphIRI := manifest.fileToIRI(graphData.File)
+		// The graph name is the file's canonical URI, not a file:// URI
+		graphIRI := r.filePathToURI(dataPath)
 
 		// Insert triples into named graph
 		for _, triple := range triples {
