@@ -554,10 +554,15 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 				}
 			}
 		}
+
+		// Skip Children processing if Elements was used (to avoid dual processing)
+		return plan, nil
 	}
 
 	// Handle child patterns (e.g., GRAPH, OPTIONAL, UNION, MINUS patterns)
+	// This is only reached when Elements is empty (legacy behavior)
 	for _, child := range pattern.Children {
+
 		childPlan, err := o.optimizeGraphPattern(child)
 		if err != nil {
 			return nil, err
@@ -575,10 +580,10 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 						Right: childPlan,
 					}
 				case parser.GraphPatternTypeUnion:
-					plan = &UnionPlan{
-						Left:  plan,
-						Right: childPlan,
-					}
+					// UNION should not be wrapped in another UNION!
+					// If plan is already set, this is an error in parser structure
+					// For now, just replace plan with the UNION (takes precedence)
+					plan = childPlan
 				case parser.GraphPatternTypeMinus:
 					plan = &MinusPlan{
 						Left:  plan,
