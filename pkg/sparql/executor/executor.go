@@ -738,20 +738,18 @@ func (it *filterIterator) Next() bool {
 		}
 
 		// Check effective boolean value
-		lit, ok := result.(*rdf.Literal)
-		if !ok {
-			// Non-literal result - filter out
+		ebv, err := it.evaluator.EffectiveBooleanValue(result)
+		if err != nil {
+			// Cannot compute EBV - filter out this binding
 			continue
 		}
 
-		// Check if it's a boolean literal with value true
-		if lit.Datatype != nil && lit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#boolean" {
-			if lit.Value == "true" || lit.Value == "1" {
-				return true
-			}
+		// Keep binding if EBV is true
+		if ebv {
+			return true
 		}
 
-		// Not true - continue to next binding
+		// EBV is false - continue to next binding
 	}
 	return false
 }
@@ -1349,6 +1347,7 @@ func (e *Executor) createUnionIterator(plan *optimizer.UnionPlan) (store.Binding
 		return nil, err
 	}
 
+	// fmt.Fprintf(os.Stderr, "DEBUG: Creating UNION iterator\n")
 	return &unionIterator{
 		left:     left,
 		right:    right,

@@ -22,7 +22,7 @@ func (e *Evaluator) evaluateBinaryExpression(expr *parser.BinaryExpression, bind
 
 		// If left is true, short-circuit (don't evaluate right)
 		if leftErr == nil {
-			leftEBV, err := e.effectiveBooleanValue(left)
+			leftEBV, err := e.EffectiveBooleanValue(left)
 			if err == nil && leftEBV {
 				return rdf.NewBooleanLiteral(true), nil
 			}
@@ -40,7 +40,7 @@ func (e *Evaluator) evaluateBinaryExpression(expr *parser.BinaryExpression, bind
 		// - If right is true, return true (even if left errored)
 		// - If both error, return error
 		if rightErr == nil {
-			rightEBV, err := e.effectiveBooleanValue(right)
+			rightEBV, err := e.EffectiveBooleanValue(right)
 			if err == nil && rightEBV {
 				return rdf.NewBooleanLiteral(true), nil
 			}
@@ -59,7 +59,7 @@ func (e *Evaluator) evaluateBinaryExpression(expr *parser.BinaryExpression, bind
 
 		// If left has error or is false, short-circuit
 		if leftErr == nil {
-			leftEBV, err := e.effectiveBooleanValue(left)
+			leftEBV, err := e.EffectiveBooleanValue(left)
 			if err == nil && !leftEBV {
 				return rdf.NewBooleanLiteral(false), nil
 			}
@@ -146,7 +146,7 @@ func (e *Evaluator) evaluateUnaryExpression(expr *parser.UnaryExpression, bindin
 // Logical operators
 
 func (e *Evaluator) evaluateAnd(left, right rdf.Term) (rdf.Term, error) {
-	leftEBV, err := e.effectiveBooleanValue(left)
+	leftEBV, err := e.EffectiveBooleanValue(left)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (e *Evaluator) evaluateAnd(left, right rdf.Term) (rdf.Term, error) {
 		return rdf.NewBooleanLiteral(false), nil
 	}
 
-	rightEBV, err := e.effectiveBooleanValue(right)
+	rightEBV, err := e.EffectiveBooleanValue(right)
 	if err != nil {
 		return nil, err
 	}
@@ -165,10 +165,10 @@ func (e *Evaluator) evaluateAnd(left, right rdf.Term) (rdf.Term, error) {
 }
 
 func (e *Evaluator) evaluateOr(left, right rdf.Term) (rdf.Term, error) {
-	leftEBV, err := e.effectiveBooleanValue(left)
+	leftEBV, err := e.EffectiveBooleanValue(left)
 	if err != nil {
 		// In SPARQL, if left is error but right is true, return true
-		rightEBV, rightErr := e.effectiveBooleanValue(right)
+		rightEBV, rightErr := e.EffectiveBooleanValue(right)
 		if rightErr == nil && rightEBV {
 			return rdf.NewBooleanLiteral(true), nil
 		}
@@ -180,7 +180,7 @@ func (e *Evaluator) evaluateOr(left, right rdf.Term) (rdf.Term, error) {
 		return rdf.NewBooleanLiteral(true), nil
 	}
 
-	rightEBV, err := e.effectiveBooleanValue(right)
+	rightEBV, err := e.EffectiveBooleanValue(right)
 	if err != nil {
 		return nil, err
 	}
@@ -189,15 +189,15 @@ func (e *Evaluator) evaluateOr(left, right rdf.Term) (rdf.Term, error) {
 }
 
 func (e *Evaluator) evaluateNot(operand rdf.Term) (rdf.Term, error) {
-	ebv, err := e.effectiveBooleanValue(operand)
+	ebv, err := e.EffectiveBooleanValue(operand)
 	if err != nil {
 		return nil, err
 	}
 	return rdf.NewBooleanLiteral(!ebv), nil
 }
 
-// effectiveBooleanValue computes the EBV of a term according to SPARQL spec
-func (e *Evaluator) effectiveBooleanValue(term rdf.Term) (bool, error) {
+// EffectiveBooleanValue computes the EBV of a term according to SPARQL spec
+func (e *Evaluator) EffectiveBooleanValue(term rdf.Term) (bool, error) {
 	if term == nil {
 		return false, fmt.Errorf("cannot compute EBV of nil term")
 	}
@@ -432,7 +432,7 @@ func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
 			return 0, nil
 		}
 
-		// One has datatype, other doesn't
+		// One has datatype, other doesn't - cannot compare
 		return 0, fmt.Errorf("cannot compare typed and untyped literals")
 	}
 
