@@ -286,14 +286,21 @@ func bindingToString(binding map[string]rdf.Term) string {
 
 // termToNormalizedString converts a term to a normalized string for comparison
 // Language tags are normalized to lowercase per RFC 5646
+// Plain literals and xsd:string literals are normalized to the same representation per RDF semantics
 func termToNormalizedString(term rdf.Term) string {
-	if lit, ok := term.(*rdf.Literal); ok && lit.Language != "" {
-		// Normalize language tag to lowercase for comparison
+	if lit, ok := term.(*rdf.Literal); ok {
 		result := fmt.Sprintf(`"%s"`, lit.Value)
-		result += "@" + strings.ToLower(lit.Language)
-		if lit.Direction != "" {
-			result += "--" + lit.Direction
+		if lit.Language != "" {
+			// Normalize language tag to lowercase for comparison
+			result += "@" + strings.ToLower(lit.Language)
+			if lit.Direction != "" {
+				result += "--" + lit.Direction
+			}
+		} else if lit.Datatype != nil && lit.Datatype.IRI != "http://www.w3.org/2001/XMLSchema#string" {
+			// Only include datatype if it's not xsd:string (plain literals are equivalent to xsd:string)
+			result += "^^" + lit.Datatype.String()
 		}
+		// Plain literals (no language, no datatype) and xsd:string literals both return just "value"
 		return result
 	}
 	return term.String()
