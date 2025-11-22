@@ -109,10 +109,11 @@ Validated against official W3C test suites:
 ### Combined RDF Compliance
 **Overall: 100% (2,304/2,304 tests) — Perfect W3C Compliance! 🎉**
 
-### SPARQL Query
-- **SPARQL Syntax:** 69.1% (65/94 tests)
-- **SPARQL BIND:** 70.0% (7/10 tests)
-- **SPARQL CSV/TSV Results:** 83.3% (5/6 tests) ✅
+### SPARQL 1.0 Query Engine
+- **Overall:** 89.4% (421/471 tests)
+- **Perfect Suites (15):** distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅
+
+See [Testing & Compliance](https://trigodb.com/testing.html) for detailed breakdown.
 
 ## Project Structure
 
