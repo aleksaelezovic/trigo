@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 )
+
+// Global counter for blank node scoping across parser instances
+var blankNodeScopeCounter uint64
 
 // TurtleParser is a simple Turtle/N-Triples parser for loading test data
 type TurtleParser struct {
@@ -15,6 +19,7 @@ type TurtleParser struct {
 	prefixes                map[string]string
 	base                    string
 	blankNodeCounter        int
+	blankNodeScope          string    // Unique scope for blank node labels in this parse session
 	strictNTriples          bool      // When true, enforce strict N-Triples syntax
 	extraTriples            []*Triple // Triples generated during term parsing (collections, blank node property lists)
 	lastTermWasPropertyList bool      // True if the last parsed term was a blank node property list
@@ -23,22 +28,28 @@ type TurtleParser struct {
 
 // NewTurtleParser creates a new Turtle parser
 func NewTurtleParser(input string) *TurtleParser {
+	// Generate unique scope for blank nodes in this parse session
+	scopeID := atomic.AddUint64(&blankNodeScopeCounter, 1)
 	return &TurtleParser{
 		input:          input,
 		pos:            0,
 		length:         len(input),
 		prefixes:       make(map[string]string),
+		blankNodeScope: fmt.Sprintf("b%d_", scopeID),
 		strictNTriples: false,
 	}
 }
 
 // NewNTriplesParser creates a new N-Triples parser with strict validation
 func NewNTriplesParser(input string) *TurtleParser {
+	// Generate unique scope for blank nodes in this parse session
+	scopeID := atomic.AddUint64(&blankNodeScopeCounter, 1)
 	return &TurtleParser{
 		input:          input,
 		pos:            0,
 		length:         len(input),
 		prefixes:       make(map[string]string),
+		blankNodeScope: fmt.Sprintf("b%d_", scopeID),
 		strictNTriples: true,
 	}
 }
@@ -1316,7 +1327,9 @@ func (p *TurtleParser) parseBlankNode() (Term, error) {
 	}
 
 	label := p.input[start:p.pos]
-	return NewBlankNode(label), nil
+	// Scope the blank node label to this parse session to ensure uniqueness across files
+	scopedLabel := p.blankNodeScope + label
+	return NewBlankNode(scopedLabel), nil
 }
 
 // parseAnonymousBlankNode parses an anonymous blank node [] or blank node property list

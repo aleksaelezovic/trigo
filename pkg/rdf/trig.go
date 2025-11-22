@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // TriGParser parses TriG format (Turtle + named graphs)
@@ -13,16 +14,20 @@ type TriGParser struct {
 	length           int
 	prefixes         map[string]string
 	base             string
-	blankNodeCounter int // Global blank node counter shared across all graph blocks
+	blankNodeCounter int    // Global blank node counter shared across all graph blocks
+	blankNodeScope   string // Unique scope for blank node labels in this parse session
 }
 
 // NewTriGParser creates a new TriG parser
 func NewTriGParser(input string) *TriGParser {
+	// Generate unique scope for blank nodes in this parse session
+	scopeID := atomic.AddUint64(&blankNodeScopeCounter, 1)
 	return &TriGParser{
-		input:    input,
-		pos:      0,
-		length:   len(input),
-		prefixes: make(map[string]string),
+		input:          input,
+		pos:            0,
+		length:         len(input),
+		prefixes:       make(map[string]string),
+		blankNodeScope: fmt.Sprintf("b%d_", scopeID),
 	}
 }
 
@@ -625,7 +630,9 @@ func (p *TriGParser) parseBlankNode() (*BlankNode, error) {
 	}
 
 	id := p.input[start:p.pos]
-	return NewBlankNode(id), nil
+	// Scope the blank node label to this parse session to ensure uniqueness across files
+	scopedID := p.blankNodeScope + id
+	return NewBlankNode(scopedID), nil
 }
 
 // parseLiteral parses a literal: "value" or "value"@lang or "value"^^<type>

@@ -3,28 +3,33 @@ package rdf
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 // NQuadsParser is an N-Quads parser that extends N-Triples with an optional 4th position for graphs
 // N-Quads format: <subject> <predicate> <object> [<graph>] .
 // Compatible with N-Triples (3 positions) - defaults to default graph
 type NQuadsParser struct {
-	input      string
-	pos        int
-	length     int
-	prefixes   map[string]string
-	baseIRI    string
-	strictMode bool // When true, enforce strict N-Quads/N-Triples syntax
+	input          string
+	pos            int
+	length         int
+	prefixes       map[string]string
+	baseIRI        string
+	blankNodeScope string // Unique scope for blank node labels in this parse session
+	strictMode     bool   // When true, enforce strict N-Quads/N-Triples syntax
 }
 
 // NewNQuadsParser creates a new N-Quads parser with strict validation
 func NewNQuadsParser(input string) *NQuadsParser {
+	// Generate unique scope for blank nodes in this parse session
+	scopeID := atomic.AddUint64(&blankNodeScopeCounter, 1)
 	return &NQuadsParser{
-		input:      input,
-		pos:        0,
-		length:     len(input),
-		prefixes:   make(map[string]string),
-		strictMode: true, // N-Quads uses strict N-Triples syntax
+		input:          input,
+		pos:            0,
+		length:         len(input),
+		prefixes:       make(map[string]string),
+		blankNodeScope: fmt.Sprintf("b%d_", scopeID),
+		strictMode:     true, // N-Quads uses strict N-Triples syntax
 	}
 }
 
@@ -372,7 +377,9 @@ func (p *NQuadsParser) parseBlankNode() (Term, error) {
 	}
 
 	label := p.input[start:p.pos]
-	return NewBlankNode(label), nil
+	// Scope the blank node label to this parse session to ensure uniqueness across files
+	scopedLabel := p.blankNodeScope + label
+	return NewBlankNode(scopedLabel), nil
 }
 
 // parseLiteral parses a literal value
