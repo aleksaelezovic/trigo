@@ -6,24 +6,33 @@
 
 ## Progress Summary
 
-### In Progress (Session 11 Part 3 - 2025-11-25 - Equality/Comparison Semantics)
+### Completed (Session 11 Part 3 - 2025-11-25 - Equality/Comparison Semantics)
 - 🔍 Investigated SPARQL equality and comparison operator semantics
 - ✅ Added validation for invalid numeric literals (e.g., "xyz"^^xsd:integer)
 - ✅ Added RDF term equality check for identical invalid literals
 - ✅ Added isNumericDatatype() helper function
 - ✅ Prevented comparison (<, >, etc.) of non-literal terms
 - ✅ Added error on unknown datatype comparisons
-- **Partial improvement:**
+- ✅ Implemented lexical comparison for invalid numeric literals with same datatype
+- **Improvements achieved:**
+  - open-eq-10: 59 → 51 bindings (target: 52, need 1 more) ✨
+  - open-eq-11: 59 → 51 bindings (target: 52, need 1 more) ✨
   - open-eq-08: 48 → 40 bindings (target: 42, need 2 more)
-  - open-eq-10: 59 → 50 bindings (target: 52, need 2 more)
-  - open-eq-11: 59 → 50 bindings (target: 52, need 2 more)
-- **Remaining issues:**
-  - Comparison tests (open-cmp-01, open-cmp-02) unchanged - still producing 10x and 20x expected bindings
-  - Likely caused by blank node property list pattern matching creating extra bindings
-  - Appears to be Cartesian product issue in pattern execution, not parser
+- **Remaining issues (complex semantics, require deeper investigation):**
+  - open-eq tests: Off by 1-2 bindings each - subtle equality edge cases remain
+  - open-cmp tests: 10x and 20x expected bindings - blank node property list Cartesian product
+  - date-2: Date/time comparison issue
+  - open-eq-12: OPTIONAL with FILTER interaction
 - **Test status:** 432/471 (91.7%) - no regressions
-- **🎯 Findings:** SPARQL != operator must error on incompatible types (per spec), errors filter out bindings
-- **Next steps:** Investigate blank node pattern matching in executor, check join logic for property lists
+- **🎯 Key findings:**
+  - SPARQL != operator errors on incompatible types (per spec), which filters out bindings
+  - Invalid literal handling is implementation extension point per SPARQL spec
+  - Adopted Neptune-style approach: lexical comparison for invalid literals
+  - Comparison tests suggest Cartesian product in blank node property list execution
+- **Commits:**
+  - `refactor(sparql): Improve equality and comparison operator semantics`
+  - `refactor(sparql): Improve invalid numeric literal equality handling`
+- **Next steps:** Blank node property list execution, RDF collection matching, dataset loading
 
 ### Completed (Session 11 Part 2 - 2025-11-25 - Dataset and GRAPH Parsing)
 - ✅ Extended FROM and FROM NAMED clauses to accept prefixed names
