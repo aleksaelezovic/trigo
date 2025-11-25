@@ -1,17 +1,30 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 421/471 tests passing (89.4%)
-**Remaining:** 50 failing tests (10.6%)
-**Last Updated:** 2025-11-25 (Session 11 Start - Status Verification)
+**Current Status:** 429/471 tests passing (91.1%)
+**Remaining:** 42 failing tests (8.9%)
+**Last Updated:** 2025-11-25 (Session 11 Complete - Blank Node Scope Validation)
 
 ## Progress Summary
 
-### Current Session (Session 11 - 2025-11-25)
-**Status Verification:**
-- ✅ Verified current test results: 421/471 (89.4%)
-- ✅ Documentation accuracy confirmed (README.md, docs/testing.html, docs/index.html)
-- **Progress since last documented session:** 375→421 (+46 tests, +6.1pp)
-- **Tests remaining to 100%:** 50 tests (10.6%)
+### Completed (Session 11 - 2025-11-25 - Blank Node Scope Validation)
+- ✅ Implemented blank node label scope validation in SPARQL parser
+- ✅ Blank node labels cannot cross basic graph pattern boundaries
+- ✅ Added currentBGPBlankNodes and allBlankNodes tracking maps
+- ✅ OPTIONAL, UNION, GRAPH, MINUS, nested {} create scope boundaries
+- ✅ Each nested pattern gets isolated scope with save/restore mechanism
+- ✅ parseBlankNode() validates against cross-scope label usage
+- ✅ All 8 blank node scope tests now passing:
+  - syn-blabel-cross-graph-bad ✅
+  - syn-blabel-cross-optional-bad ✅
+  - syn-blabel-cross-union-bad ✅
+  - syn-bad-34 (nested group) ✅
+  - syn-bad-35 ✅
+  - syn-bad-36 (UNION branches) ✅
+  - syn-bad-37 ✅
+  - syn-bad-GRAPH-breaks-BGP ✅
+- **Test improvement:** 421→429 (+8 tests, +1.7pp)
+- **🎯 Impact:** Proper SPARQL blank node scoping per specification
+- **Tests remaining to 100%:** 42 tests (8.9%)
 
 ### Completed (Session 10 Continued Part 5 - Short-Circuit Evaluation for OR/AND)
 - ✅ Implemented short-circuit evaluation for logical OR operator
