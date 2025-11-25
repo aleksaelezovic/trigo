@@ -285,13 +285,19 @@ func (e *Executor) executeConstruct(query *optimizer.OptimizedQuery) (*Construct
 	// Collect triples by instantiating template for each binding
 	var triples []*Triple
 	seenTriples := make(map[string]bool) // For deduplication
+	solutionIndex := 0                   // Track solution number for fresh blank nodes
 
 	for iter.Next() {
 		binding := iter.Binding()
+		solutionIndex++
+
+		// Create a blank node mapping for this solution
+		// Blank nodes in the template get fresh identifiers per solution
+		blankNodeMap := make(map[string]string)
 
 		// Instantiate each triple pattern in the template
 		for _, pattern := range constructPlan.Template {
-			triple, err := e.instantiateTriplePattern(pattern, binding)
+			triple, err := e.instantiateTriplePatternWithBNodes(pattern, binding, solutionIndex, blankNodeMap)
 			if err != nil {
 				// Skip triples that can't be instantiated (e.g., unbound variables)
 				continue
@@ -414,6 +420,8 @@ func (e *Executor) rdfTermToExecutorTerm(term rdf.Term) Term {
 }
 
 // instantiateTriplePattern creates a triple from a pattern and binding
+//
+//lint:ignore U1000 Kept for potential non-CONSTRUCT uses
 func (e *Executor) instantiateTriplePattern(pattern *parser.TriplePattern, binding *store.Binding) (*Triple, error) {
 	subject, err := e.instantiateTerm(pattern.Subject, binding)
 	if err != nil {
@@ -437,7 +445,33 @@ func (e *Executor) instantiateTriplePattern(pattern *parser.TriplePattern, bindi
 	}, nil
 }
 
+// instantiateTriplePatternWithBNodes instantiates a triple pattern with fresh blank nodes per solution
+func (e *Executor) instantiateTriplePatternWithBNodes(pattern *parser.TriplePattern, binding *store.Binding, solutionIndex int, blankNodeMap map[string]string) (*Triple, error) {
+	subject, err := e.instantiateTermWithBNodes(pattern.Subject, binding, solutionIndex, blankNodeMap)
+	if err != nil {
+		return nil, err
+	}
+
+	predicate, err := e.instantiateTermWithBNodes(pattern.Predicate, binding, solutionIndex, blankNodeMap)
+	if err != nil {
+		return nil, err
+	}
+
+	object, err := e.instantiateTermWithBNodes(pattern.Object, binding, solutionIndex, blankNodeMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Triple{
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
+	}, nil
+}
+
 // instantiateTerm converts a TermOrVariable to a concrete Term using bindings
+//
+//lint:ignore U1000 Kept for potential non-CONSTRUCT uses
 func (e *Executor) instantiateTerm(termOrVar parser.TermOrVariable, binding *store.Binding) (Term, error) {
 	if termOrVar.IsVariable() {
 		// Look up variable in binding
@@ -449,6 +483,38 @@ func (e *Executor) instantiateTerm(termOrVar parser.TermOrVariable, binding *sto
 	}
 
 	// It's a constant term
+	return e.rdfTermToExecutorTerm(termOrVar.Term), nil
+}
+
+// instantiateTermWithBNodes converts a TermOrVariable with fresh blank nodes per solution
+func (e *Executor) instantiateTermWithBNodes(termOrVar parser.TermOrVariable, binding *store.Binding, solutionIndex int, blankNodeMap map[string]string) (Term, error) {
+	if termOrVar.IsVariable() {
+		// Look up variable in binding
+		value, found := binding.Vars[termOrVar.Variable.Name]
+		if !found {
+			return Term{}, fmt.Errorf("unbound variable: %s", termOrVar.Variable.Name)
+		}
+		return e.rdfTermToExecutorTerm(value), nil
+	}
+
+	// Check if it's a blank node in the template
+	if blankNode, ok := termOrVar.Term.(*rdf.BlankNode); ok {
+		// Generate a fresh blank node identifier for this solution
+		originalLabel := blankNode.ID
+
+		// Check if we've already mapped this blank node in this solution
+		if freshLabel, exists := blankNodeMap[originalLabel]; exists {
+			// Reuse the same fresh blank node within this solution
+			return Term{Value: freshLabel, Type: "blank"}, nil
+		}
+
+		// Create a new fresh blank node identifier
+		freshLabel := fmt.Sprintf("%s_s%d", originalLabel, solutionIndex)
+		blankNodeMap[originalLabel] = freshLabel
+		return Term{Value: freshLabel, Type: "blank"}, nil
+	}
+
+	// It's a constant term (not a blank node)
 	return e.rdfTermToExecutorTerm(termOrVar.Term), nil
 }
 
