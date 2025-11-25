@@ -6,6 +6,40 @@
 
 ## Remaining Work (39 tests - 8.3%)
 
+### Investigation Notes (Session 11 Part 4 - Cartesian Product Root Cause)
+
+**Root Cause Analysis:**
+The Cartesian product issue in RDF collection and blank node property list matching stems from how the executor creates nested loop joins.
+
+**Problem:**
+1. Collections like `(1)` expand to: `_:b1 rdf:first 1 ; _:b1 rdf:rest rdf:nil`
+2. Parser correctly generates blank node `_:b1` as a `*rdf.BlankNode` term
+3. Executor's `convertTermOrVariable()` converts ALL blank nodes to variables: `_:b1` → `Var("_:_:b1")`
+4. Each triple pattern becomes an independent scan with the variable
+5. Nested loop join executes: Scan1, then for each binding, execute Scan2, then Scan3
+6. **Critical issue:** Right-side scans are created without applying left-side variable bindings
+
+**Current Behavior:**
+- Left scan: `:x ?p Var("_:_:b1")` → finds all matches
+- Right scan: `Var("_:_:b1") rdf:first 1` → finds **all** blank nodes with `rdf:first 1` (not filtered to the one bound from left)
+- Result: Cartesian product of all matches, then filtered by `mergeBindings`
+
+**Attempted Fix:**
+Added `createScanIteratorWithBinding()` to instantiate variables with bound values before scanning.
+Modified nested loop join to pass left bindings as context to right iterator.
+
+**Result:** Still producing Cartesian products. The fix requires deeper changes to how:
+1. Context bindings propagate through recursive join plans (not just ScanPlans)
+2. OPTIONAL patterns use preBindingIterator which may conflict with variable instantiation
+3. Blank node semantics differ between user-written (_:x in query) vs parser-generated (_:b1 from [])
+
+**Recommended Approach:**
+1. Distinguish parser-generated blank nodes (keep as terms) from user-written (convert to variables)
+2. OR: Make nested loop join more intelligent about propagating bindings through the plan tree
+3. OR: Use a different join strategy (hash join with variable binding propagation)
+
+This is a fundamental executor architecture issue requiring careful redesign to avoid regressions.
+
 ### Category 1: Dataset Loading (29 tests) - **Requires Major Feature**
 Tests: dataset-01, dataset-03, dataset-05, dataset-06, dataset-07, dataset-08, dataset-09, dataset-10, dataset-11, dataset-12, and 19 more
 - **Requirement:** Implement FROM/FROM NAMED dataset loading in executor
