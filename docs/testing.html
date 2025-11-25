@@ -349,7 +349,7 @@ Skipped: 1
         </ul>
 
         <h4>SPARQL 1.0 Test Results</h4>
-        <p><strong>Overall: 91.1% (429/471 tests)</strong></p>
+        <p><strong>Overall: 91.7% (432/471 tests)</strong></p>
         <p><strong>Perfect Compliance Suites (15):</strong></p>
         <ul>
             <li><strong>distinct</strong>: 100% (11/11 tests) ✅</li>
@@ -379,7 +379,23 @@ Skipped: 1
             <li><strong>syntax-sparql3</strong>: 92.2% (47/51 tests)</li>
         </ul>
 
-        <p><strong>Recent Improvements (Session 11 - Blank Node Scope Validation):</strong></p>
+        <p><strong>Recent Improvements (Session 11 Part 2 - Dataset and GRAPH Parsing):</strong></p>
+        <ul>
+            <li>Extended FROM and FROM NAMED clauses to accept prefixed names</li>
+            <li>Extended GRAPH patterns to accept prefixed names and variables</li>
+            <li>Added parseIRIOrPrefixedName() helper for flexible IRI parsing</li>
+            <li>FROM/FROM NAMED now accept both &lt;http://...&gt; and :prefixedName</li>
+            <li><strong>SPARQL 1.0 compliance improved: 91.1% → 91.7%</strong> (+0.6 percentage points, +3 tests)</li>
+            <li><strong>All 3 dataset/GRAPH syntax tests now passing:</strong>
+                <ul>
+                    <li>syntax-dataset-03.rq (multiple FROM NAMED with prefixes) ✅</li>
+                    <li>syntax-dataset-04.rq (mixed FROM and FROM NAMED) ✅</li>
+                    <li>syntax-graph-02.rq (GRAPH with prefixed name) ✅</li>
+                </ul>
+            </li>
+        </ul>
+
+        <p><strong>Recent Improvements (Session 11 Part 1 - Blank Node Scope Validation):</strong></p>
         <ul>
             <li>Implemented blank node label scope validation in SPARQL parser</li>
             <li>Blank node labels cannot cross basic graph pattern boundaries (OPTIONAL, UNION, GRAPH, MINUS, nested groups)</li>

@@ -1,12 +1,27 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 429/471 tests passing (91.1%)
-**Remaining:** 42 failing tests (8.9%)
-**Last Updated:** 2025-11-25 (Session 11 Complete - Blank Node Scope Validation)
+**Current Status:** 432/471 tests passing (91.7%)
+**Remaining:** 39 failing tests (8.3%)
+**Last Updated:** 2025-11-25 (Session 11 Part 2 - Dataset and GRAPH Parsing)
 
 ## Progress Summary
 
-### Completed (Session 11 - 2025-11-25 - Blank Node Scope Validation)
+### Completed (Session 11 Part 2 - 2025-11-25 - Dataset and GRAPH Parsing)
+- ✅ Extended FROM and FROM NAMED clauses to accept prefixed names
+- ✅ Extended GRAPH patterns to accept prefixed names
+- ✅ Added parseIRIOrPrefixedName() helper for flexible IRI parsing
+- ✅ FROM/FROM NAMED now accept both <http://...> and :prefixedName
+- ✅ GRAPH patterns now accept IRI, prefixed name, or variable
+- ✅ All 3 dataset/GRAPH syntax tests now passing:
+  - syntax-dataset-03.rq (multiple FROM NAMED with prefixes) ✅
+  - syntax-dataset-04.rq (mixed FROM and FROM NAMED) ✅
+  - syntax-graph-02.rq (GRAPH with prefixed name) ✅
+- **Test improvement:** 429→432 (+3 tests, +0.6pp)
+- **🎯 Impact:** Proper SPARQL dataset and GRAPH parsing per specification
+- **Tests remaining to 100%:** 39 tests (8.3%)
+- **Note:** Dataset evaluation tests still failing (require executor implementation)
+
+### Completed (Session 11 Part 1 - 2025-11-25 - Blank Node Scope Validation)
 - ✅ Implemented blank node label scope validation in SPARQL parser
 - ✅ Blank node labels cannot cross basic graph pattern boundaries
 - ✅ Added currentBGPBlankNodes and allBlankNodes tracking maps

@@ -110,7 +110,7 @@ Validated against official W3C test suites:
 **Overall: 100% (2,304/2,304 tests) — Perfect W3C Compliance! 🎉**
 
 ### SPARQL 1.0 Query Engine
-- **Overall:** 91.1% (429/471 tests)
+- **Overall:** 91.7% (432/471 tests)
 - **Perfect Suites (15):** distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅
 
 See [Testing & Compliance](https://trigodb.com/testing.html) for detailed breakdown.
