@@ -11,25 +11,29 @@ import (
 
 // Parser parses SPARQL queries
 type Parser struct {
-	input            string
-	pos              int
-	length           int
-	prefixes         map[string]string // Maps prefix to IRI
-	baseURI          string            // Base URI for resolving relative IRIs
-	blankNodeCounter int               // Counter for generating blank node identifiers
-	extraTriples     []TriplePattern   // Extra triples generated from collections and blank node property lists
+	input                string
+	pos                  int
+	length               int
+	prefixes             map[string]string // Maps prefix to IRI
+	baseURI              string            // Base URI for resolving relative IRIs
+	blankNodeCounter     int               // Counter for generating blank node identifiers
+	extraTriples         []TriplePattern   // Extra triples generated from collections and blank node property lists
+	currentBGPBlankNodes map[string]bool   // Blank node labels used in current basic graph pattern
+	allBlankNodes        map[string]bool   // All blank node labels seen in current graph pattern scope
 }
 
 // NewParser creates a new SPARQL parser
 func NewParser(input string) *Parser {
 	return &Parser{
-		input:            input,
-		pos:              0,
-		length:           len(input),
-		prefixes:         make(map[string]string),
-		baseURI:          "",
-		blankNodeCounter: 0,
-		extraTriples:     make([]TriplePattern, 0),
+		input:                input,
+		pos:                  0,
+		length:               len(input),
+		prefixes:             make(map[string]string),
+		baseURI:              "",
+		blankNodeCounter:     0,
+		extraTriples:         make([]TriplePattern, 0),
+		currentBGPBlankNodes: make(map[string]bool),
+		allBlankNodes:        make(map[string]bool),
 	}
 }
 
@@ -507,10 +511,20 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 		// Check for GRAPH keyword
 		if p.matchKeyword("GRAPH") {
+			// Save current BGP scope before entering GRAPH pattern
+			savedScope := p.saveBGPScope()
+			// Clear scope for nested pattern
+			p.currentBGPBlankNodes = make(map[string]bool)
+
 			graphPattern, err := p.parseGraphGraphPattern()
 			if err != nil {
 				return nil, err
 			}
+
+			// Restore outer scope and mark boundary
+			p.restoreBGPScope(savedScope)
+			p.markBGPBoundary()
+
 			// Add the GRAPH pattern as a child
 			if pattern.Children == nil {
 				pattern.Children = []*GraphPattern{}
@@ -560,10 +574,20 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 		// Check for OPTIONAL
 		if p.matchKeyword("OPTIONAL") {
+			// Save current BGP scope before entering nested pattern
+			savedScope := p.saveBGPScope()
+			// Clear scope for nested pattern
+			p.currentBGPBlankNodes = make(map[string]bool)
+
 			optionalPattern, err := p.parseGraphPattern()
 			if err != nil {
 				return nil, err
 			}
+
+			// Restore outer scope and mark boundary
+			p.restoreBGPScope(savedScope)
+			p.markBGPBoundary()
+
 			optionalPattern.Type = GraphPatternTypeOptional
 			if pattern.Children == nil {
 				pattern.Children = []*GraphPattern{}
@@ -581,10 +605,20 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 		// Check for MINUS
 		if p.matchKeyword("MINUS") {
+			// Save current BGP scope before entering nested pattern
+			savedScope := p.saveBGPScope()
+			// Clear scope for nested pattern
+			p.currentBGPBlankNodes = make(map[string]bool)
+
 			minusPattern, err := p.parseGraphPattern()
 			if err != nil {
 				return nil, err
 			}
+
+			// Restore outer scope and mark boundary
+			p.restoreBGPScope(savedScope)
+			p.markBGPBoundary()
+
 			minusPattern.Type = GraphPatternTypeMinus
 			if pattern.Children == nil {
 				pattern.Children = []*GraphPattern{}
@@ -635,10 +669,19 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 			}
 
 			// Regular nested graph pattern
+			// Save current BGP scope before entering nested pattern
+			savedScope := p.saveBGPScope()
+			// Clear scope for nested pattern
+			p.currentBGPBlankNodes = make(map[string]bool)
+
 			nestedPattern, err := p.parseGraphPattern()
 			if err != nil {
 				return nil, err
 			}
+
+			// Restore outer scope after nested pattern
+			p.restoreBGPScope(savedScope)
+
 			if pattern.Children == nil {
 				pattern.Children = []*GraphPattern{}
 			}
@@ -655,11 +698,19 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 				// Loop to handle multiple consecutive UNIONs
 				for {
+					// Each UNION branch gets its own scope
+					// Clear scope for this UNION branch
+					p.currentBGPBlankNodes = make(map[string]bool)
+
 					// Parse the next pattern after UNION
 					rightPattern, err := p.parseGraphPattern()
 					if err != nil {
 						return nil, err
 					}
+
+					// Restore outer scope after this UNION branch
+					p.restoreBGPScope(savedScope)
+
 					unionChildren = append(unionChildren, rightPattern)
 
 					// Check if there's another UNION
@@ -684,6 +735,8 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 
 			// Add to Elements to preserve order with FILTERs
 			pattern.Elements = append(pattern.Elements, PatternElement{GraphPattern: finalPattern})
+			// Nested groups and UNION create BGP boundaries - subsequent triples are in a new BGP
+			p.markBGPBoundary()
 			continue
 		}
 
@@ -1243,6 +1296,17 @@ func (p *Parser) parseBlankNode() (*rdf.BlankNode, error) {
 			(ch >= '0' && ch <= '9') || ch == '_'
 	})
 
+	// Validate blank node label scope:
+	// If this label was used in a previous BGP (in allBlankNodes) but not in
+	// the current BGP (not in currentBGPBlankNodes), it's crossing a boundary
+	if p.allBlankNodes[id] && !p.currentBGPBlankNodes[id] {
+		return nil, fmt.Errorf("blank node label _%s crosses basic graph pattern boundary", id)
+	}
+
+	// Register this blank node in the current BGP
+	p.currentBGPBlankNodes[id] = true
+	p.allBlankNodes[id] = true
+
 	return rdf.NewBlankNode(id), nil
 }
 
@@ -1250,6 +1314,28 @@ func (p *Parser) parseBlankNode() (*rdf.BlankNode, error) {
 func (p *Parser) newBlankNode() *rdf.BlankNode {
 	p.blankNodeCounter++
 	return rdf.NewBlankNode(fmt.Sprintf("b%d", p.blankNodeCounter))
+}
+
+// markBGPBoundary marks a basic graph pattern boundary
+// This should be called after parsing patterns that create scope boundaries
+// (OPTIONAL, GRAPH, MINUS, nested groups, UNION)
+func (p *Parser) markBGPBoundary() {
+	// Clear current BGP scope - we're starting a new basic graph pattern
+	p.currentBGPBlankNodes = make(map[string]bool)
+}
+
+// saveBGPScope saves the current blank node scope state
+func (p *Parser) saveBGPScope() map[string]bool {
+	saved := make(map[string]bool)
+	for k, v := range p.currentBGPBlankNodes {
+		saved[k] = v
+	}
+	return saved
+}
+
+// restoreBGPScope restores a previously saved blank node scope state
+func (p *Parser) restoreBGPScope(saved map[string]bool) {
+	p.currentBGPBlankNodes = saved
 }
 
 // parseCollection parses an RDF collection (list) in SPARQL syntax: (item1 item2 ...)
