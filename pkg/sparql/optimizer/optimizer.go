@@ -330,6 +330,12 @@ func (o *Optimizer) optimizeGraphGraphPattern(pattern *parser.GraphPattern) (Que
 		return nil, err
 	}
 
+	// If the graph pattern is empty (e.g., GRAPH ?g {}), create an EmptyPlan
+	// This allows the graph executor to enumerate graphs or check existence
+	if innerPlan == nil {
+		innerPlan = &EmptyPlan{}
+	}
+
 	// Wrap in a GraphPlan that specifies which graph to query
 	return &GraphPlan{
 		Input: innerPlan,

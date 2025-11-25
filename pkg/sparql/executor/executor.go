@@ -955,6 +955,21 @@ func (ge *graphExecutor) createIterator(plan optimizer.QueryPlan) (store.Binding
 			rightPlan: p.Right,
 			graphExec: ge,
 		}, nil
+	case *optimizer.EmptyPlan:
+		// For empty GRAPH patterns like GRAPH ?g {} or GRAPH <uri> {}
+		// We need to enumerate graphs or check existence
+		return ge.createEmptyGraphIterator()
+	case *optimizer.FilterPlan:
+		// For filters inside GRAPH patterns, apply filter to graph-constrained input
+		input, err := ge.createIterator(p.Input)
+		if err != nil {
+			return nil, err
+		}
+		return &filterIterator{
+			input:     input,
+			filter:    p.Filter,
+			evaluator: evaluator.NewEvaluator(),
+		}, nil
 	default:
 		// For other operators, delegate to base executor
 		return ge.base.createIterator(plan)
@@ -990,6 +1005,57 @@ func (ge *graphExecutor) convertGraphTerm(graphTerm *parser.GraphTerm) any {
 		return &store.Variable{Name: graphTerm.Variable.Name}
 	}
 	return graphTerm.IRI
+}
+
+// createEmptyGraphIterator handles empty GRAPH patterns like GRAPH ?g {} or GRAPH <uri> {}
+func (ge *graphExecutor) createEmptyGraphIterator() (store.BindingIterator, error) {
+	if ge.graph.Variable != nil {
+		// GRAPH ?g {} - enumerate all named graphs
+		// Query for all quads and extract unique graph names
+		pattern := &store.Pattern{
+			Subject:   &store.Variable{Name: "_s"},
+			Predicate: &store.Variable{Name: "_p"},
+			Object:    &store.Variable{Name: "_o"},
+			Graph:     &store.Variable{Name: ge.graph.Variable.Name},
+		}
+
+		quadIter, err := ge.base.store.Query(pattern)
+		if err != nil {
+			return nil, err
+		}
+
+		return &emptyGraphEnumerator{
+			quadIter:     quadIter,
+			graphVarName: ge.graph.Variable.Name,
+			seenGraphs:   make(map[string]bool),
+		}, nil
+	} else {
+		// GRAPH <uri> {} - check if the graph exists
+		// Query for any quad in the specified graph
+		pattern := &store.Pattern{
+			Subject:   &store.Variable{Name: "_s"},
+			Predicate: &store.Variable{Name: "_p"},
+			Object:    &store.Variable{Name: "_o"},
+			Graph:     ge.graph.IRI,
+		}
+
+		quadIter, err := ge.base.store.Query(pattern)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if at least one quad exists
+		exists := quadIter.Next()
+		_ = quadIter.Close() // Best effort close
+
+		if exists {
+			// Return a single empty binding
+			return &emptyIterator{}, nil
+		} else {
+			// Return no bindings
+			return &noBindingsIterator{}, nil
+		}
+	}
 }
 
 // graphJoinIterator implements nested loop join for GRAPH patterns
@@ -1895,4 +1961,58 @@ func (it *emptyIterator) Binding() *store.Binding {
 
 func (it *emptyIterator) Close() error {
 	return nil
+}
+
+// noBindingsIterator returns no bindings at all (empty result set)
+type noBindingsIterator struct{}
+
+func (it *noBindingsIterator) Next() bool {
+	return false
+}
+
+func (it *noBindingsIterator) Binding() *store.Binding {
+	return nil
+}
+
+func (it *noBindingsIterator) Close() error {
+	return nil
+}
+
+// emptyGraphEnumerator enumerates unique graph names for GRAPH ?g {} patterns
+type emptyGraphEnumerator struct {
+	quadIter     store.QuadIterator
+	graphVarName string
+	seenGraphs   map[string]bool
+	binding      *store.Binding
+}
+
+func (it *emptyGraphEnumerator) Next() bool {
+	for it.quadIter.Next() {
+		quad, err := it.quadIter.Quad()
+		if err != nil {
+			continue
+		}
+
+		graphName := quad.Graph.String()
+
+		// Skip if we've already seen this graph
+		if it.seenGraphs[graphName] {
+			continue
+		}
+
+		// Mark as seen and return binding
+		it.seenGraphs[graphName] = true
+		it.binding = store.NewBinding()
+		it.binding.Vars[it.graphVarName] = quad.Graph
+		return true
+	}
+	return false
+}
+
+func (it *emptyGraphEnumerator) Binding() *store.Binding {
+	return it.binding
+}
+
+func (it *emptyGraphEnumerator) Close() error {
+	return it.quadIter.Close()
 }
