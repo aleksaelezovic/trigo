@@ -141,8 +141,10 @@ type Triple struct {
 
 // Term represents an RDF term (for CONSTRUCT results)
 type Term struct {
-	Type  string // "iri", "blank", "literal"
-	Value string
+	Type     string // "iri", "blank", "literal"
+	Value    string
+	Datatype string // For typed literals (IRI of datatype)
+	Language string // For language-tagged literals
 }
 
 func (r *ConstructResult) resultType() {}
@@ -303,8 +305,11 @@ func (e *Executor) executeConstruct(query *optimizer.OptimizedQuery) (*Construct
 				continue
 			}
 
-			// Deduplicate triples
-			key := fmt.Sprintf("%s|%s|%s", triple.Subject.Value, triple.Predicate.Value, triple.Object.Value)
+			// Deduplicate triples (include datatype and language in key)
+			key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+				triple.Subject.Value, triple.Subject.Type,
+				triple.Predicate.Value, triple.Predicate.Type,
+				triple.Object.Value, triple.Object.Datatype, triple.Object.Language)
 			if !seenTriples[key] {
 				seenTriples[key] = true
 				triples = append(triples, triple)
@@ -390,8 +395,11 @@ func (e *Executor) executeDescribe(query *optimizer.OptimizedQuery) (*ConstructR
 				Object:    e.rdfTermToExecutorTerm(quad.Object),
 			}
 
-			// Deduplicate triples
-			key := fmt.Sprintf("%s|%s|%s", triple.Subject.Value, triple.Predicate.Value, triple.Object.Value)
+			// Deduplicate triples (include datatype and language in key)
+			key := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+				triple.Subject.Value, triple.Subject.Type,
+				triple.Predicate.Value, triple.Predicate.Type,
+				triple.Object.Value, triple.Object.Datatype, triple.Object.Language)
 			if !seenTriples[key] {
 				seenTriples[key] = true
 				triples = append(triples, triple)
@@ -413,7 +421,14 @@ func (e *Executor) rdfTermToExecutorTerm(term rdf.Term) Term {
 	case *rdf.BlankNode:
 		return Term{Type: "blank", Value: t.ID}
 	case *rdf.Literal:
-		return Term{Type: "literal", Value: t.Value}
+		result := Term{Type: "literal", Value: t.Value}
+		if t.Datatype != nil {
+			result.Datatype = t.Datatype.IRI
+		}
+		if t.Language != "" {
+			result.Language = t.Language
+		}
+		return result
 	default:
 		return Term{Type: "literal", Value: term.String()}
 	}

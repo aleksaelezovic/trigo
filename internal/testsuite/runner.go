@@ -704,6 +704,13 @@ func (r *TestRunner) executorTermToRDFTerm(t executor.Term) (rdf.Term, error) {
 	case "blank":
 		return rdf.NewBlankNode(t.Value), nil
 	case "literal":
+		// Handle typed and language-tagged literals
+		if t.Datatype != "" {
+			return rdf.NewLiteralWithDatatype(t.Value, rdf.NewNamedNode(t.Datatype)), nil
+		}
+		if t.Language != "" {
+			return rdf.NewLiteralWithLanguage(t.Value, t.Language), nil
+		}
 		return rdf.NewLiteral(t.Value), nil
 	default:
 		return nil, fmt.Errorf("unknown term type: %s", t.Type)
