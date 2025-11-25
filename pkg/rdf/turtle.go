@@ -934,8 +934,10 @@ func (p *TurtleParser) parseTerm() (Term, error) {
 		return NewBooleanLiteral(false), nil
 	}
 
-	// Prefixed name
-	if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == ':' {
+	// Prefixed name - check for valid prefix start character (including Unicode)
+	// Can start with PN_CHARS_BASE or ':' (for default prefix)
+	r, _ := p.peekRune()
+	if isPN_CHARS_BASE(r) || r == ':' {
 		return p.parsePrefixedName()
 	}
 

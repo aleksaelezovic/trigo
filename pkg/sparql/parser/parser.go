@@ -1128,7 +1128,8 @@ func (p *Parser) parseTermOrVariable() (*TermOrVariable, error) {
 	}
 
 	// Prefixed name (like :foo or prefix:foo)
-	if ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+	// Check for ':' or any valid prefix start character (including Unicode > 127)
+	if ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch > 127 {
 		prefixedName, err := p.parsePrefixedName()
 		if err != nil {
 			return nil, err
@@ -2037,12 +2038,16 @@ func (p *Parser) skipSelectExpression() error {
 func (p *Parser) parsePrefixedName() (string, error) {
 	// Read prefix part (everything before ':')
 	// Per SPARQL grammar, prefix names can contain: PN_CHARS_BASE | '_' and continue with PN_CHARS | '.'
-	// In practice: letters, digits, underscore, hyphen, and dots
+	// We allow Unicode characters per the SPARQL spec
 	prefixStart := p.pos
-	for p.pos < p.length && p.input[p.pos] != ':' {
+	for p.pos < p.length {
 		ch := p.input[p.pos]
-		// Allow letters, digits, underscore, hyphen, and dot in prefix
-		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
+		if ch == ':' {
+			break
+		}
+		// Allow ASCII letters, digits, underscore, hyphen, dot, and high Unicode (> 127)
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+			ch == '_' || ch == '-' || ch == '.' || ch > 127) {
 			break
 		}
 		p.advance()
@@ -2058,14 +2063,14 @@ func (p *Parser) parsePrefixedName() (string, error) {
 	// Read local part (everything after ':')
 	// According to SPARQL spec, PN_LOCAL can start with: PN_CHARS_U | ':' | [0-9] | PLX
 	// and continue with: (PN_CHARS | '.' | ':' | PLX)*
-	// We'll use a simplified approach that allows most characters
+	// We allow Unicode characters per the SPARQL spec
 	localStart := p.pos
 	for p.pos < p.length {
 		ch := p.input[p.pos]
-		// Allow letters, digits, underscore, hyphen, and dot
-		// According to spec, local part can be more complex, but this covers common cases
+		// Allow ASCII letters, digits, underscore, hyphen, dot, and high Unicode (> 127)
+		// Stop at whitespace or special characters that would end a term
 		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-			(ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
+			(ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.' || ch > 127) {
 			break
 		}
 		p.advance()
