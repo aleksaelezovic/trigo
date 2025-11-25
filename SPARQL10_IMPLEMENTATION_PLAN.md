@@ -2,9 +2,28 @@
 
 **Current Status:** 432/471 tests passing (91.7%)
 **Remaining:** 39 failing tests (8.3%)
-**Last Updated:** 2025-11-25 (Session 11 Part 2 - Dataset and GRAPH Parsing)
+**Last Updated:** 2025-11-25 (Session 11 Part 3 - Equality/Comparison Investigation)
 
 ## Progress Summary
+
+### In Progress (Session 11 Part 3 - 2025-11-25 - Equality/Comparison Semantics)
+- 🔍 Investigated SPARQL equality and comparison operator semantics
+- ✅ Added validation for invalid numeric literals (e.g., "xyz"^^xsd:integer)
+- ✅ Added RDF term equality check for identical invalid literals
+- ✅ Added isNumericDatatype() helper function
+- ✅ Prevented comparison (<, >, etc.) of non-literal terms
+- ✅ Added error on unknown datatype comparisons
+- **Partial improvement:**
+  - open-eq-08: 48 → 40 bindings (target: 42, need 2 more)
+  - open-eq-10: 59 → 50 bindings (target: 52, need 2 more)
+  - open-eq-11: 59 → 50 bindings (target: 52, need 2 more)
+- **Remaining issues:**
+  - Comparison tests (open-cmp-01, open-cmp-02) unchanged - still producing 10x and 20x expected bindings
+  - Likely caused by blank node property list pattern matching creating extra bindings
+  - Appears to be Cartesian product issue in pattern execution, not parser
+- **Test status:** 432/471 (91.7%) - no regressions
+- **🎯 Findings:** SPARQL != operator must error on incompatible types (per spec), errors filter out bindings
+- **Next steps:** Investigate blank node pattern matching in executor, check join logic for property lists
 
 ### Completed (Session 11 Part 2 - 2025-11-25 - Dataset and GRAPH Parsing)
 - ✅ Extended FROM and FROM NAMED clauses to accept prefixed names
