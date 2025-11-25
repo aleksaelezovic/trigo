@@ -349,7 +349,7 @@ Skipped: 1
         </ul>
 
         <h4>SPARQL 1.0 Test Results</h4>
-        <p><strong>Overall: 89.4% (421/471 tests)</strong></p>
+        <p><strong>Overall: 91.1% (429/471 tests)</strong></p>
         <p><strong>Perfect Compliance Suites (15):</strong></p>
         <ul>
             <li><strong>distinct</strong>: 100% (11/11 tests) ✅</li>
@@ -377,6 +377,26 @@ Skipped: 1
             <li><strong>syntax-sparql1</strong>: 98.8% (80/81 tests)</li>
             <li><strong>syntax-sparql2</strong>: 94.3% (50/53 tests)</li>
             <li><strong>syntax-sparql3</strong>: 92.2% (47/51 tests)</li>
+        </ul>
+
+        <p><strong>Recent Improvements (Session 11 - Blank Node Scope Validation):</strong></p>
+        <ul>
+            <li>Implemented blank node label scope validation in SPARQL parser</li>
+            <li>Blank node labels cannot cross basic graph pattern boundaries (OPTIONAL, UNION, GRAPH, MINUS, nested groups)</li>
+            <li>Each nested pattern has isolated blank node scope with proper save/restore</li>
+            <li><strong>SPARQL 1.0 compliance improved: 89.4% → 91.1%</strong> (+1.7 percentage points, +8 tests)</li>
+            <li><strong>All 8 blank node scope tests now passing:</strong>
+                <ul>
+                    <li>syn-blabel-cross-graph-bad ✅</li>
+                    <li>syn-blabel-cross-optional-bad ✅</li>
+                    <li>syn-blabel-cross-union-bad ✅</li>
+                    <li>syn-bad-34 (nested group) ✅</li>
+                    <li>syn-bad-35 ✅</li>
+                    <li>syn-bad-36 (UNION branches) ✅</li>
+                    <li>syn-bad-37 ✅</li>
+                    <li>syn-bad-GRAPH-breaks-BGP ✅</li>
+                </ul>
+            </li>
         </ul>
 
         <p><strong>Recent Improvements (Phase 1):</strong></p>
