@@ -452,25 +452,19 @@ func (p *Parser) parseDatasetClauses() ([]string, []string, error) {
 		if p.matchKeyword("FROM") {
 			p.skipWhitespace()
 			if p.matchKeyword("NAMED") {
-				// FROM NAMED <iri>
+				// FROM NAMED <iri> or FROM NAMED :prefixedName
 				p.skipWhitespace()
-				if p.peek() != '<' {
-					return nil, nil, fmt.Errorf("expected IRI after FROM NAMED")
-				}
-				iri, err := p.parseIRI()
+				iri, err := p.parseIRIOrPrefixedName()
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to parse IRI in FROM NAMED: %w", err)
+					return nil, nil, fmt.Errorf("expected IRI or prefixed name after FROM NAMED: %w", err)
 				}
 				fromNamed = append(fromNamed, iri)
 			} else {
-				// FROM <iri>
+				// FROM <iri> or FROM :prefixedName
 				p.skipWhitespace()
-				if p.peek() != '<' {
-					return nil, nil, fmt.Errorf("expected IRI after FROM")
-				}
-				iri, err := p.parseIRI()
+				iri, err := p.parseIRIOrPrefixedName()
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to parse IRI in FROM: %w", err)
+					return nil, nil, fmt.Errorf("expected IRI or prefixed name after FROM: %w", err)
 				}
 				from = append(from, iri)
 			}
@@ -481,6 +475,21 @@ func (p *Parser) parseDatasetClauses() ([]string, []string, error) {
 	}
 
 	return from, fromNamed, nil
+}
+
+// parseIRIOrPrefixedName parses either a full IRI <...> or a prefixed name :local or prefix:local
+func (p *Parser) parseIRIOrPrefixedName() (string, error) {
+	ch := p.peek()
+
+	if ch == '<' {
+		// Full IRI
+		return p.parseIRI()
+	} else if ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+		// Prefixed name
+		return p.parsePrefixedName()
+	} else {
+		return "", fmt.Errorf("expected IRI or prefixed name, got '%c'", ch)
+	}
 }
 
 // parseGraphPattern parses a graph pattern (WHERE clause content)
@@ -787,29 +796,30 @@ func (p *Parser) parseGraphPattern() (*GraphPattern, error) {
 	return pattern, nil
 }
 
-// parseGraphGraphPattern parses a GRAPH <iri> { ... } or GRAPH ?var { ... } pattern
+// parseGraphGraphPattern parses a GRAPH <iri> { ... } or GRAPH ?var { ... } or GRAPH :prefixedName { ... } pattern
 func (p *Parser) parseGraphGraphPattern() (*GraphPattern, error) {
 	p.skipWhitespace()
 
-	// Parse graph name (IRI or variable)
+	// Parse graph name (IRI, prefixed name, or variable)
 	graphTerm := &GraphTerm{}
 
-	if p.peek() == '?' {
+	ch := p.peek()
+	if ch == '?' || ch == '$' {
 		// Variable
 		varName, err := p.parseVariable()
 		if err != nil {
 			return nil, err
 		}
 		graphTerm.Variable = varName
-	} else if p.peek() == '<' {
-		// IRI
-		iri, err := p.parseIRI()
+	} else if ch == '<' || ch == ':' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+		// IRI or prefixed name
+		iri, err := p.parseIRIOrPrefixedName()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse IRI after GRAPH: %w", err)
 		}
 		graphTerm.IRI = rdf.NewNamedNode(iri)
 	} else {
-		return nil, fmt.Errorf("expected IRI or variable after GRAPH")
+		return nil, fmt.Errorf("expected IRI, prefixed name, or variable after GRAPH")
 	}
 
 	// Parse the nested graph pattern
