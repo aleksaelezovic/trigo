@@ -311,26 +311,53 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 	rightLit, rightIsLit := right.(*rdf.Literal)
 
 	if leftIsLit && rightIsLit {
-		// First check RDF term equality (same datatype and lexical form)
-		// This handles the case where both have the same invalid literal
+		// Check if both are the same term (same datatype IRI and lexical value)
+		// This includes the case of identical invalid literals
 		if leftLit.Datatype != nil && rightLit.Datatype != nil {
 			if leftLit.Datatype.IRI == rightLit.Datatype.IRI && leftLit.Value == rightLit.Value {
-				// Same term, even if invalid - return true
+				// Identical terms are equal, even if invalid
 				return true, nil
 			}
 		}
 
-		// Check for invalid numeric literals when comparing different values
-		if leftLit.Datatype != nil && e.isNumericDatatype(leftLit.Datatype.IRI) {
+		// For different terms with invalid numeric literals:
+		// SPARQL spec allows implementations to handle this as an extension point
+		// We'll treat them lexically - if one is invalid, error when comparing to valid numerics
+		// but allow lexical comparison between two invalid numerics with same datatype
+		leftInvalid := leftLit.Datatype != nil && e.isNumericDatatype(leftLit.Datatype.IRI)
+		if leftInvalid {
 			if _, ok := e.ExtractNumeric(left); !ok {
-				return false, fmt.Errorf("invalid numeric literal: %s", leftLit.Value)
+				leftInvalid = true
+			} else {
+				leftInvalid = false
 			}
 		}
-		if rightLit.Datatype != nil && e.isNumericDatatype(rightLit.Datatype.IRI) {
+
+		rightInvalid := rightLit.Datatype != nil && e.isNumericDatatype(rightLit.Datatype.IRI)
+		if rightInvalid {
 			if _, ok := e.ExtractNumeric(right); !ok {
-				return false, fmt.Errorf("invalid numeric literal: %s", rightLit.Value)
+				rightInvalid = true
+			} else {
+				rightInvalid = false
 			}
 		}
+
+		// If both have same numeric datatype and both are invalid, compare lexically
+		if leftInvalid && rightInvalid &&
+			leftLit.Datatype != nil && rightLit.Datatype != nil &&
+			leftLit.Datatype.IRI == rightLit.Datatype.IRI {
+			// Lexical comparison for invalid numeric literals with same datatype
+			return leftLit.Value == rightLit.Value, nil
+		}
+
+		// If one is invalid and the other is valid (or different datatypes), error
+		if leftInvalid && !rightInvalid {
+			return false, fmt.Errorf("cannot compare invalid and valid numeric literals")
+		}
+		if !leftInvalid && rightInvalid {
+			return false, fmt.Errorf("cannot compare valid and invalid numeric literals")
+		}
+		// Both valid, continue with normal comparison below
 
 		// Try numeric comparison first
 		leftNum, leftIsNum := e.ExtractNumeric(left)
