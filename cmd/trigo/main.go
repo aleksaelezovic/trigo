@@ -163,7 +163,7 @@ func runDemo() {
 	fmt.Println("✓ Query optimized successfully")
 
 	// Execute query
-	exec := executor.NewExecutor(tripleStore)
+	exec := executor.NewExecutor(tripleStore, ".")
 	result, err := exec.Execute(optimizedQuery)
 	if err != nil {
 		log.Fatalf("Failed to execute query: %v", err)
@@ -235,7 +235,7 @@ func runQuery(sparqlQuery string) {
 	}
 
 	// Execute query
-	exec := executor.NewExecutor(tripleStore)
+	exec := executor.NewExecutor(tripleStore, ".")
 	result, err := exec.Execute(optimizedQuery)
 	if err != nil {
 		log.Fatalf("Failed to execute query: %v", err)

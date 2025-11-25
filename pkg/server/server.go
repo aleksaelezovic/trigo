@@ -20,7 +20,7 @@ type Server struct {
 
 // NewServer creates a new SPARQL HTTP server
 func NewServer(store *store.TripleStore, addr string) *Server {
-	exec := executor.NewExecutor(store)
+	exec := executor.NewExecutor(store, ".")
 
 	// Get statistics for optimizer
 	count, _ := store.Count()

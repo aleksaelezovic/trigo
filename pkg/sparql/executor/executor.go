@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aleksaelezovic/trigo/pkg/rdf"
+	"github.com/aleksaelezovic/trigo/pkg/sparql/dataset"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/evaluator"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/optimizer"
 	"github.com/aleksaelezovic/trigo/pkg/sparql/parser"
@@ -14,18 +15,84 @@ import (
 
 // Executor executes SPARQL queries using the Volcano iterator model
 type Executor struct {
-	store *store.TripleStore
+	store         *store.TripleStore
+	datasetLoader *dataset.Loader
 }
 
 // NewExecutor creates a new query executor
-func NewExecutor(store *store.TripleStore) *Executor {
+func NewExecutor(store *store.TripleStore, baseDir string) *Executor {
 	return &Executor{
-		store: store,
+		store:         store,
+		datasetLoader: dataset.NewLoader(baseDir),
 	}
+}
+
+// ExecutionOptions provides options for query execution
+type ExecutionOptions struct {
+	BaseDir string // Optional: override default base directory for file resolution
 }
 
 // Execute executes an optimized query
 func (e *Executor) Execute(query *optimizer.OptimizedQuery) (QueryResult, error) {
+	return e.ExecuteWithOptions(query, nil)
+}
+
+// ExecuteWithOptions executes an optimized query with options
+func (e *Executor) ExecuteWithOptions(query *optimizer.OptimizedQuery, opts *ExecutionOptions) (QueryResult, error) {
+	var from, fromNamed []string
+
+	// Extract FROM/FROM NAMED based on query type
+	switch query.Original.QueryType {
+	case parser.QueryTypeSelect:
+		from = query.Original.Select.From
+		fromNamed = query.Original.Select.FromNamed
+	case parser.QueryTypeConstruct:
+		from = query.Original.Construct.From
+		fromNamed = query.Original.Construct.FromNamed
+	case parser.QueryTypeAsk:
+		from = query.Original.Ask.From
+		fromNamed = query.Original.Ask.FromNamed
+	case parser.QueryTypeDescribe:
+		from = query.Original.Describe.From
+		fromNamed = query.Original.Describe.FromNamed
+	}
+
+	// Check if query has dataset specification
+	hasDataset := len(from) > 0 || len(fromNamed) > 0
+
+	if hasDataset {
+		// Build load options with base directory override if provided
+		loadOpts := &dataset.LoadOptions{}
+		if opts != nil && opts.BaseDir != "" {
+			loadOpts.BaseDir = opts.BaseDir
+		}
+		return e.executeWithDataset(query, from, fromNamed, loadOpts)
+	}
+
+	// Execute without dataset (use main store)
+	return e.executeWithoutDataset(query)
+}
+
+// executeWithDataset loads dataset and executes query on temporary store
+func (e *Executor) executeWithDataset(query *optimizer.OptimizedQuery, from []string, fromNamed []string, opts *dataset.LoadOptions) (QueryResult, error) {
+	// Load dataset into temporary store
+	loadedDataset, err := e.datasetLoader.Load(from, fromNamed, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load dataset: %w", err)
+	}
+
+	// Create temporary executor with dataset store
+	tempExecutor := &Executor{
+		store:         loadedDataset.Store,
+		datasetLoader: e.datasetLoader,
+	}
+
+	// Execute query on temporary store
+	return tempExecutor.executeWithoutDataset(query)
+}
+
+// executeWithoutDataset executes query without dataset loading
+func (e *Executor) executeWithoutDataset(query *optimizer.OptimizedQuery) (QueryResult, error) {
 	switch query.Original.QueryType {
 	case parser.QueryTypeSelect:
 		return e.executeSelect(query)

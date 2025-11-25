@@ -19,8 +19,9 @@ import (
 
 // TestRunner runs W3C SPARQL test suite tests
 type TestRunner struct {
-	store *store.TripleStore
-	stats *TestStats
+	store   *store.TripleStore
+	stats   *TestStats
+	baseDir string // Base directory for resolving dataset files
 }
 
 // TestStats tracks test execution statistics
@@ -47,8 +48,9 @@ func NewTestRunner(dbPath string) (*TestRunner, error) {
 	}
 
 	return &TestRunner{
-		store: store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder()),
-		stats: &TestStats{},
+		store:   store.NewTripleStore(storage, encoding.NewTermEncoder(), encoding.NewTermDecoder()),
+		stats:   &TestStats{},
+		baseDir: ".", // Default to current directory
 	}, nil
 }
 
@@ -63,6 +65,9 @@ func (r *TestRunner) RunManifest(manifestPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse manifest: %w", err)
 	}
+
+	// Set base directory to manifest directory (for resolving dataset files in FROM/FROM NAMED)
+	r.baseDir = filepath.Dir(manifestPath)
 
 	fmt.Printf("\n📋 Running manifest: %s\n", manifestPath)
 	fmt.Printf("   Found %d tests\n\n", len(manifest.Tests))
@@ -267,8 +272,8 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 		return TestResultFail
 	}
 
-	// Execute query
-	exec := executor.NewExecutor(r.store)
+	// Execute query with base directory for dataset resolution
+	exec := executor.NewExecutor(r.store, r.baseDir)
 	result, err := exec.Execute(plan)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
@@ -801,8 +806,8 @@ func (r *TestRunner) runResultFormatTest(manifest *TestManifest, test *TestCase,
 		return TestResultFail
 	}
 
-	// Execute query
-	exec := executor.NewExecutor(r.store)
+	// Execute query with base directory for dataset resolution
+	exec := executor.NewExecutor(r.store, r.baseDir)
 	result, err := exec.Execute(plan)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
