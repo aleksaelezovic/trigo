@@ -2,7 +2,58 @@
 
 **Current Status:** 432/471 tests passing (91.7%)
 **Remaining:** 39 failing tests (8.3%)
-**Last Updated:** 2025-11-25 (Session 11 Part 3 - Equality/Comparison Investigation)
+**Last Updated:** 2025-11-25 (Session 11 Part 3 Complete - Categorized Remaining Work)
+
+## Remaining Work (39 tests - 8.3%)
+
+### Category 1: Dataset Loading (29 tests) - **Requires Major Feature**
+Tests: dataset-01, dataset-03, dataset-05, dataset-06, dataset-07, dataset-08, dataset-09, dataset-10, dataset-11, dataset-12, and 19 more
+- **Requirement:** Implement FROM/FROM NAMED dataset loading in executor
+- **Scope:** Parse already captures From/FromNamed IRIs, but executor doesn't load or query them
+- **Implementation needed:**
+  - Load RDF files specified in FROM clauses into temporary default graph
+  - Load RDF files specified in FROM NAMED into temporary named graphs
+  - Constrain query execution to only match triples in specified graphs
+  - Integrate with GRAPH patterns for named graph access
+- **Estimated effort:** Large (multi-day feature)
+- **Priority:** Medium (29 tests, but substantial implementation)
+
+### Category 2: RDF Collection Matching (3 tests) - **Execution Bug**
+Tests: Basic - List 2, Basic - List 3, Basic - List 4
+- **Issue:** Cartesian product when matching RDF collections in queries
+- **Example:** Query `?x ?p (1)` expects 1 binding, produces 12/72/2592
+- **Root cause:** Collection syntax `(...)` generates multiple triple patterns with shared blank nodes, but executor creates Cartesian product instead of proper join
+- **Similar to:** Blank node property list issue (open-cmp tests)
+- **Estimated effort:** Medium (executor join logic fix)
+- **Priority:** High (blocks 3 tests, similar root cause as other failures)
+
+### Category 3: Blank Node Property List Matching (2 tests) - **Execution Bug**
+Tests: open-cmp-01, open-cmp-02
+- **Issue:** Cartesian product when matching blank node property lists `[ :v1 ?v1 ; :v2 ?v2 ]`
+- **Example:** Expected 1 binding, produces 10; expected 3, produces 20
+- **Root cause:** Property list generates triples sharing same blank node, but execution creates Cartesian product
+- **Parser validated:** Blank node is correctly shared across all property triples in extraTriples
+- **Executor issue:** Join logic not properly constraining blank node to be identical
+- **Estimated effort:** Medium (executor join logic investigation)
+- **Priority:** High (blocks 2 tests, same root cause as collection tests)
+
+### Category 4: Equality/Comparison Edge Cases (5 tests) - **Complex Semantics**
+Tests: open-eq-08 (off by 2), open-eq-10 (off by 1), open-eq-11 (off by 1), open-eq-12 (off by 2), date-2 (off by 2)
+- **Issue:** Subtle edge cases in SPARQL equality/inequality operator semantics
+- **Progress:** Already improved from 48→40 and 59→51 bindings through invalid literal handling
+- **Remaining gaps:**
+  - Specific term type comparison combinations causing wrong error/success
+  - Language tag case sensitivity edge cases
+  - Plain literal vs xsd:string equivalence nuances
+  - Date/time comparison semantics (date-2)
+  - OPTIONAL with FILTER interaction (open-eq-12)
+- **Estimated effort:** Medium (requires careful spec analysis per test)
+- **Priority:** Low (small impact, very subtle semantics)
+
+### Summary by Priority
+1. **High Priority (5 tests):** RDF collection + blank node property list Cartesian products - same root cause
+2. **Medium Priority (29 tests):** Dataset loading - major feature, but well-defined scope
+3. **Low Priority (5 tests):** Equality edge cases - diminishing returns, very subtle
 
 ## Progress Summary
 
