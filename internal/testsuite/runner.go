@@ -273,7 +273,10 @@ func (r *TestRunner) runQueryEvaluationTest(manifest *TestManifest, test *TestCa
 	}
 
 	// Execute query with base directory for dataset resolution
-	exec := executor.NewExecutor(r.store, r.baseDir)
+	// Use the query file's directory as base, not the manifest directory
+	// This ensures FROM/FROM NAMED files are resolved relative to the query location
+	queryDir := filepath.Dir(queryFile)
+	exec := executor.NewExecutor(r.store, queryDir)
 	result, err := exec.Execute(plan)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
@@ -807,7 +810,10 @@ func (r *TestRunner) runResultFormatTest(manifest *TestManifest, test *TestCase,
 	}
 
 	// Execute query with base directory for dataset resolution
-	exec := executor.NewExecutor(r.store, r.baseDir)
+	// Use the query file's directory as base, not the manifest directory
+	// This ensures FROM/FROM NAMED files are resolved relative to the query location
+	queryDir := filepath.Dir(queryFile)
+	exec := executor.NewExecutor(r.store, queryDir)
 	result, err := exec.Execute(plan)
 	if err != nil {
 		r.recordError(test, fmt.Sprintf("Execution error: %v", err))
