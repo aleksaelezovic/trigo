@@ -311,6 +311,27 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 	rightLit, rightIsLit := right.(*rdf.Literal)
 
 	if leftIsLit && rightIsLit {
+		// First check RDF term equality (same datatype and lexical form)
+		// This handles the case where both have the same invalid literal
+		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			if leftLit.Datatype.IRI == rightLit.Datatype.IRI && leftLit.Value == rightLit.Value {
+				// Same term, even if invalid - return true
+				return true, nil
+			}
+		}
+
+		// Check for invalid numeric literals when comparing different values
+		if leftLit.Datatype != nil && e.isNumericDatatype(leftLit.Datatype.IRI) {
+			if _, ok := e.ExtractNumeric(left); !ok {
+				return false, fmt.Errorf("invalid numeric literal: %s", leftLit.Value)
+			}
+		}
+		if rightLit.Datatype != nil && e.isNumericDatatype(rightLit.Datatype.IRI) {
+			if _, ok := e.ExtractNumeric(right); !ok {
+				return false, fmt.Errorf("invalid numeric literal: %s", rightLit.Value)
+			}
+		}
+
 		// Try numeric comparison first
 		leftNum, leftIsNum := e.ExtractNumeric(left)
 		rightNum, rightIsNum := e.ExtractNumeric(right)
@@ -383,9 +404,22 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 // compareTerms compares two terms for ordering
 // Returns: -1 if left < right, 0 if left == right, 1 if left > right
 func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
+	// DEBUG: Log all comparisons
+	// fmt.Printf("DEBUG compareTerms: left=%v (type=%T), right=%v (type=%T)\n", left, left, right, right)
+
 	// Get literals if both are literals
 	leftLit, leftIsLit := left.(*rdf.Literal)
 	rightLit, rightIsLit := right.(*rdf.Literal)
+
+	// Cannot compare different term types (IRI vs literal, blank vs literal, etc.)
+	if !leftIsLit && !rightIsLit {
+		// Both are non-literals (IRI or blank node) - cannot use ordering operators
+		return 0, fmt.Errorf("cannot compare non-literal terms")
+	}
+	if leftIsLit != rightIsLit {
+		// One is literal, other isn't - cannot compare
+		return 0, fmt.Errorf("cannot compare literal and non-literal terms")
+	}
 
 	// Try numeric comparison first if both are numeric literals
 	if leftIsLit && rightIsLit {
@@ -410,7 +444,11 @@ func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
 				return 0, fmt.Errorf("cannot compare literals with different datatypes: %s and %s",
 					leftLit.Datatype.IRI, rightLit.Datatype.IRI)
 			}
-			// Same datatype, compare lexical forms
+			// Same datatype - but can only compare if it's a known datatype
+			if !e.isKnownDatatype(leftLit.Datatype.IRI) {
+				return 0, fmt.Errorf("cannot compare literals with unknown datatype: %s", leftLit.Datatype.IRI)
+			}
+			// Same known datatype, compare lexical forms
 			if leftLit.Value < rightLit.Value {
 				return -1, nil
 			} else if leftLit.Value > rightLit.Value {
@@ -648,4 +686,28 @@ func (e *Evaluator) isKnownDatatype(iri string) bool {
 	// SPARQL 1.0 recognizes XSD datatypes and rdf:langString
 	return strings.HasPrefix(iri, "http://www.w3.org/2001/XMLSchema#") ||
 		iri == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+}
+
+// isNumericDatatype checks if a datatype IRI represents a numeric type
+func (e *Evaluator) isNumericDatatype(iri string) bool {
+	switch iri {
+	case "http://www.w3.org/2001/XMLSchema#integer",
+		"http://www.w3.org/2001/XMLSchema#int",
+		"http://www.w3.org/2001/XMLSchema#long",
+		"http://www.w3.org/2001/XMLSchema#short",
+		"http://www.w3.org/2001/XMLSchema#byte",
+		"http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+		"http://www.w3.org/2001/XMLSchema#negativeInteger",
+		"http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+		"http://www.w3.org/2001/XMLSchema#positiveInteger",
+		"http://www.w3.org/2001/XMLSchema#unsignedLong",
+		"http://www.w3.org/2001/XMLSchema#unsignedInt",
+		"http://www.w3.org/2001/XMLSchema#unsignedShort",
+		"http://www.w3.org/2001/XMLSchema#unsignedByte",
+		"http://www.w3.org/2001/XMLSchema#double",
+		"http://www.w3.org/2001/XMLSchema#float",
+		"http://www.w3.org/2001/XMLSchema#decimal":
+		return true
+	}
+	return false
 }
