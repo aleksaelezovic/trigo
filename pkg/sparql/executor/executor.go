@@ -173,50 +173,14 @@ func (e *Executor) executeSelect(query *optimizer.OptimizedQuery) (*SelectResult
 		variables = extractVariablesFromGraphPattern(query.Original.Select.Where)
 	}
 
-	// Apply DISTINCT if specified
-	if query.Original.Select.Distinct {
-		bindings = applyDistinct(bindings)
-	}
-
-	// Apply REDUCED if specified (relaxed de-duplication)
-	if query.Original.Select.Reduced {
-		bindings = applyReduced(bindings)
-	}
+	// Note: DISTINCT and REDUCED are now handled by the query plan iterators
+	// (DistinctPlan/ReducedPlan) in the correct order relative to projection/offset/limit
+	// per SPARQL 1.1 spec section 15
 
 	return &SelectResult{
 		Variables: variables,
 		Bindings:  bindings,
 	}, nil
-}
-
-// applyDistinct removes duplicate bindings
-func applyDistinct(bindings []*store.Binding) []*store.Binding {
-	if len(bindings) == 0 {
-		return bindings
-	}
-
-	seen := make(map[string]bool)
-	var unique []*store.Binding
-
-	for _, binding := range bindings {
-		// Create a signature for this binding
-		sig := bindingSignature(binding)
-		if !seen[sig] {
-			seen[sig] = true
-			unique = append(unique, binding)
-		}
-	}
-
-	return unique
-}
-
-// applyReduced is a hint that duplicates MAY be removed but are not required to be removed.
-// Per SPARQL spec, REDUCED permits but does not require elimination of duplicates.
-// For simplicity and correctness, we keep all duplicates (no-op).
-func applyReduced(bindings []*store.Binding) []*store.Binding {
-	// REDUCED is a hint to the query engine that it MAY eliminate duplicates
-	// but is not required to. To ensure test compatibility, we don't remove any.
-	return bindings
 }
 
 // bindingSignature creates a unique string representation of a binding
@@ -610,6 +574,8 @@ func (e *Executor) createIteratorWithContext(plan optimizer.QueryPlan, contextBi
 		return e.createOffsetIterator(p)
 	case *optimizer.DistinctPlan:
 		return e.createDistinctIterator(p)
+	case *optimizer.ReducedPlan:
+		return e.createReducedIterator(p)
 	case *optimizer.GraphPlan:
 		return e.createGraphIterator(p)
 	case *optimizer.BindPlan:
@@ -811,6 +777,13 @@ func (e *Executor) createDistinctIterator(plan *optimizer.DistinctPlan) (store.B
 		input: input,
 		seen:  make(map[string]bool),
 	}, nil
+}
+
+func (e *Executor) createReducedIterator(plan *optimizer.ReducedPlan) (store.BindingIterator, error) {
+	// Per SPARQL 1.1 spec, REDUCED is a hint that duplicates MAY be removed
+	// but are not required to be removed. For simplicity and test compatibility,
+	// we just pass through without removing duplicates.
+	return e.createIterator(plan.Input)
 }
 
 // convertTermOrVariable converts a parser term/variable to store format

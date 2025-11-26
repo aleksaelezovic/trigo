@@ -145,6 +145,13 @@ type DistinctPlan struct {
 
 func (p *DistinctPlan) planNode() {}
 
+// ReducedPlan represents a REDUCED operation
+type ReducedPlan struct {
+	Input QueryPlan
+}
+
+func (p *ReducedPlan) planNode() {}
+
 // ConstructPlan represents a CONSTRUCT operation
 type ConstructPlan struct {
 	Input    QueryPlan
@@ -225,18 +232,27 @@ func (o *Optimizer) optimizeSelect(query *parser.SelectQuery) (QueryPlan, error)
 		}
 	}
 
+	// Apply projection (if not SELECT *)
+	if query.Variables != nil {
+		plan = &ProjectionPlan{
+			Input:     plan,
+			Variables: query.Variables,
+		}
+	}
+
 	// Apply DISTINCT if present
+	// Per SPARQL 1.1 spec section 15, DISTINCT is applied after projection
 	if query.Distinct {
 		plan = &DistinctPlan{
 			Input: plan,
 		}
 	}
 
-	// Apply projection (if not SELECT *)
-	if query.Variables != nil {
-		plan = &ProjectionPlan{
-			Input:     plan,
-			Variables: query.Variables,
+	// Apply REDUCED if present
+	// Per SPARQL 1.1 spec section 15, REDUCED is applied after projection
+	if query.Reduced {
+		plan = &ReducedPlan{
+			Input: plan,
 		}
 	}
 
