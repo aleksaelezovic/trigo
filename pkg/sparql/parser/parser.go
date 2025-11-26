@@ -835,6 +835,7 @@ func (p *Parser) parseGraphGraphPattern() (*GraphPattern, error) {
 		Patterns: nestedPattern.Patterns,
 		Filters:  nestedPattern.Filters,
 		Children: nestedPattern.Children,
+		Elements: nestedPattern.Elements, // Preserve element order for BIND/FILTER scoping
 	}
 
 	return graphPattern, nil

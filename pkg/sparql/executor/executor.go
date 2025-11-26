@@ -1146,7 +1146,54 @@ func (e *Executor) createGraphIterator(plan *optimizer.GraphPlan) (store.Binding
 	}
 
 	// Execute the inner plan with the graph constraint
-	return graphExec.createIterator(plan.Input)
+	innerIter, err := graphExec.createIterator(plan.Input)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap with iterator that promotes graph variable from HiddenVars to Vars
+	// This makes the graph variable visible outside the GRAPH pattern but not inside
+	return &graphPromotionIterator{
+		inner:     innerIter,
+		graphTerm: plan.Graph,
+	}, nil
+}
+
+// graphPromotionIterator promotes graph variable from HiddenVars to Vars
+// This makes the graph variable visible outside the GRAPH pattern but not inside
+type graphPromotionIterator struct {
+	inner     store.BindingIterator
+	graphTerm *parser.GraphTerm
+	binding   *store.Binding
+}
+
+func (it *graphPromotionIterator) Next() bool {
+	if !it.inner.Next() {
+		return false
+	}
+
+	// Clone the inner binding and promote graph variable
+	innerBinding := it.inner.Binding()
+	it.binding = innerBinding.Clone()
+
+	// Move graph variable from HiddenVars to Vars
+	if it.graphTerm != nil && it.graphTerm.Variable != nil {
+		varName := it.graphTerm.Variable.Name
+		if graphValue, exists := it.binding.HiddenVars[varName]; exists {
+			it.binding.Vars[varName] = graphValue
+			delete(it.binding.HiddenVars, varName)
+		}
+	}
+
+	return true
+}
+
+func (it *graphPromotionIterator) Binding() *store.Binding {
+	return it.binding
+}
+
+func (it *graphPromotionIterator) Close() error {
+	return it.inner.Close()
 }
 
 // graphExecutor wraps an executor and adds graph constraints to all scans
@@ -1430,6 +1477,7 @@ func (it *graphScanIterator) Next() bool {
 		}
 
 		// Bind graph variable if the GRAPH pattern uses a variable
+		// Use HiddenVars so it's not visible to BOUND() inside the GRAPH pattern
 		if valid && it.graphTerm != nil && it.graphTerm.Variable != nil {
 			varName := it.graphTerm.Variable.Name
 			if quad.Graph != nil {
@@ -1437,13 +1485,14 @@ func (it *graphScanIterator) Next() bool {
 				// GRAPH ?g means "match any NAMED graph", not the default graph
 				if quad.Graph.Type() == rdf.TermTypeDefaultGraph {
 					valid = false
-				} else if existingValue, exists := it.binding.Vars[varName]; exists {
+				} else if existingValue, exists := it.binding.HiddenVars[varName]; exists {
 					// Variable already bound - check if values match
 					if !existingValue.Equals(quad.Graph) {
 						valid = false
 					}
 				} else {
-					it.binding.Vars[varName] = quad.Graph
+					// Bind to HiddenVars, not Vars, so BOUND(?g) returns false inside pattern
+					it.binding.HiddenVars[varName] = quad.Graph
 				}
 			}
 		}
@@ -2249,7 +2298,9 @@ func (it *emptyGraphEnumerator) Next() bool {
 		// Mark as seen and return binding
 		it.seenGraphs[graphName] = true
 		it.binding = store.NewBinding()
-		it.binding.Vars[it.graphVarName] = quad.Graph
+		// Bind to HiddenVars, not Vars, so BOUND(?g) returns false inside GRAPH pattern
+		// The graphPromotionIterator will promote this to Vars outside the pattern
+		it.binding.HiddenVars[it.graphVarName] = quad.Graph
 		return true
 	}
 	return false

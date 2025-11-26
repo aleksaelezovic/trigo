@@ -30,15 +30,17 @@ func (v *Variable) String() string {
 
 // Binding represents a variable binding
 type Binding struct {
-	Vars   map[string]rdf.Term
-	values map[string]EncodedTerm // internal encoded values
+	Vars       map[string]rdf.Term
+	values     map[string]EncodedTerm // internal encoded values
+	HiddenVars map[string]rdf.Term    // Variables not visible to BOUND() (e.g., GRAPH variable inside pattern)
 }
 
 // NewBinding creates a new empty binding
 func NewBinding() *Binding {
 	return &Binding{
-		Vars:   make(map[string]rdf.Term),
-		values: make(map[string]EncodedTerm),
+		Vars:       make(map[string]rdf.Term),
+		values:     make(map[string]EncodedTerm),
+		HiddenVars: make(map[string]rdf.Term),
 	}
 }
 
@@ -50,6 +52,9 @@ func (b *Binding) Clone() *Binding {
 	}
 	for k, v := range b.values {
 		newBinding.values[k] = v
+	}
+	for k, v := range b.HiddenVars {
+		newBinding.HiddenVars[k] = v
 	}
 	return newBinding
 }
