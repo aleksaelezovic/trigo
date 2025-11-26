@@ -682,8 +682,15 @@ func (e *Executor) convertTermOrVariableWithContext(tov parser.TermOrVariable, c
 	if tov.IsVariable() {
 		varName := tov.Variable.Name
 		if context != nil {
+			// Check Vars first
 			if value, exists := context.Vars[varName]; exists {
 				// Use the bound value instead of a variable
+				return value
+			}
+			// Also check HiddenVars - these are still bound for pattern matching,
+			// just not visible to BOUND() checks
+			if value, exists := context.HiddenVars[varName]; exists {
+				// Use the bound value from HiddenVars
 				return value
 			}
 		}
@@ -696,6 +703,10 @@ func (e *Executor) convertTermOrVariableWithContext(tov parser.TermOrVariable, c
 		if context != nil {
 			if value, exists := context.Vars[varName]; exists {
 				// Use the bound value
+				return value
+			}
+			// Also check HiddenVars
+			if value, exists := context.HiddenVars[varName]; exists {
 				return value
 			}
 		}
@@ -1198,8 +1209,9 @@ func (it *graphPromotionIterator) Close() error {
 
 // graphExecutor wraps an executor and adds graph constraints to all scans
 type graphExecutor struct {
-	base  *Executor
-	graph *parser.GraphTerm
+	base           *Executor
+	graph          *parser.GraphTerm
+	contextBinding *store.Binding // Optional: variables from outer scope (e.g., from left side of join)
 }
 
 func (ge *graphExecutor) createIterator(plan optimizer.QueryPlan) (store.BindingIterator, error) {
@@ -1242,10 +1254,11 @@ func (ge *graphExecutor) createIterator(plan optimizer.QueryPlan) (store.Binding
 
 func (ge *graphExecutor) createGraphScanIterator(plan *optimizer.ScanPlan) (store.BindingIterator, error) {
 	// Convert parser triple pattern to store pattern with graph constraint
+	// Use context binding if available to substitute bound variables (including HiddenVars)
 	pattern := &store.Pattern{
-		Subject:   ge.base.convertTermOrVariable(plan.Pattern.Subject),
-		Predicate: ge.base.convertTermOrVariable(plan.Pattern.Predicate),
-		Object:    ge.base.convertTermOrVariable(plan.Pattern.Object),
+		Subject:   ge.base.convertTermOrVariableWithContext(plan.Pattern.Subject, ge.contextBinding),
+		Predicate: ge.base.convertTermOrVariableWithContext(plan.Pattern.Predicate, ge.contextBinding),
+		Object:    ge.base.convertTermOrVariableWithContext(plan.Pattern.Object, ge.contextBinding),
 		Graph:     ge.convertGraphTerm(ge.graph),
 	}
 
@@ -1360,7 +1373,13 @@ func (it *graphJoinIterator) Next() bool {
 		it.currentLeft = it.left.Binding()
 
 		// Create new right iterator using graph executor (with graph constraints)
-		rightIter, err := it.graphExec.createIterator(it.rightPlan)
+		// Pass the left binding as context so variables (including HiddenVars) can be substituted
+		execWithContext := &graphExecutor{
+			base:           it.graphExec.base,
+			graph:          it.graphExec.graph,
+			contextBinding: it.currentLeft,
+		}
+		rightIter, err := execWithContext.createIterator(it.rightPlan)
 		if err != nil {
 			return false
 		}
