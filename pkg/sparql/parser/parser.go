@@ -1621,14 +1621,18 @@ func (p *Parser) parseFilter() (*Filter, error) {
 	// Constraint ::= BrackettedExpression | BuiltInCall | FunctionCall
 	// This means FILTER must be followed by:
 	//   - '(' for bracketed expression: FILTER (?x > 5)
-	//   - A letter for function: FILTER REGEX(?x, "...") or FILTER fn:custom(?x)
+	//   - A letter for function: FILTER REGEX(?x, "...")
+	//   - A colon or '<' for prefixed name/IRI: FILTER :myFunc(?x) or FILTER <http://fn>(?x)
 	// A bare variable or literal (FILTER ?x) is NOT valid per the grammar
 	p.skipWhitespace()
 	ch := p.peek()
 
 	// Validate that we have a valid constraint start
 	isLetter := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
-	if ch != '(' && !isLetter {
+	// Allow: '(' for bracketed expressions, letters for built-in functions,
+	// ':' for prefixed names, '<' for IRIs, and high bytes for Unicode
+	isValidStart := ch == '(' || isLetter || ch == ':' || ch == '<' || ch > 127
+	if !isValidStart {
 		return nil, fmt.Errorf("expected '(' or function name after FILTER keyword")
 	}
 
