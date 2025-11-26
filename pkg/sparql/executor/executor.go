@@ -2074,6 +2074,11 @@ func (it *emptyGraphEnumerator) Next() bool {
 			continue
 		}
 
+		// Skip the default graph - GRAPH ?g {} only enumerates named graphs
+		if quad.Graph.Type() == rdf.TermTypeDefaultGraph {
+			continue
+		}
+
 		graphName := quad.Graph.String()
 
 		// Skip if we've already seen this graph
