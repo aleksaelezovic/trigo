@@ -262,8 +262,9 @@ func (e *Evaluator) evaluateNotEqual(left, right rdf.Term) (rdf.Term, error) {
 	// SPARQL inequality with value-based comparison for compatible types
 	result, err := e.sparqlEquals(left, right)
 	if err != nil {
-		// Propagate error - incompatible types cause filter to fail
-		return nil, err
+		// Per SPARQL 1.1 spec section 17.4.1, when = produces a type error, != returns true
+		// This is the "open world" semantics for incompatible comparisons
+		return rdf.NewBooleanLiteral(true), nil
 	}
 	return rdf.NewBooleanLiteral(!result), nil
 }
@@ -320,25 +321,18 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 			}
 		}
 
-		// For different terms with invalid numeric literals:
-		// SPARQL spec allows implementations to handle this as an extension point
-		// We'll treat them lexically - if one is invalid, error when comparing to valid numerics
-		// but allow lexical comparison between two invalid numerics with same datatype
-		leftInvalid := leftLit.Datatype != nil && e.isNumericDatatype(leftLit.Datatype.IRI)
-		if leftInvalid {
+		// Check if either is an invalid numeric literal
+		leftInvalid := false
+		if leftLit.Datatype != nil && e.isNumericDatatype(leftLit.Datatype.IRI) {
 			if _, ok := e.ExtractNumeric(left); !ok {
 				leftInvalid = true
-			} else {
-				leftInvalid = false
 			}
 		}
 
-		rightInvalid := rightLit.Datatype != nil && e.isNumericDatatype(rightLit.Datatype.IRI)
-		if rightInvalid {
+		rightInvalid := false
+		if rightLit.Datatype != nil && e.isNumericDatatype(rightLit.Datatype.IRI) {
 			if _, ok := e.ExtractNumeric(right); !ok {
 				rightInvalid = true
-			} else {
-				rightInvalid = false
 			}
 		}
 
@@ -350,12 +344,17 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 			return leftLit.Value == rightLit.Value, nil
 		}
 
-		// If one is invalid and the other is valid (or different datatypes), error
-		if leftInvalid && !rightInvalid {
-			return false, fmt.Errorf("cannot compare invalid and valid numeric literals")
-		}
-		if !leftInvalid && rightInvalid {
-			return false, fmt.Errorf("cannot compare valid and invalid numeric literals")
+		// If one is invalid and the other is valid
+		if leftInvalid != rightInvalid {
+			// Check if they have the same numeric datatype
+			if leftLit.Datatype != nil && rightLit.Datatype != nil &&
+				e.isNumericDatatype(leftLit.Datatype.IRI) && e.isNumericDatatype(rightLit.Datatype.IRI) &&
+				leftLit.Datatype.IRI == rightLit.Datatype.IRI {
+				// Same numeric datatype, one invalid one valid - they are not equal (return false, not error)
+				return false, nil
+			}
+			// Different datatypes or one is numeric and the other isn't - error
+			return false, fmt.Errorf("cannot compare invalid and valid literals of different types")
 		}
 		// Both valid, continue with normal comparison below
 
