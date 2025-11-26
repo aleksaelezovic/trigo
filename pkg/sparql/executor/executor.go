@@ -538,6 +538,41 @@ func (e *Executor) createIterator(plan optimizer.QueryPlan) (store.BindingIterat
 	return e.createIteratorWithContext(plan, nil)
 }
 
+// createIteratorWithJoinContext creates an iterator with join context binding
+// This is used by nested loop joins to constrain the right side with left bindings
+func (e *Executor) createIteratorWithJoinContext(plan optimizer.QueryPlan, joinContext *store.Binding) (store.BindingIterator, error) {
+	switch p := plan.(type) {
+	case *optimizer.ScanPlan:
+		return e.createScanIteratorWithJoinContext(p, joinContext)
+	case *optimizer.JoinPlan:
+		return e.createJoinIteratorWithContext(p, joinContext)
+	case *optimizer.FilterPlan:
+		input, err := e.createIteratorWithJoinContext(p.Input, joinContext)
+		if err != nil {
+			return nil, err
+		}
+		return &filterIterator{
+			input:     input,
+			filter:    p.Filter,
+			evaluator: evaluator.NewEvaluator(),
+		}, nil
+	case *optimizer.BindPlan:
+		input, err := e.createIteratorWithJoinContext(p.Input, joinContext)
+		if err != nil {
+			return nil, err
+		}
+		return &bindIterator{
+			input:      input,
+			expression: p.Expression,
+			variable:   p.Variable,
+			evaluator:  evaluator.NewEvaluator(),
+		}, nil
+	default:
+		// For other plan types, delegate to regular createIterator
+		return e.createIterator(plan)
+	}
+}
+
 // createIteratorWithContext creates an iterator with an optional context binding for OPTIONAL patterns
 func (e *Executor) createIteratorWithContext(plan optimizer.QueryPlan, contextBinding *store.Binding) (store.BindingIterator, error) {
 	switch p := plan.(type) {
@@ -617,9 +652,84 @@ func (e *Executor) createScanIterator(plan *optimizer.ScanPlan) (store.BindingIt
 	}, nil
 }
 
+// createScanIteratorWithJoinContext creates a scan iterator constrained by join context
+// If a variable in the pattern is already bound in joinContext, use that binding
+func (e *Executor) createScanIteratorWithJoinContext(plan *optimizer.ScanPlan, joinContext *store.Binding) (store.BindingIterator, error) {
+	// Convert pattern, substituting variables that are already bound in joinContext
+	pattern := &store.Pattern{
+		Subject:   e.convertTermOrVariableWithContext(plan.Pattern.Subject, joinContext),
+		Predicate: e.convertTermOrVariableWithContext(plan.Pattern.Predicate, joinContext),
+		Object:    e.convertTermOrVariableWithContext(plan.Pattern.Object, joinContext),
+	}
+
+	// Execute pattern query
+	quadIter, err := e.store.Query(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	return &scanIterator{
+		quadIter:    quadIter,
+		pattern:     plan.Pattern,
+		binding:     store.NewBinding(),
+		joinContext: joinContext, // Store context for binding phase
+	}, nil
+}
+
+// convertTermOrVariableWithContext converts a term/variable, using context binding if available
+func (e *Executor) convertTermOrVariableWithContext(tov parser.TermOrVariable, context *store.Binding) any {
+	// Check if this is a variable that's bound in context
+	if tov.IsVariable() {
+		varName := tov.Variable.Name
+		if context != nil {
+			if value, exists := context.Vars[varName]; exists {
+				// Use the bound value instead of a variable
+				return value
+			}
+		}
+		return store.NewVariable(varName)
+	}
+
+	// Handle blank nodes as variables (check context too)
+	if blankNode, ok := tov.Term.(*rdf.BlankNode); ok {
+		varName := "_:" + blankNode.ID
+		if context != nil {
+			if value, exists := context.Vars[varName]; exists {
+				// Use the bound value
+				return value
+			}
+		}
+		return store.NewVariable(varName)
+	}
+
+	return tov.Term
+}
+
 // createJoinIterator creates an iterator for join operations
 func (e *Executor) createJoinIterator(plan *optimizer.JoinPlan) (store.BindingIterator, error) {
 	left, err := e.createIterator(plan.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	switch plan.Type {
+	case optimizer.JoinTypeNestedLoop:
+		return &nestedLoopJoinIterator{
+			left:         left,
+			rightPlan:    plan.Right,
+			executor:     e,
+			currentLeft:  nil,
+			currentRight: nil,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported join type: %v", plan.Type)
+	}
+}
+
+// createJoinIteratorWithContext creates a join iterator with existing join context
+func (e *Executor) createJoinIteratorWithContext(plan *optimizer.JoinPlan, joinContext *store.Binding) (store.BindingIterator, error) {
+	// Create left iterator with join context
+	left, err := e.createIteratorWithJoinContext(plan.Left, joinContext)
 	if err != nil {
 		return nil, err
 	}
@@ -708,9 +818,10 @@ func (e *Executor) convertTermOrVariable(tov parser.TermOrVariable) any {
 
 // scanIterator implements BindingIterator for scanning
 type scanIterator struct {
-	quadIter store.QuadIterator
-	pattern  *parser.TriplePattern
-	binding  *store.Binding
+	quadIter    store.QuadIterator
+	pattern     *parser.TriplePattern
+	binding     *store.Binding
+	joinContext *store.Binding // Optional: variables bound from left side of join
 }
 
 func (it *scanIterator) Next() bool {
@@ -732,6 +843,10 @@ func (it *scanIterator) Next() bool {
 		if it.pattern.Subject.IsVariable() {
 			varName := it.pattern.Subject.Variable.Name
 			it.binding.Vars[varName] = quad.Subject
+		} else if bn, ok := it.pattern.Subject.Term.(*rdf.BlankNode); ok {
+			// Blank nodes in patterns act like variables
+			varName := "_:" + bn.ID
+			it.binding.Vars[varName] = quad.Subject
 		}
 
 		// Bind predicate (check if variable already bound from subject)
@@ -739,6 +854,15 @@ func (it *scanIterator) Next() bool {
 			varName := it.pattern.Predicate.Variable.Name
 			if existingValue, exists := it.binding.Vars[varName]; exists {
 				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Predicate) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Predicate
+			}
+		} else if bn, ok := it.pattern.Predicate.Term.(*rdf.BlankNode); ok {
+			varName := "_:" + bn.ID
+			if existingValue, exists := it.binding.Vars[varName]; exists {
 				if !existingValue.Equals(quad.Predicate) {
 					valid = false
 				}
@@ -757,6 +881,17 @@ func (it *scanIterator) Next() bool {
 				}
 			} else {
 				it.binding.Vars[varName] = quad.Object
+			}
+		} else if valid {
+			if bn, ok := it.pattern.Object.Term.(*rdf.BlankNode); ok {
+				varName := "_:" + bn.ID
+				if existingValue, exists := it.binding.Vars[varName]; exists {
+					if !existingValue.Equals(quad.Object) {
+						valid = false
+					}
+				} else {
+					it.binding.Vars[varName] = quad.Object
+				}
 			}
 		}
 
@@ -813,8 +948,9 @@ func (it *nestedLoopJoinIterator) Next() bool {
 
 		it.currentLeft = it.left.Binding()
 
-		// Create new right iterator (with current left binding applied)
-		rightIter, err := it.executor.createIterator(it.rightPlan)
+		// Create new right iterator with left binding as context
+		// This allows the right side to use variable bindings from the left
+		rightIter, err := it.executor.createIteratorWithJoinContext(it.rightPlan, it.currentLeft)
 		if err != nil {
 			return false
 		}
@@ -1241,6 +1377,10 @@ func (it *graphScanIterator) Next() bool {
 		if it.pattern.Subject.IsVariable() {
 			varName := it.pattern.Subject.Variable.Name
 			it.binding.Vars[varName] = quad.Subject
+		} else if bn, ok := it.pattern.Subject.Term.(*rdf.BlankNode); ok {
+			// Blank nodes in patterns act like variables
+			varName := "_:" + bn.ID
+			it.binding.Vars[varName] = quad.Subject
 		}
 
 		// Bind predicate (check if variable already bound from subject)
@@ -1248,6 +1388,15 @@ func (it *graphScanIterator) Next() bool {
 			varName := it.pattern.Predicate.Variable.Name
 			if existingValue, exists := it.binding.Vars[varName]; exists {
 				// Variable already bound - check if values match
+				if !existingValue.Equals(quad.Predicate) {
+					valid = false
+				}
+			} else {
+				it.binding.Vars[varName] = quad.Predicate
+			}
+		} else if bn, ok := it.pattern.Predicate.Term.(*rdf.BlankNode); ok {
+			varName := "_:" + bn.ID
+			if existingValue, exists := it.binding.Vars[varName]; exists {
 				if !existingValue.Equals(quad.Predicate) {
 					valid = false
 				}
@@ -1266,6 +1415,17 @@ func (it *graphScanIterator) Next() bool {
 				}
 			} else {
 				it.binding.Vars[varName] = quad.Object
+			}
+		} else if valid {
+			if bn, ok := it.pattern.Object.Term.(*rdf.BlankNode); ok {
+				varName := "_:" + bn.ID
+				if existingValue, exists := it.binding.Vars[varName]; exists {
+					if !existingValue.Equals(quad.Object) {
+						valid = false
+					}
+				} else {
+					it.binding.Vars[varName] = quad.Object
+				}
 			}
 		}
 
