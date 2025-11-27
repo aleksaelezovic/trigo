@@ -1,10 +1,94 @@
 # SPARQL 1.0 Implementation Plan
 
-**Current Status:** 440/471 tests passing (93.4%)
-**Remaining:** 31 failing tests (6.6%)
-**Last Updated:** 2025-11-25 (Session 12 Complete - FROM/FROM NAMED Dataset Loading)
+**Current Status:** 460/471 tests passing (97.7%)
+**Remaining:** 11 failing tests (2.3%)
+**Last Updated:** 2025-11-27 (Session 13 Complete - Parser Duplication Fix)
 
-## Remaining Work (31 tests - 6.6%)
+## Remaining Work (11 tests - 2.3%)
+
+### Current Failing Tests
+
+```
+❌ ERRORS:
+   • open-eq-08: Results mismatch: expected 42 bindings, got 40 bindings
+   • open-eq-10: Results mismatch: expected 52 bindings, got 51 bindings
+   • open-eq-11: Results mismatch: expected 52 bindings, got 51 bindings
+   • open-eq-12: Results mismatch: expected 10 bindings, got 12 bindings
+   • date-2: Results mismatch: expected 3 bindings, got 5 bindings
+   • Complex optional semantics: 3: Results mismatch: expected 1 bindings, got 2 bindings
+   • dawg-optional-filter-005-not-simplified: Results mismatch: expected 3 bindings, got 3 bindings
+   • graph-variable-join: Results mismatch: expected 1 bindings, got 3 bindings
+   • graph-optional: Results mismatch: expected 1 bindings, got 4 bindings
+   • Equality with dateTime: Results mismatch: expected 5 bindings, got 4 bindings
+   ... and 1 more
+```
+
+### Investigation Notes (Session 13 - Parser Duplication & GRAPH+OPTIONAL)
+
+**Parser Duplication Issue - FIXED ✅**
+
+The parser was populating BOTH `Elements` and `Children` arrays with the same GraphPattern objects (same memory addresses). This caused potential duplicate processing in the optimizer.
+
+**Problem:**
+1. Parser creates GraphPattern with Elements = [pattern1, pattern2]
+2. Parser also adds same patterns to Children = [pattern1, pattern2] (same addresses!)
+3. Before fix: optimizer code structure allowed fall-through from Elements to Children processing
+4. Result: Some patterns could be processed twice in edge cases
+
+**Fix Applied:**
+- Removed unreachable Children processing code after Elements/else block
+- Both if (Elements) and else branches now return, preventing dual processing
+- Added `//lint:ignore U1000` for plansEqual (reserved for future deduplication)
+- Simplified control flow by removing dead code
+
+**Impact:** Test improvement from 456/471 (96.8%) to 460/471 (97.7%) - **+4 tests fixed**
+
+**GRAPH+OPTIONAL Investigation - IN PROGRESS**
+
+Tests still failing:
+- `graph-optional`: Expected 1 binding, got 4 bindings
+- `graph-variable-join`: Expected 1 binding, got 3 bindings
+
+**Query Analysis (graph-optional):**
+```sparql
+PREFIX : <http://example/>
+SELECT ?g ?s {
+    GRAPH ?g { ?s ?p ?o OPTIONAL { ?s ?p ?g } }
+}
+```
+
+**Data:**
+```turtle
+:s :p :o .
+:s2 :p <> .  # <> resolves to base URI (data-optional.ttl)
+```
+
+**Expected Result:** Only `?g=<data-optional.ttl>, ?s=:s2`
+- For :s2: Object `<data-optional.ttl>` equals graph variable ?g, so OPTIONAL matches
+- For :s: Object `:o` doesn't equal ?g, so OPTIONAL should fail but binding should still output
+- **Mystery:** Why does spec expect only 1 binding when OPTIONAL should preserve left side?
+
+**Optimizer Verified Correct:**
+```
+ProjectionPlan
+  GraphPlan
+    OptionalPlan
+      Left: ScanPlan (?s ?p ?o)
+      Right: ScanPlan (?s ?p ?g)
+```
+
+Only ONE OptionalPlan in query plan - no duplication at optimizer level.
+
+**Hypothesis:**
+The duplication (4 bindings instead of 1-2) must be occurring in the executor:
+- graphOptionalIterator may be producing duplicate bindings
+- Possible iterator state management issue
+- May be related to how HiddenVars are handled in GRAPH patterns
+
+**Next Steps:**
+1. Debug graphOptionalIterator to trace binding production
+2. Verify OPTIONAL semantics: should OPTIONAL failure inside GRAPH filter out bindings?
+3. Check if there's an issue with iterator resets or state
 
 ### Investigation Notes (Session 11 Part 4 - Cartesian Product Root Cause)
 
@@ -82,12 +166,39 @@ Tests: open-eq-08 (off by 2), open-eq-10 (off by 1), open-eq-11 (off by 1), open
 - **Estimated effort:** Medium (requires careful spec analysis per test)
 - **Priority:** Low (small impact, very subtle semantics)
 
-### Summary by Priority
-1. **High Priority (5 tests):** RDF collection + blank node property list Cartesian products - same root cause
-2. **Medium Priority (29 tests):** Dataset loading - major feature, but well-defined scope
-3. **Low Priority (5 tests):** Equality edge cases - diminishing returns, very subtle
+### Summary by Priority (Updated Session 13)
+1. **High Priority (2 tests):** GRAPH+OPTIONAL execution issues - graph-optional, graph-variable-join
+2. **Medium Priority (5 tests):** Equality/comparison edge cases - off by 1-2 bindings each
+3. **Low Priority (4 tests):** OPTIONAL/FILTER interaction, date/time comparison
+
+**Note:** RDF collection and blank node property list tests PASSING after optimizer fix! 🎉
 
 ## Progress Summary
+
+### Completed (Session 13 - 2025-11-27 - Parser Duplication Fix) ✅
+- ✅ Identified parser duplication bug: Elements and Children pointing to same objects
+- ✅ Fixed optimizer to prevent dual processing of patterns
+- ✅ Removed unreachable Children processing code after Elements path
+- ✅ Verified optimizer generates correct query plans (no duplicate OptionalPlans)
+- ✅ Investigated GRAPH+OPTIONAL execution issue (ongoing)
+- **Test improvement:** 456/471 → 460/471 (+4 tests, +0.9pp to 97.7%)
+- **Remaining:** 11 tests (2.3%)
+- **🎯 Key achievement:** Eliminated optimizer-level pattern duplication
+  - Parser creates both Elements and Children arrays with same pattern addresses
+  - Optimizer now uses only Elements when available, ignoring Children
+  - Simplified control flow eliminates dead code
+- **All quality checks pass:** go vet, staticcheck, gosec
+- **Commits:**
+  - `refactor(sparql): Prevent parser duplication by ignoring Children when Elements exist`
+- **Investigation findings:**
+  - graph-optional and graph-variable-join still failing due to executor issue
+  - Optimizer verified correct: only ONE OptionalPlan in query plan
+  - Duplication happening at execution time, not optimization time
+  - graphOptionalIterator may have iterator state management bug
+- **Next steps:**
+  - Debug graphOptionalIterator binding production
+  - Investigate OPTIONAL semantics within GRAPH patterns
+  - Check for iterator reset or state issues
 
 ### Completed (Session 12 - 2025-11-25 - FROM/FROM NAMED Dataset Loading) ✅
 - ✅ Created dataset loader module with HTTP/HTTPS support
