@@ -1605,6 +1605,25 @@ func (it *graphScanIterator) Next() bool {
 				} else {
 					// Bind to HiddenVars, not Vars, so BOUND(?g) returns false inside pattern
 					it.binding.HiddenVars[varName] = quad.Graph
+
+					// CRITICAL: Check if graph variable is also used in S/P/O positions
+					// For queries like: GRAPH ?g { ?g :p ?o }
+					// The graph variable must match the subject/predicate/object value
+					if it.pattern.Subject.IsVariable() && it.pattern.Subject.Variable.Name == varName {
+						if !quad.Graph.Equals(quad.Subject) {
+							valid = false
+						}
+					}
+					if valid && it.pattern.Predicate.IsVariable() && it.pattern.Predicate.Variable.Name == varName {
+						if !quad.Graph.Equals(quad.Predicate) {
+							valid = false
+						}
+					}
+					if valid && it.pattern.Object.IsVariable() && it.pattern.Object.Variable.Name == varName {
+						if !quad.Graph.Equals(quad.Object) {
+							valid = false
+						}
+					}
 				}
 			}
 		}
