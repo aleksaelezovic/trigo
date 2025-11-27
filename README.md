@@ -91,23 +91,23 @@ Validated against official W3C test suites:
 ### RDF 1.1 Parsers (Perfect Compliance!)
 - **RDF N-Triples:** 100% (70/70 tests) ✅
 - **RDF N-Quads:** 100% (87/87 tests) ✅
-- **RDF Turtle:** 100% (313/313 tests) ✅
-- **RDF TriG:** 100% (356/356 tests) ✅
+- **RDF Turtle:** 100% (296/296 tests) ✅
+- **RDF TriG:** 100% (335/335 tests) ✅
 - **RDF/XML:** 100% (166/166 tests) ✅
 
-**🎉 RDF 1.1 Total: 100% (992/992 tests) — Full W3C Compliance Achieved!**
+**🎉 RDF 1.1 Total: 100% (954/954 tests) — Full W3C Compliance Achieved!**
 
-### RDF 1.2 Parsers (Perfect Compliance!)
-- **RDF 1.2 N-Triples:** 100% (140/140 tests) ✅
-- **RDF 1.2 N-Quads:** 100% (155/155 tests) ✅
-- **RDF 1.2 Turtle:** 100% (405/405 tests) ✅
-- **RDF 1.2 TriG:** 100% (416/416 tests) ✅
+### RDF 1.2 Parsers (Near-Perfect Compliance)
+- **RDF 1.2 N-Triples:** 99.3% (139/140 tests) — 1 triple-term canonicalization edge case
+- **RDF 1.2 N-Quads:** 99.4% (154/155 tests) — 1 triple-term canonicalization edge case
+- **RDF 1.2 Turtle:** 100% (388/388 tests) ✅
+- **RDF 1.2 TriG:** 99.7% (395/396 tests) — 1 test skipped (quoted triple syntax)
 - **RDF 1.2 RDF/XML:** 100% (196/196 tests) ✅
 
-**🚀 RDF 1.2 Total: 100% (1,312/1,312 tests) — Full W3C Compliance Achieved!**
+**🚀 RDF 1.2 Total: 99.8% (1,270/1,272 tests) — 2 edge cases remaining**
 
 ### Combined RDF Compliance
-**Overall: 100% (2,304/2,304 tests) — Perfect W3C Compliance! 🎉**
+**Overall: 99.9% (2,224/2,226 tests) — Excellent W3C Compliance! 🎉**
 
 ### SPARQL 1.0 Query Engine
 - **Overall:** 97.7% (460/471 tests)
