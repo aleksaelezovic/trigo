@@ -2187,6 +2187,32 @@ func (p *Parser) parseComparisonExpression() (Expression, error) {
 	} else {
 		// Not IN operator, check for comparison operators
 		p.pos = savedPos
+
+		// SPARQL longest-token rule: check if '<' starts an IRI before treating as operator
+		// This prevents parsing "<?a&&?b>" as "< ?a && ?b >" when it should be an invalid IRI
+		//
+		// Key insight: If there's whitespace after '<', it's a comparison operator (< EXPR).
+		// If there's no whitespace, try to parse as IRI first (<?...>).
+		if p.peek() == '<' && p.pos+1 < len(p.input) {
+			nextChar := p.input[p.pos+1]
+			// If next character is whitespace, it's definitely "< expr", not an IRI
+			isWhitespace := nextChar == ' ' || nextChar == '\t' || nextChar == '\n' || nextChar == '\r'
+
+			if !isWhitespace {
+				// No whitespace after '<', could be an IRI - try to parse it
+				iriStartPos := p.pos
+				_, err := p.parseIRI()
+				if err == nil {
+					// Successfully parsed as IRI, restore position and return
+					// The IRI will be parsed by the caller (parseAdditiveExpression)
+					p.pos = iriStartPos
+					return left, nil
+				}
+				// IRI parsing failed, restore position and continue to comparison operators
+				p.pos = iriStartPos
+			}
+		}
+
 		var op Operator
 		if p.match("<=") {
 			op = OpLessThanOrEqual
