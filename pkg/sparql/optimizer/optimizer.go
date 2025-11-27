@@ -325,6 +325,7 @@ func (o *Optimizer) optimizeDescribe(query *parser.DescribeQuery) (QueryPlan, er
 
 // plansEqual checks if two query plans are structurally identical
 // This is used to detect duplicate OPTIONAL patterns created by parser duplication
+//
 //lint:ignore U1000 Reserved for future plan deduplication
 func plansEqual(a, b QueryPlan) bool {
 	if a == nil || b == nil {

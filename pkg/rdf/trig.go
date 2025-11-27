@@ -298,6 +298,9 @@ func (p *TriGParser) parseTriplesBlock(startPos int) ([]*Triple, int, error) {
 	}
 	turtleParser.base = p.base
 	turtleParser.blankNodeCounter = p.blankNodeCounter
+	// CRITICAL: Share blank node scope across all graph blocks
+	// Per TriG spec, blank node labels are document-scoped, not graph-scoped
+	turtleParser.blankNodeScope = p.blankNodeScope
 
 	// Parse the triples
 	triples, err := turtleParser.Parse()
@@ -437,6 +440,9 @@ func (p *TriGParser) parseDefaultGraphTripleBlock() ([]*Triple, error) {
 	}
 	turtleParser.base = p.base
 	turtleParser.blankNodeCounter = p.blankNodeCounter
+	// CRITICAL: Share blank node scope across all graph blocks
+	// Per TriG spec, blank node labels are document-scoped, not graph-scoped
+	turtleParser.blankNodeScope = p.blankNodeScope
 
 	// Parse the triples
 	triples, err := turtleParser.Parse()
