@@ -323,6 +323,34 @@ func (o *Optimizer) optimizeDescribe(query *parser.DescribeQuery) (QueryPlan, er
 	return describePlan, nil
 }
 
+// plansEqual checks if two query plans are structurally identical
+// This is used to detect duplicate OPTIONAL patterns created by parser duplication
+func plansEqual(a, b QueryPlan) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
+	// Compare plan types
+	switch planA := a.(type) {
+	case *ScanPlan:
+		if planB, ok := b.(*ScanPlan); ok {
+			// Compare triple patterns (pointer equality is sufficient since parser reuses objects)
+			return planA.Pattern == planB.Pattern
+		}
+	case *OptionalPlan:
+		if planB, ok := b.(*OptionalPlan); ok {
+			return plansEqual(planA.Left, planB.Left) && plansEqual(planA.Right, planB.Right)
+		}
+	case *JoinPlan:
+		if planB, ok := b.(*JoinPlan); ok {
+			return plansEqual(planA.Left, planB.Left) && plansEqual(planA.Right, planB.Right)
+		}
+	}
+
+	// Default: pointer equality
+	return a == b
+}
+
 // optimizeGraphPattern optimizes a graph pattern
 func (o *Optimizer) optimizeGraphPattern(pattern *parser.GraphPattern) (QueryPlan, error) {
 	switch pattern.Type {
@@ -477,9 +505,18 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 						// Create appropriate plan based on child pattern type
 						switch elem.GraphPattern.Type {
 						case parser.GraphPatternTypeOptional:
-							plan = &OptionalPlan{
+							// Check if plan is already an OptionalPlan to avoid nesting with same right side
+							// This can happen due to parser adding patterns to both Elements and Children
+							newOptional := &OptionalPlan{
 								Left:  plan,
 								Right: childPlan,
+							}
+							// If the left side is also an Optional with the same right plan, skip the outer wrapper
+							if leftOptional, ok := plan.(*OptionalPlan); ok && plansEqual(leftOptional.Right, childPlan) {
+								// Don't wrap - the left already has this OPTIONAL
+								plan = leftOptional
+							} else {
+								plan = newOptional
 							}
 						case parser.GraphPatternTypeUnion:
 							// UNION patterns are already optimized by optimizeUnionPattern
