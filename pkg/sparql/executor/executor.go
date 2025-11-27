@@ -1439,11 +1439,16 @@ func (it *graphOptionalIterator) Next() bool {
 		it.hasMatch = false
 
 		// Create new right iterator using graph executor (with graph constraints)
-		// Per SPARQL spec, variables bound by GRAPH are not accessible inside OPTIONAL
-		// So we only pass Vars (not HiddenVars) as context for the right side
+		// Create context binding for OPTIONAL right side
+		// Graph variables must be visible for constraint matching, but stay hidden from SELECT results
+		// Copy both Vars AND HiddenVars so the right side can see graph variable bindings
 		contextBinding := &store.Binding{
 			Vars:       it.currentLeft.Vars,
-			HiddenVars: make(map[string]rdf.Term), // Don't pass HiddenVars to OPTIONAL right side
+			HiddenVars: make(map[string]rdf.Term),
+		}
+		// Copy HiddenVars from left to context so graph variable constraints are preserved
+		for varName, term := range it.currentLeft.HiddenVars {
+			contextBinding.HiddenVars[varName] = term
 		}
 		execWithContext := &graphExecutor{
 			base:           it.graphExec.base,
