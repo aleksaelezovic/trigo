@@ -325,6 +325,7 @@ func (o *Optimizer) optimizeDescribe(query *parser.DescribeQuery) (QueryPlan, er
 
 // plansEqual checks if two query plans are structurally identical
 // This is used to detect duplicate OPTIONAL patterns created by parser duplication
+//lint:ignore U1000 Reserved for future plan deduplication
 func plansEqual(a, b QueryPlan) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -505,18 +506,9 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 						// Create appropriate plan based on child pattern type
 						switch elem.GraphPattern.Type {
 						case parser.GraphPatternTypeOptional:
-							// Check if plan is already an OptionalPlan to avoid nesting with same right side
-							// This can happen due to parser adding patterns to both Elements and Children
-							newOptional := &OptionalPlan{
+							plan = &OptionalPlan{
 								Left:  plan,
 								Right: childPlan,
-							}
-							// If the left side is also an Optional with the same right plan, skip the outer wrapper
-							if leftOptional, ok := plan.(*OptionalPlan); ok && plansEqual(leftOptional.Right, childPlan) {
-								// Don't wrap - the left already has this OPTIONAL
-								plan = leftOptional
-							} else {
-								plan = newOptional
 							}
 						case parser.GraphPatternTypeUnion:
 							// UNION patterns are already optimized by optimizeUnionPattern
@@ -569,6 +561,9 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 				}
 			}
 		}
+
+		// Elements were processed, skip Children to avoid duplicate processing
+		return plan, nil
 	} else {
 		// Fallback to old behavior if Elements not populated (for backwards compatibility)
 		// Handle triple patterns if present
@@ -614,53 +609,9 @@ func (o *Optimizer) optimizeBasicGraphPattern(pattern *parser.GraphPattern) (Que
 			}
 		}
 
-		// Skip Children processing if Elements was used (to avoid dual processing)
+		// Elements were processed, skip Children to avoid duplicate processing
 		return plan, nil
 	}
-
-	// Handle child patterns (e.g., GRAPH, OPTIONAL, UNION, MINUS patterns)
-	// This is only reached when Elements is empty (legacy behavior)
-	for _, child := range pattern.Children {
-
-		childPlan, err := o.optimizeGraphPattern(child)
-		if err != nil {
-			return nil, err
-		}
-
-		if childPlan != nil {
-			if plan == nil {
-				plan = childPlan
-			} else {
-				// Create appropriate plan based on child pattern type
-				switch child.Type {
-				case parser.GraphPatternTypeOptional:
-					plan = &OptionalPlan{
-						Left:  plan,
-						Right: childPlan,
-					}
-				case parser.GraphPatternTypeUnion:
-					// UNION should not be wrapped in another UNION!
-					// If plan is already set, this is an error in parser structure
-					// For now, just replace plan with the UNION (takes precedence)
-					plan = childPlan
-				case parser.GraphPatternTypeMinus:
-					plan = &MinusPlan{
-						Left:  plan,
-						Right: childPlan,
-					}
-				default:
-					// Regular join for other pattern types
-					plan = &JoinPlan{
-						Left:  plan,
-						Right: childPlan,
-						Type:  JoinTypeNestedLoop,
-					}
-				}
-			}
-		}
-	}
-
-	return plan, nil
 }
 
 // reorderBySelectivity reorders triple patterns by estimated selectivity
