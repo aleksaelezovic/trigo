@@ -1439,11 +1439,16 @@ func (it *graphOptionalIterator) Next() bool {
 		it.hasMatch = false
 
 		// Create new right iterator using graph executor (with graph constraints)
-		// Pass the left binding as context so variables (including HiddenVars) can be substituted
+		// Per SPARQL spec, variables bound by GRAPH are not accessible inside OPTIONAL
+		// So we only pass Vars (not HiddenVars) as context for the right side
+		contextBinding := &store.Binding{
+			Vars:       it.currentLeft.Vars,
+			HiddenVars: make(map[string]rdf.Term), // Don't pass HiddenVars to OPTIONAL right side
+		}
 		execWithContext := &graphExecutor{
 			base:           it.graphExec.base,
 			graph:          it.graphExec.graph,
-			contextBinding: it.currentLeft,
+			contextBinding: contextBinding,
 		}
 		rightIter, err := execWithContext.createIterator(it.rightPlan)
 		if err != nil {
@@ -1471,14 +1476,29 @@ func (it *graphOptionalIterator) mergeBindings(left, right *store.Binding) *stor
 	result := left.Clone()
 
 	for varName, term := range right.Vars {
+		// Check if variable already exists in result Vars
 		if existingTerm, exists := result.Vars[varName]; exists {
 			// Check compatibility
 			if !existingTerm.Equals(term) {
 				return nil
 			}
-		} else {
-			result.Vars[varName] = term
+			// Variable already in Vars and compatible, skip
+			continue
 		}
+
+		// Check if variable exists in result HiddenVars
+		if hiddenTerm, exists := result.HiddenVars[varName]; exists {
+			// Variable is in HiddenVars - validate compatibility but DON'T promote to Vars
+			// The graphPromotionIterator will handle promotion later
+			if !hiddenTerm.Equals(term) {
+				return nil
+			}
+			// Compatible but keep it hidden, don't add to Vars
+			continue
+		}
+
+		// Variable doesn't exist in either Vars or HiddenVars, add to Vars
+		result.Vars[varName] = term
 	}
 
 	return result
