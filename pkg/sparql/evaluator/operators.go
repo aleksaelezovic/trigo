@@ -375,6 +375,34 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 		// Try simple literal comparison (same datatype and value)
 		// This handles strings, booleans, dates, etc.
 		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			// Special handling for date/dateTime - use semantic comparison with timezone normalization
+			if leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#dateTime" &&
+				rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#dateTime" {
+				leftTime, err1 := e.parseDateTimeValue(leftLit.Value)
+				rightTime, err2 := e.parseDateTimeValue(rightLit.Value)
+				if err1 != nil || err2 != nil {
+					// Invalid datetime values
+					return false, fmt.Errorf("cannot compare invalid dateTime values")
+				}
+				return leftTime == rightTime, nil
+			}
+
+			if leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#date" &&
+				rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#date" {
+				leftDate, leftHasTz, err1 := e.parseDateValue(leftLit.Value)
+				rightDate, rightHasTz, err2 := e.parseDateValue(rightLit.Value)
+				if err1 != nil || err2 != nil {
+					// Invalid date values
+					return false, fmt.Errorf("cannot compare invalid date values")
+				}
+				// Per SPARQL spec: dates with different timezone presence are incomparable
+				// One has explicit timezone, one doesn't = error
+				if leftHasTz != rightHasTz {
+					return false, fmt.Errorf("cannot compare dates with and without explicit timezone")
+				}
+				return leftDate == rightDate, nil
+			}
+
 			// Check if datatypes are known (XSD types)
 			leftKnown := e.isKnownDatatype(leftLit.Datatype.IRI)
 			rightKnown := e.isKnownDatatype(rightLit.Datatype.IRI)
@@ -465,6 +493,39 @@ func (e *Evaluator) compareTerms(left, right rdf.Term) (int, error) {
 		// Both literals but not numeric - try string/datetime comparison
 		// Must have compatible datatypes
 		if leftLit.Datatype != nil && rightLit.Datatype != nil {
+			// Special handling for date/dateTime - use semantic comparison with timezone normalization
+			if leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#dateTime" &&
+				rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#dateTime" {
+				leftTime, err1 := e.parseDateTimeValue(leftLit.Value)
+				rightTime, err2 := e.parseDateTimeValue(rightLit.Value)
+				if err1 != nil || err2 != nil {
+					return 0, fmt.Errorf("cannot compare invalid dateTime values")
+				}
+				if leftTime < rightTime {
+					return -1, nil
+				} else if leftTime > rightTime {
+					return 1, nil
+				}
+				return 0, nil
+			}
+
+			if leftLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#date" &&
+				rightLit.Datatype.IRI == "http://www.w3.org/2001/XMLSchema#date" {
+				leftDate, _, err1 := e.parseDateValue(leftLit.Value)
+				rightDate, _, err2 := e.parseDateValue(rightLit.Value)
+				if err1 != nil || err2 != nil {
+					return 0, fmt.Errorf("cannot compare invalid date values")
+				}
+				// For ordering operations (<, >, <=, >=), allow comparison even with different TZ presence
+				// The values are normalized to UTC for comparison
+				if leftDate < rightDate {
+					return -1, nil
+				} else if leftDate > rightDate {
+					return 1, nil
+				}
+				return 0, nil
+			}
+
 			if leftLit.Datatype.IRI != rightLit.Datatype.IRI {
 				// Incompatible datatypes
 				return 0, fmt.Errorf("cannot compare literals with different datatypes: %s and %s",
@@ -736,4 +797,193 @@ func (e *Evaluator) isNumericDatatype(iri string) bool {
 		return true
 	}
 	return false
+}
+
+// parseDateTimeValue parses an xsd:dateTime value and normalizes to UTC
+// Handles various datetime formats and special cases like 24:00:00
+func (e *Evaluator) parseDateTimeValue(value string) (int64, error) {
+	// Handle 24:00:00 edge case (represents midnight of next day)
+	// Replace "T24:00:00" with "T00:00:00" and add 1 day after parsing
+	add24Hours := false
+	if strings.Contains(value, "T24:00:00") {
+		value = strings.Replace(value, "T24:00:00", "T00:00:00", 1)
+		add24Hours = true
+	}
+
+	// Try parsing various formats
+	var parsedTime int64
+	var err error
+
+	// RFC3339 with timezone (most common)
+	if strings.Contains(value, "T") {
+		// Try with 'T' separator
+		layouts := []string{
+			"2006-01-02T15:04:05.999999999Z07:00", // With fractional seconds and timezone
+			"2006-01-02T15:04:05Z07:00",           // Without fractional seconds
+			"2006-01-02T15:04:05.999999999",       // With fractional seconds, no timezone
+			"2006-01-02T15:04:05",                 // Without fractional seconds, no timezone
+		}
+
+		for _, layout := range layouts {
+			parsedTime, err = parseTimeToUnixNano(value, layout)
+			if err == nil {
+				break
+			}
+		}
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("invalid dateTime format: %s", value)
+	}
+
+	// Add 24 hours if we had 24:00:00
+	if add24Hours {
+		parsedTime += 24 * 60 * 60 * 1_000_000_000 // 24 hours in nanoseconds
+	}
+
+	return parsedTime, nil
+}
+
+// parseDateValue parses an xsd:date value
+// Returns: (unixNanos, hasExplicitTimezone, error)
+// Dates without timezone have an implicit timezone and cannot be compared with explicit timezone dates
+func (e *Evaluator) parseDateValue(value string) (int64, bool, error) {
+	// Check if date has explicit timezone
+	hasTimezone := strings.HasSuffix(value, "Z") ||
+		(strings.Contains(value, "+") || strings.LastIndex(value, "-") > 8)
+
+	parsedTime, err := parseTimeToUnixNano(value, "")
+	if err != nil {
+		return 0, false, fmt.Errorf("invalid date format: %s", value)
+	}
+
+	return parsedTime, hasTimezone, nil
+}
+
+// parseTimeToUnixNano is a helper that parses time and returns Unix nanoseconds
+// Uses custom parsing to avoid Go's time package limitations
+func parseTimeToUnixNano(value string, layout string) (int64, error) {
+	// For simple comparison, we can parse the components directly
+	// This is more reliable than Go's time.Parse for XSD datetime edge cases
+
+	// Check for timezone
+	tzOffset := int64(0)
+	dateTimePart := value
+
+	// Extract timezone if present
+	if strings.Contains(value, "+") || strings.LastIndex(value, "-") > 8 {
+		// Has explicit timezone
+		tzIdx := strings.LastIndexAny(value, "+-")
+		if tzIdx > 0 {
+			tzStr := value[tzIdx:]
+			dateTimePart = value[:tzIdx]
+
+			// Parse timezone offset (e.g., "+05:30" or "-08:00")
+			sign := int64(1)
+			if tzStr[0] == '-' {
+				sign = -1
+			}
+			tzStr = tzStr[1:] // Remove sign
+
+			var tzHours, tzMinutes int64
+			_, err := fmt.Sscanf(tzStr, "%d:%d", &tzHours, &tzMinutes)
+			if err != nil {
+				return 0, fmt.Errorf("invalid timezone format: %s", tzStr)
+			}
+
+			tzOffset = sign * (tzHours*60 + tzMinutes) * 60 * 1_000_000_000 // Convert to nanoseconds
+		}
+	} else if strings.HasSuffix(value, "Z") {
+		// UTC timezone (Z)
+		dateTimePart = strings.TrimSuffix(value, "Z")
+		tzOffset = 0
+	}
+
+	// Parse the date/datetime components
+	var year, month, day, hour, minute, second int64
+	var fracSeconds float64
+
+	if strings.Contains(dateTimePart, "T") {
+		// DateTime
+		parts := strings.Split(dateTimePart, "T")
+		if len(parts) != 2 {
+			return 0, fmt.Errorf("invalid datetime format")
+		}
+
+		// Parse date part
+		_, err := fmt.Sscanf(parts[0], "%d-%d-%d", &year, &month, &day)
+		if err != nil {
+			return 0, err
+		}
+
+		// Parse time part
+		if strings.Contains(parts[1], ".") {
+			// With fractional seconds
+			timeParts := strings.Split(parts[1], ".")
+			_, err = fmt.Sscanf(timeParts[0], "%d:%d:%d", &hour, &minute, &second)
+			if err != nil {
+				return 0, err
+			}
+			_, err = fmt.Sscanf("0."+timeParts[1], "%f", &fracSeconds)
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			// Without fractional seconds
+			_, err = fmt.Sscanf(parts[1], "%d:%d:%d", &hour, &minute, &second)
+			if err != nil {
+				return 0, err
+			}
+		}
+	} else {
+		// Date only
+		_, err := fmt.Sscanf(dateTimePart, "%d-%d-%d", &year, &month, &day)
+		if err != nil {
+			return 0, err
+		}
+		hour, minute, second = 0, 0, 0
+	}
+
+	// Convert to Unix timestamp (nanoseconds since epoch)
+	// Simple calculation for dates after 1970
+	// Days since epoch
+	daysSinceEpoch := int64(0)
+
+	// Add years
+	for y := int64(1970); y < year; y++ {
+		if isLeapYear(y) {
+			daysSinceEpoch += 366
+		} else {
+			daysSinceEpoch += 365
+		}
+	}
+
+	// Add months
+	daysInMonth := []int64{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	if isLeapYear(year) {
+		daysInMonth[1] = 29
+	}
+	for m := int64(1); m < month; m++ {
+		daysSinceEpoch += daysInMonth[m-1]
+	}
+
+	// Add days
+	daysSinceEpoch += day - 1
+
+	// Convert to nanoseconds
+	nanos := daysSinceEpoch * 24 * 60 * 60 * 1_000_000_000
+	nanos += hour * 60 * 60 * 1_000_000_000
+	nanos += minute * 60 * 1_000_000_000
+	nanos += second * 1_000_000_000
+	nanos += int64(fracSeconds * 1_000_000_000)
+
+	// Adjust for timezone (subtract offset to normalize to UTC)
+	nanos -= tzOffset
+
+	return nanos, nil
+}
+
+// isLeapYear checks if a year is a leap year
+func isLeapYear(year int64) bool {
+	return (year%4 == 0 && year%100 != 0) || (year%400 == 0)
 }
