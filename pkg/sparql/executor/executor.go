@@ -541,18 +541,9 @@ func (e *Executor) createIteratorWithJoinContext(plan optimizer.QueryPlan, joinC
 func (e *Executor) createIteratorWithContext(plan optimizer.QueryPlan, contextBinding *store.Binding) (store.BindingIterator, error) {
 	switch p := plan.(type) {
 	case *optimizer.ScanPlan:
-		iter, err := e.createScanIterator(p)
-		if err != nil {
-			return nil, err
-		}
-		// Wrap scans with context binding so filters can see outer variables
-		if contextBinding != nil {
-			return &preBindingIterator{
-				input:       iter,
-				baseBinding: contextBinding,
-			}, nil
-		}
-		return iter, nil
+		// For scans in OPTIONAL context, we don't substitute variables in the pattern
+		// Instead, we let the scan run and then merge bindings in the OPTIONAL iterator
+		return e.createScanIterator(p)
 	case *optimizer.JoinPlan:
 		return e.createJoinIterator(p)
 	case *optimizer.FilterPlan:
@@ -1219,6 +1210,18 @@ func (ge *graphExecutor) createIterator(plan optimizer.QueryPlan) (store.Binding
 			filter:    p.Filter,
 			evaluator: evaluator.NewEvaluator(),
 		}, nil
+	case *optimizer.OptionalPlan:
+		// For OPTIONAL inside GRAPH patterns, both sides need graph constraints
+		left, err := ge.createIterator(p.Left)
+		if err != nil {
+			return nil, err
+		}
+		// Create an OPTIONAL iterator where right side also uses graph executor
+		return &graphOptionalIterator{
+			left:      left,
+			rightPlan: p.Right,
+			graphExec: ge,
+		}, nil
 	default:
 		// For other operators, delegate to base executor
 		return ge.base.createIterator(plan)
@@ -1373,6 +1376,98 @@ func (it *graphJoinIterator) Close() error {
 
 // mergeBindings merges two bindings, returns nil if incompatible
 func (it *graphJoinIterator) mergeBindings(left, right *store.Binding) *store.Binding {
+	result := left.Clone()
+
+	for varName, term := range right.Vars {
+		if existingTerm, exists := result.Vars[varName]; exists {
+			// Check compatibility
+			if !existingTerm.Equals(term) {
+				return nil
+			}
+		} else {
+			result.Vars[varName] = term
+		}
+	}
+
+	return result
+}
+
+// graphOptionalIterator implements OPTIONAL patterns inside GRAPH (left outer join with graph constraints)
+type graphOptionalIterator struct {
+	left         store.BindingIterator
+	rightPlan    optimizer.QueryPlan
+	graphExec    *graphExecutor
+	currentLeft  *store.Binding
+	currentRight store.BindingIterator
+	result       *store.Binding
+	hasMatch     bool
+}
+
+func (it *graphOptionalIterator) Next() bool {
+	for {
+		// If we have a right iterator, try to get next from it
+		if it.currentRight != nil {
+			if it.currentRight.Next() {
+				rightBinding := it.currentRight.Binding()
+
+				// Try to merge bindings
+				merged := it.mergeBindings(it.currentLeft, rightBinding)
+				if merged != nil {
+					it.hasMatch = true
+					it.result = merged
+					return true
+				}
+				continue
+			}
+			// Right exhausted
+			_ = it.currentRight.Close() // #nosec G104 - close error doesn't affect iteration logic
+			it.currentRight = nil
+
+			// If no match was found, return the left binding alone (OPTIONAL semantics)
+			if !it.hasMatch {
+				it.result = it.currentLeft
+				return true
+			}
+		}
+
+		// Get next from left
+		if !it.left.Next() {
+			return false
+		}
+
+		it.currentLeft = it.left.Binding()
+		it.hasMatch = false
+
+		// Create new right iterator using graph executor (with graph constraints)
+		// Pass the left binding as context so variables (including HiddenVars) can be substituted
+		execWithContext := &graphExecutor{
+			base:           it.graphExec.base,
+			graph:          it.graphExec.graph,
+			contextBinding: it.currentLeft,
+		}
+		rightIter, err := execWithContext.createIterator(it.rightPlan)
+		if err != nil {
+			// If right fails, still return left binding (OPTIONAL semantics)
+			it.result = it.currentLeft
+			return true
+		}
+		it.currentRight = rightIter
+	}
+}
+
+func (it *graphOptionalIterator) Binding() *store.Binding {
+	return it.result
+}
+
+func (it *graphOptionalIterator) Close() error {
+	if it.currentRight != nil {
+		_ = it.currentRight.Close() // #nosec G104 - right close error less critical than left close error
+	}
+	return it.left.Close()
+}
+
+// mergeBindings merges two bindings, returns nil if incompatible
+func (it *graphOptionalIterator) mergeBindings(left, right *store.Binding) *store.Binding {
 	result := left.Clone()
 
 	for varName, term := range right.Vars {
@@ -1609,57 +1704,6 @@ func (e *Executor) createOptionalIterator(plan *optimizer.OptionalPlan) (store.B
 		currentRight: nil,
 		hasMatch:     false,
 	}, nil
-}
-
-// preBindingIterator seeds an iterator with an initial binding
-// This provides variables from the outer scope to inner patterns (for OPTIONAL)
-type preBindingIterator struct {
-	input       store.BindingIterator
-	baseBinding *store.Binding
-}
-
-func (it *preBindingIterator) Next() bool {
-	for it.input.Next() {
-		// Check if bindings are compatible
-		inputBinding := it.input.Binding()
-
-		// Debug: log what we're merging
-		// fmt.Printf("[preBinding] Base vars: %v, Input vars: %v\n",
-		//    it.baseBinding.Vars, inputBinding.Vars)
-
-		// Verify no conflicts between base binding and input binding
-		compatible := true
-		for varName, baseTerm := range it.baseBinding.Vars {
-			if inputTerm, exists := inputBinding.Vars[varName]; exists {
-				if !baseTerm.Equals(inputTerm) {
-					// Conflict - skip this binding
-					compatible = false
-					break
-				}
-			}
-		}
-
-		if compatible {
-			return true
-		}
-	}
-	return false
-}
-
-func (it *preBindingIterator) Binding() *store.Binding {
-	// Merge base binding with input binding
-	inputBinding := it.input.Binding()
-	result := it.baseBinding.Clone()
-
-	for varName, term := range inputBinding.Vars {
-		result.Vars[varName] = term
-	}
-
-	return result
-}
-
-func (it *preBindingIterator) Close() error {
-	return it.input.Close()
 }
 
 // optionalIterator implements OPTIONAL patterns (left outer join)
