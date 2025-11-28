@@ -176,19 +176,28 @@ ts.InsertTriple(triple)</code></pre>
 
             <h3>RDF 1.2 Parsers — Near-Perfect Compliance</h3>
             <ul>
-                <li><strong>RDF 1.2 N-Triples:</strong> <span class="badge badge-warning">99.3% (139/140 tests)</span> — 1 triple-term canonicalization edge case</li>
-                <li><strong>RDF 1.2 N-Quads:</strong> <span class="badge badge-warning">99.4% (154/155 tests)</span> — 1 triple-term canonicalization edge case</li>
+                <li><strong>RDF 1.2 N-Triples:</strong> <span class="badge badge-warning">99.3% (139/140 tests)</span> — 1 C14N canonicalization test</li>
+                <li><strong>RDF 1.2 N-Quads:</strong> <span class="badge badge-warning">99.4% (154/155 tests)</span> — 1 C14N canonicalization test</li>
                 <li><strong>RDF 1.2 Turtle:</strong> <span class="badge badge-success">100% (388/388 tests)</span> ✅</li>
                 <li><strong>RDF 1.2 TriG:</strong> <span class="badge badge-warning">99.7% (395/396 tests)</span> — 1 test skipped</li>
                 <li><strong>RDF 1.2 XML:</strong> <span class="badge badge-success">100% (196/196 tests)</span> ✅</li>
             </ul>
-            <p><strong>RDF 1.2 Total: 99.8% (1,270/1,272 tests) — 2 edge cases remaining</strong></p>
-            <p><strong>Combined RDF: 99.9% (2,224/2,226 tests) — Excellent W3C Compliance! 🎉</strong></p>
+            <p><strong>RDF 1.2 Total: 99.8% (1,272/1,275 tests) — 3 tests remaining</strong></p>
+            <p><strong>Combined RDF: 99.9% (2,226/2,229 tests) — Excellent W3C Compliance! 🎉</strong></p>
 
             <h3>SPARQL 1.0 Query Engine</h3>
-            <p><strong>Overall: 97.7% (460/471 tests)</strong></p>
+            <p><strong>Overall: 99.2% (467/471 tests) — 4 tests remaining</strong></p>
             <ul>
                 <li><strong>Perfect Suites (15):</strong> <span class="badge badge-success">distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅</span></li>
+            </ul>
+
+            <h3>SPARQL 1.1 Query Engine — Partial Implementation</h3>
+            <ul>
+                <li><strong>syntax-query:</strong> <span class="badge badge-warning">68.1% (64/94 tests)</span></li>
+                <li><strong>bind:</strong> <span class="badge badge-warning">80.0% (8/10 tests)</span></li>
+                <li><strong>csv-tsv-res:</strong> <span class="badge badge-warning">83.3% (5/6 tests)</span></li>
+                <li><strong>construct:</strong> <span class="badge badge-warning">71.4% (5/7 tests)</span></li>
+                <li><strong>Features not implemented:</strong> Aggregates, GROUP BY, Property Paths, Subqueries, VALUES, UPDATE operations</li>
             </ul>
 
             <p><a href="testing.html">View detailed test results →</a></p>

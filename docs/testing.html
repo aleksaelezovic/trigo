@@ -349,7 +349,14 @@ Skipped: 1
         </ul>
 
         <h4>SPARQL 1.0 Test Results</h4>
-        <p><strong>Overall: 97.7% (460/471 tests)</strong></p>
+        <p><strong>Overall: 99.2% (467/471 tests)</strong></p>
+        <p><strong>Remaining: 4 tests</strong></p>
+        <ul>
+            <li>date-2: Date/time comparison semantics (same binding count, wrong values)</li>
+            <li>Complex optional semantics: 3 (expected 1 binding, got 2 bindings)</li>
+            <li>dawg-optional-filter-005-not-simplified (same binding count, wrong values)</li>
+            <li>graph-optional (expected 1 binding, got 4 bindings)</li>
+        </ul>
         <p><strong>Perfect Compliance Suites (15):</strong></p>
         <ul>
             <li><strong>distinct</strong>: 100% (11/11 tests) ✅</li>
@@ -378,6 +385,32 @@ Skipped: 1
             <li><strong>syntax-sparql2</strong>: 94.3% (50/53 tests)</li>
             <li><strong>syntax-sparql3</strong>: 92.2% (47/51 tests)</li>
         </ul>
+
+        <h4>SPARQL 1.1 Test Results (Partial Implementation)</h4>
+        <p><strong>Implemented Features:</strong></p>
+        <ul>
+            <li><strong>syntax-query:</strong> 68.1% (64/94 tests) - Core SPARQL 1.1 syntax parsing</li>
+            <li><strong>bind:</strong> 80.0% (8/10 tests) - BIND clause with expressions</li>
+            <li><strong>csv-tsv-res:</strong> 83.3% (5/6 tests) - CSV and TSV result formats</li>
+            <li><strong>construct:</strong> 71.4% (5/7 tests) - CONSTRUCT WHERE queries</li>
+        </ul>
+
+        <p><strong>Features Not Yet Implemented:</strong></p>
+        <ul>
+            <li><strong>aggregates:</strong> 0% (0/32 tests) - COUNT, SUM, AVG, MIN, MAX, SAMPLE, GROUP_CONCAT</li>
+            <li><strong>grouping:</strong> 33.3% (2/6 tests) - GROUP BY and HAVING clauses</li>
+            <li><strong>property-path:</strong> 0% (0/25 tests) - Property path operators (/, *, +, ?, |, ^, !)</li>
+            <li><strong>subquery:</strong> 0% (0/1 tests) - Nested SELECT in WHERE clause</li>
+            <li><strong>bindings (VALUES):</strong> 0% (0/9 tests) - VALUES inline data</li>
+            <li><strong>negation (MINUS):</strong> 11.1% (1/9 tests) - MINUS pattern, EXISTS/NOT EXISTS evaluation</li>
+            <li><strong>exists:</strong> 40.0% (2/5 tests) - EXISTS evaluation (parsed but limited execution)</li>
+            <li><strong>functions:</strong> 12.5% (7/56 tests) - Advanced string, date, hash functions</li>
+            <li><strong>cast:</strong> 0% (0/6 tests) - Type casting edge cases</li>
+            <li><strong>project-expression:</strong> 0% (0/6 tests) - Projection expressions</li>
+            <li><strong>UPDATE operations:</strong> 0% - INSERT, DELETE, MODIFY, CLEAR, DROP, COPY, MOVE, ADD</li>
+        </ul>
+
+        <p><strong>Total SPARQL 1.1 Estimated Coverage:</strong> ~15-20% (many features not yet implemented)</p>
 
         <p><strong>Recent Improvements (Session 11 Part 2 - Dataset and GRAPH Parsing):</strong></p>
         <ul>

@@ -98,20 +98,27 @@ Validated against official W3C test suites:
 **🎉 RDF 1.1 Total: 100% (954/954 tests) — Full W3C Compliance Achieved!**
 
 ### RDF 1.2 Parsers (Near-Perfect Compliance)
-- **RDF 1.2 N-Triples:** 99.3% (139/140 tests) — 1 triple-term canonicalization edge case
-- **RDF 1.2 N-Quads:** 99.4% (154/155 tests) — 1 triple-term canonicalization edge case
+- **RDF 1.2 N-Triples:** 99.3% (139/140 tests) — 1 C14N canonicalization test
+- **RDF 1.2 N-Quads:** 99.4% (154/155 tests) — 1 C14N canonicalization test
 - **RDF 1.2 Turtle:** 100% (388/388 tests) ✅
-- **RDF 1.2 TriG:** 99.7% (395/396 tests) — 1 test skipped (quoted triple syntax)
+- **RDF 1.2 TriG:** 99.7% (395/396 tests) — 1 test skipped
 - **RDF 1.2 RDF/XML:** 100% (196/196 tests) ✅
 
-**🚀 RDF 1.2 Total: 99.8% (1,270/1,272 tests) — 2 edge cases remaining**
+**🚀 RDF 1.2 Total: 99.8% (1,272/1,275 tests) — 3 tests remaining**
 
 ### Combined RDF Compliance
-**Overall: 99.9% (2,224/2,226 tests) — Excellent W3C Compliance! 🎉**
+**Overall: 99.9% (2,226/2,229 tests) — Excellent W3C Compliance! 🎉**
 
 ### SPARQL 1.0 Query Engine
-- **Overall:** 97.7% (460/471 tests)
+- **Overall:** 99.2% (467/471 tests) — 4 tests remaining
 - **Perfect Suites (15):** distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅
+
+### SPARQL 1.1 Query Engine (Partial Implementation)
+- **syntax-query:** 68.1% (64/94 tests) - Core syntax parsing
+- **bind:** 80.0% (8/10 tests) - BIND clause support
+- **csv-tsv-res:** 83.3% (5/6 tests) - Result format serialization
+- **construct:** 71.4% (5/7 tests) - CONSTRUCT queries
+- **Features not yet implemented:** Aggregates (COUNT, SUM, AVG, etc.), GROUP BY, Property Paths, Subqueries, VALUES clause, UPDATE operations
 
 See [Testing & Compliance](https://trigodb.com/testing.html) for detailed breakdown.
 
