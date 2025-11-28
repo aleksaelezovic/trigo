@@ -303,6 +303,7 @@ func (e *Evaluator) evaluateGreaterThanOrEqual(left, right rdf.Term) (rdf.Term, 
 // Returns true if terms are equal, false if not equal, error if incompatible
 func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 	// DEBUG: Print what we're comparing
+	// Uncomment for debugging:
 	// fmt.Printf("DEBUG sparqlEquals: left=%v (type=%T), right=%v (type=%T)\n", left, left, right, right)
 
 	// If both are literals, try value-based comparison
@@ -341,22 +342,68 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 			}
 		}
 
-		// If both have same numeric datatype and both are invalid, compare lexically
-		if leftInvalid && rightInvalid &&
-			leftLit.Datatype != nil && rightLit.Datatype != nil &&
-			leftLit.Datatype.IRI == rightLit.Datatype.IRI {
-			// Lexical comparison for invalid numeric literals with same datatype
-			return leftLit.Value == rightLit.Value, nil
+		// If both have same numeric datatype and both are invalid with different values, error
+		// (same datatype + same value was already handled at line 317)
+		if leftInvalid && rightInvalid {
+			// Both invalid numerics - error
+			return false, fmt.Errorf("cannot compare two invalid numeric literals")
 		}
 
-		// If one is invalid and the other is valid (or different datatypes), error
-		if leftInvalid && !rightInvalid {
+		// If one is invalid numeric and the other is not a numeric type:
+		// - Can compare with lang-tagged literals (return false, not equal)
+		// - Cannot compare with plain literals or other known datatypes (error)
+		if leftInvalid {
+			// Left is invalid numeric.
+			if rightLit.Datatype == nil && rightLit.Language != "" {
+				// Right is lang-tagged - these are incomparable types, return not equal
+				return false, nil
+			}
+			if rightLit.Datatype == nil || !e.isNumericDatatype(rightLit.Datatype.IRI) {
+				// Right is plain literal or non-numeric datatype - error
+				return false, fmt.Errorf("cannot compare invalid numeric with non-numeric literal")
+			}
+			// Both are numeric types, one invalid - error
 			return false, fmt.Errorf("cannot compare invalid and valid numeric literals")
 		}
-		if !leftInvalid && rightInvalid {
+		if rightInvalid {
+			// Right is invalid numeric.
+			if leftLit.Datatype == nil && leftLit.Language != "" {
+				// Left is lang-tagged - these are incomparable types, return not equal
+				return false, nil
+			}
+			if leftLit.Datatype == nil || !e.isNumericDatatype(leftLit.Datatype.IRI) {
+				// Left is plain literal or non-numeric datatype - error
+				return false, fmt.Errorf("cannot compare invalid numeric with non-numeric literal")
+			}
+			// Both are numeric types, one invalid - error
 			return false, fmt.Errorf("cannot compare valid and invalid numeric literals")
 		}
 		// Both valid, continue with normal comparison below
+
+		// Check for unknown datatypes (same behavior as invalid numerics)
+		leftUnknown := leftLit.Datatype != nil && !e.isKnownDatatype(leftLit.Datatype.IRI)
+		rightUnknown := rightLit.Datatype != nil && !e.isKnownDatatype(rightLit.Datatype.IRI)
+
+		if leftUnknown || rightUnknown {
+			// At least one has unknown datatype
+			// Unknown datatypes can only be compared with lang-tagged literals, not with plain or known datatypes
+			if leftUnknown {
+				if rightLit.Datatype == nil && rightLit.Language != "" {
+					// Right is lang-tagged - incomparable types, return not equal
+					return false, nil
+				}
+				// Right is plain or known datatype - error
+				return false, fmt.Errorf("cannot compare unknown datatype with other literals")
+			}
+			if rightUnknown {
+				if leftLit.Datatype == nil && leftLit.Language != "" {
+					// Left is lang-tagged - incomparable types, return not equal
+					return false, nil
+				}
+				// Left is plain or known datatype - error
+				return false, fmt.Errorf("cannot compare unknown datatype with other literals")
+			}
+		}
 
 		// Try numeric comparison first
 		leftNum, leftIsNum := e.ExtractNumeric(left)
