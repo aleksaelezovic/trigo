@@ -442,12 +442,14 @@ func (e *Evaluator) sparqlEquals(left, right rdf.Term) (bool, error) {
 					// Invalid date values
 					return false, fmt.Errorf("cannot compare invalid date values")
 				}
-				// Per SPARQL spec: dates with different timezone presence are incomparable
-				// One has explicit timezone, one doesn't = error
-				if leftHasTz != rightHasTz {
-					return false, fmt.Errorf("cannot compare dates with and without explicit timezone")
+				// Check if dates are equal first (UTC-normalized comparison)
+				datesEqual := leftDate == rightDate
+				// Per SPARQL spec: dates with different timezone presence can be unequal,
+				// but error if they would be equal with different TZ presence (ambiguous equality)
+				if datesEqual && leftHasTz != rightHasTz {
+					return false, fmt.Errorf("cannot determine equality of dates with different timezone presence")
 				}
-				return leftDate == rightDate, nil
+				return datesEqual, nil
 			}
 
 			// Check if datatypes are known (XSD types)

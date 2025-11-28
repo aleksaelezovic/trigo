@@ -294,7 +294,9 @@ func (e *TermEncoder) encodeDateTimeLiteral(lit *rdf.Literal) (store.EncodedTerm
 		encoded[i] = 0
 	}
 
-	return encoded, nil, nil
+	// Preserve original lexical form in string dictionary to maintain timezone information
+	originalValue := lit.Value
+	return encoded, &originalValue, nil
 }
 
 func (e *TermEncoder) encodeDateLiteral(lit *rdf.Literal) (store.EncodedTerm, *string, error) {
