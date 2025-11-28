@@ -244,19 +244,41 @@ func (p *Parser) parseConstruct() (*ConstructQuery, error) {
 
 	p.skipWhitespace()
 
+	// Parse FROM and FROM NAMED clauses (optional) - these can appear before template or WHERE
+	from, fromNamed, err := p.parseDatasetClauses()
+	if err != nil {
+		return nil, err
+	}
+	query.From = from
+	query.FromNamed = fromNamed
+
+	p.skipWhitespace()
+
 	// Check for CONSTRUCT WHERE shorthand syntax
 	if p.matchKeyword("WHERE") {
 		// CONSTRUCT WHERE { pattern } is shorthand for CONSTRUCT { pattern } WHERE { pattern }
-		// BUT only when the pattern contains only triple patterns (no FILTER)
+		// BUT only when the pattern is a basic graph pattern (BGP) - no FILTER, GRAPH, OPTIONAL, etc.
 		where, err := p.parseGraphPattern()
 		if err != nil {
 			return nil, err
 		}
 
-		// CONSTRUCT WHERE is only valid when there are no FILTER expressions
-		// GRAPH patterns and other constructs are allowed
+		// CONSTRUCT WHERE is only valid for basic graph patterns
+		// Check for any non-BGP constructs
 		if len(where.Filters) > 0 {
 			return nil, fmt.Errorf("CONSTRUCT WHERE cannot contain FILTER expressions")
+		}
+		// Check if Elements contains any complex patterns (OPTIONAL, UNION, GRAPH, MINUS, etc.)
+		for _, elem := range where.Elements {
+			if elem.GraphPattern != nil {
+				return nil, fmt.Errorf("CONSTRUCT WHERE can only contain basic triple patterns")
+			}
+			if elem.Bind != nil {
+				return nil, fmt.Errorf("CONSTRUCT WHERE cannot contain BIND expressions")
+			}
+			if elem.Filter != nil {
+				return nil, fmt.Errorf("CONSTRUCT WHERE cannot contain FILTER expressions")
+			}
 		}
 
 		query.Where = where
@@ -268,43 +290,46 @@ func (p *Parser) parseConstruct() (*ConstructQuery, error) {
 	}
 
 	// Parse template - expects { triple pattern ... }
-	if p.peek() != '{' {
-		return nil, fmt.Errorf("expected '{' to start CONSTRUCT template or WHERE keyword")
-	}
-	p.advance() // skip '{'
-
-	// Parse triple patterns for the template
+	// Template is optional if FROM clauses were specified
 	var template []*TriplePattern
-	for {
-		p.skipWhitespace()
-		if p.peek() == '}' {
-			p.advance() // skip '}'
-			break
-		}
+	if p.peek() == '{' {
+		p.advance() // skip '{'
 
-		// Parse triple pattern(s) with property list shorthand support
-		patterns, err := p.parseTriplePatterns()
-		if err != nil {
-			return nil, err
-		}
-		template = append(template, patterns...)
+		// Parse triple patterns for the template
+		for {
+			p.skipWhitespace()
+			if p.peek() == '}' {
+				p.advance() // skip '}'
+				break
+			}
 
-		p.skipWhitespace()
-		// Optionally consume '.' separator
-		if p.peek() == '.' {
-			p.advance()
+			// Parse triple pattern(s) with property list shorthand support
+			patterns, err := p.parseTriplePatterns()
+			if err != nil {
+				return nil, err
+			}
+			template = append(template, patterns...)
+
+			p.skipWhitespace()
+			// Optionally consume '.' separator
+			if p.peek() == '.' {
+				p.advance()
+			}
 		}
 	}
 
 	query.Template = template
 
-	// Parse FROM and FROM NAMED clauses (optional)
-	from, fromNamed, err := p.parseDatasetClauses()
-	if err != nil {
-		return nil, err
+	// Parse FROM and FROM NAMED clauses if not already parsed (optional)
+	// They may have been parsed before CONSTRUCT WHERE shorthand
+	if len(query.From) == 0 && len(query.FromNamed) == 0 {
+		from, fromNamed, err := p.parseDatasetClauses()
+		if err != nil {
+			return nil, err
+		}
+		query.From = from
+		query.FromNamed = fromNamed
 	}
-	query.From = from
-	query.FromNamed = fromNamed
 
 	// Parse WHERE clause
 	if !p.matchKeyword("WHERE") {

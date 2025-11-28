@@ -109,16 +109,20 @@ Validated against official W3C test suites:
 ### Combined RDF Compliance
 **Overall: 99.9% (2,226/2,229 tests) — Excellent W3C Compliance! 🎉**
 
-### SPARQL 1.0 Query Engine
-- **Overall:** 99.2% (467/471 tests) — 4 tests remaining
-- **Perfect Suites (15):** distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅
+### SPARQL Query Engine
+- **Overall SPARQL:** 74.4% (574/772 tests) — Combining SPARQL 1.0 + 1.1
+  - **SPARQL 1.0:** 99.2% (467/471 tests) — 4 tests remaining
+  - **SPARQL 1.1:** 35.5% (107/301 tests) — Many features implemented
 
-### SPARQL 1.1 Query Engine (Partial Implementation)
-- **syntax-query:** 68.1% (64/94 tests) - Core syntax parsing
-- **bind:** 80.0% (8/10 tests) - BIND clause support
-- **csv-tsv-res:** 83.3% (5/6 tests) - Result format serialization
-- **construct:** 71.4% (5/7 tests) - CONSTRUCT queries
-- **Features not yet implemented:** Aggregates (COUNT, SUM, AVG, etc.), GROUP BY, Property Paths, Subqueries, VALUES clause, UPDATE operations
+**SPARQL 1.0 (Near-Perfect):**
+- **Perfect Suites (15):** distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅
+- **Remaining:** 4 edge case tests (date comparison, GRAPH+OPTIONAL, complex optional semantics)
+
+**SPARQL 1.1 (Growing Support):**
+- **construct:** 100% (7/7 tests) ✅ — Full CONSTRUCT WHERE support
+- **bind:** 80.0% (8/10 tests) — BIND clause with expressions
+- **csv-tsv-res:** 83.3% (5/6 tests) — CSV and TSV result formats
+- **Not yet implemented:** Aggregates, GROUP BY, Property Paths, Subqueries, VALUES clause, UPDATE operations
 
 See [Testing & Compliance](https://trigodb.com/testing.html) for detailed breakdown.
 

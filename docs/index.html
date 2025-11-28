@@ -185,19 +185,23 @@ ts.InsertTriple(triple)</code></pre>
             <p><strong>RDF 1.2 Total: 99.8% (1,272/1,275 tests) — 3 tests remaining</strong></p>
             <p><strong>Combined RDF: 99.9% (2,226/2,229 tests) — Excellent W3C Compliance! 🎉</strong></p>
 
-            <h3>SPARQL 1.0 Query Engine</h3>
-            <p><strong>Overall: 99.2% (467/471 tests) — 4 tests remaining</strong></p>
+            <h3>SPARQL Query Engine</h3>
+            <p><strong>Overall SPARQL: 74.4% (574/772 tests)</strong> — Combining SPARQL 1.0 + 1.1</p>
+
+            <h4>SPARQL 1.0 — Near-Perfect</h4>
+            <p><strong>99.2% (467/471 tests)</strong> — 4 tests remaining</p>
             <ul>
                 <li><strong>Perfect Suites (15):</strong> <span class="badge badge-success">distinct, boolean-effective-value, expr-builtin, expr-ops, bound, cast, reduced, regex, solution-seq, sort, triple-match, type-promotion, bnode-coreference, syntax-sparql5, ask ✅</span></li>
+                <li><strong>Remaining:</strong> Date comparison, GRAPH+OPTIONAL, complex optional semantics (4 edge cases)</li>
             </ul>
 
-            <h3>SPARQL 1.1 Query Engine — Partial Implementation</h3>
+            <h4>SPARQL 1.1 — Growing Support</h4>
+            <p><strong>35.5% (107/301 tests)</strong> — Many features implemented</p>
             <ul>
-                <li><strong>syntax-query:</strong> <span class="badge badge-warning">68.1% (64/94 tests)</span></li>
+                <li><strong>construct:</strong> <span class="badge badge-success">100% (7/7 tests) ✅</span> — Full CONSTRUCT WHERE support</li>
                 <li><strong>bind:</strong> <span class="badge badge-warning">80.0% (8/10 tests)</span></li>
                 <li><strong>csv-tsv-res:</strong> <span class="badge badge-warning">83.3% (5/6 tests)</span></li>
-                <li><strong>construct:</strong> <span class="badge badge-warning">71.4% (5/7 tests)</span></li>
-                <li><strong>Features not implemented:</strong> Aggregates, GROUP BY, Property Paths, Subqueries, VALUES, UPDATE operations</li>
+                <li><strong>Not yet implemented:</strong> Aggregates, GROUP BY, Property Paths, Subqueries, VALUES, UPDATE operations</li>
             </ul>
 
             <p><a href="testing.html">View detailed test results →</a></p>

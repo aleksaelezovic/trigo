@@ -119,7 +119,7 @@ func (d *TermDecoder) DecodeTerm(encoded store.EncodedTerm, stringValue *string)
 		}
 		// Fallback: reconstruct from timestamp (may lose timezone info)
 		nanos := int64(binary.BigEndian.Uint64(encoded[1:9])) // #nosec G115 - intentional bit-pattern conversion for timestamp decoding
-		t := time.Unix(0, nanos).UTC() // Use UTC to avoid local timezone dependency
+		t := time.Unix(0, nanos).UTC()                        // Use UTC to avoid local timezone dependency
 		return rdf.NewDateTimeLiteral(t), nil
 
 	case rdf.TermTypeDateLiteral:

@@ -348,6 +348,13 @@ Skipped: 1
             </li>
         </ul>
 
+        <h4>Overall SPARQL Test Results</h4>
+        <p><strong>Overall SPARQL: 74.4% (574/772 tests)</strong> — Combining SPARQL 1.0 + 1.1</p>
+        <ul>
+            <li><strong>SPARQL 1.0:</strong> 99.2% (467/471 tests) — Near-perfect compliance</li>
+            <li><strong>SPARQL 1.1:</strong> 35.5% (107/301 tests) — Growing support</li>
+        </ul>
+
         <h4>SPARQL 1.0 Test Results</h4>
         <p><strong>Overall: 99.2% (467/471 tests)</strong></p>
         <p><strong>Remaining: 4 tests</strong></p>
@@ -386,31 +393,42 @@ Skipped: 1
             <li><strong>syntax-sparql3</strong>: 92.2% (47/51 tests)</li>
         </ul>
 
-        <h4>SPARQL 1.1 Test Results (Partial Implementation)</h4>
-        <p><strong>Implemented Features:</strong></p>
+        <h4>SPARQL 1.1 Test Results</h4>
+        <p><strong>Overall: 35.5% (107/301 tests)</strong> — Many features implemented</p>
+
+        <p><strong>High-Performing Features:</strong></p>
         <ul>
-            <li><strong>syntax-query:</strong> 68.1% (64/94 tests) - Core SPARQL 1.1 syntax parsing</li>
-            <li><strong>bind:</strong> 80.0% (8/10 tests) - BIND clause with expressions</li>
+            <li><strong>construct:</strong> 100% (7/7 tests) ✅ - Full CONSTRUCT WHERE support with dataset clauses</li>
             <li><strong>csv-tsv-res:</strong> 83.3% (5/6 tests) - CSV and TSV result formats</li>
-            <li><strong>construct:</strong> 71.4% (5/7 tests) - CONSTRUCT WHERE queries</li>
+            <li><strong>bind:</strong> 80.0% (8/10 tests) - BIND clause with expressions</li>
+            <li><strong>syntax-query:</strong> 68.1% (64/94 tests) - Core SPARQL 1.1 syntax parsing</li>
+        </ul>
+
+        <p><strong>Partial Support:</strong></p>
+        <ul>
+            <li><strong>exists:</strong> 40.0% (2/5 tests) - EXISTS evaluation (parsed but limited execution)</li>
+            <li><strong>grouping:</strong> 33.3% (2/6 tests) - GROUP BY and HAVING clauses</li>
+            <li><strong>functions:</strong> 12.5% (7/56 tests) - Advanced string, date, hash functions</li>
+            <li><strong>negation (MINUS):</strong> 11.1% (1/9 tests) - MINUS pattern, EXISTS/NOT EXISTS evaluation</li>
         </ul>
 
         <p><strong>Features Not Yet Implemented:</strong></p>
         <ul>
             <li><strong>aggregates:</strong> 0% (0/32 tests) - COUNT, SUM, AVG, MIN, MAX, SAMPLE, GROUP_CONCAT</li>
-            <li><strong>grouping:</strong> 33.3% (2/6 tests) - GROUP BY and HAVING clauses</li>
             <li><strong>property-path:</strong> 0% (0/25 tests) - Property path operators (/, *, +, ?, |, ^, !)</li>
             <li><strong>subquery:</strong> 0% (0/1 tests) - Nested SELECT in WHERE clause</li>
             <li><strong>bindings (VALUES):</strong> 0% (0/9 tests) - VALUES inline data</li>
-            <li><strong>negation (MINUS):</strong> 11.1% (1/9 tests) - MINUS pattern, EXISTS/NOT EXISTS evaluation</li>
-            <li><strong>exists:</strong> 40.0% (2/5 tests) - EXISTS evaluation (parsed but limited execution)</li>
-            <li><strong>functions:</strong> 12.5% (7/56 tests) - Advanced string, date, hash functions</li>
             <li><strong>cast:</strong> 0% (0/6 tests) - Type casting edge cases</li>
             <li><strong>project-expression:</strong> 0% (0/6 tests) - Projection expressions</li>
             <li><strong>UPDATE operations:</strong> 0% - INSERT, DELETE, MODIFY, CLEAR, DROP, COPY, MOVE, ADD</li>
         </ul>
 
-        <p><strong>Total SPARQL 1.1 Estimated Coverage:</strong> ~15-20% (many features not yet implemented)</p>
+        <p><strong>Recent Improvements:</strong></p>
+        <ul>
+            <li>✅ CONSTRUCT WHERE shorthand: Full support including dataset clauses (FROM/FROM NAMED)</li>
+            <li>✅ CONSTRUCT WHERE validation: Properly rejects FILTER, BIND, GRAPH, OPTIONAL patterns</li>
+            <li>🎉 <strong>construct suite: 71.4% → 100%</strong> (+2 tests)</li>
+        </ul>
 
         <p><strong>Recent Improvements (Session 11 Part 2 - Dataset and GRAPH Parsing):</strong></p>
         <ul>
